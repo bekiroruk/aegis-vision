@@ -1,0 +1,26 @@
+#pragma once
+
+#include "aegisvision/contracts.hpp"
+#include <filesystem>
+
+namespace aegisvision::vision {
+struct VideoConfig {
+    float tracking_iou{0.3F};
+    std::uint32_t max_missed_frames{20};
+    int max_frames{0}; // 0 = entire local file, no frame skipping
+    double fallback_fps{25.0};
+};
+struct VideoSummary {
+    int processed_frames{};
+    std::size_t unique_track_ids{};
+    double source_fps{};
+    double processing_fps{};
+    double mean_analysis_ms{};
+    std::string stop_reason;
+};
+
+// One tracker per invocation/source. The injected detector may own a loaded YOLO model.
+// OUTPUT must be new/empty. Partial files remain on error; summary.json is only written on success.
+[[nodiscard]] VideoSummary process_video(const std::filesystem::path& input,
+    const std::filesystem::path& output, IDetector& detector, const VideoConfig& config = {});
+} // namespace aegisvision::vision

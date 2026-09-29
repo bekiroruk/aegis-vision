@@ -5,7 +5,7 @@ modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
 içinde birleştirmektir.
 
-> Durum: C++ çekirdeği, OpenCV görüntü/hizalama ve gerçek YOLOv8 nesne tespiti hazır. TensorRT ve Qdrant adaptörleri sonraki
+> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 nesne tespiti ve videoda IoU takibi hazır. TensorRT ve Qdrant adaptörleri sonraki
 > kilometre taşlarında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
 > korunmaktadır; aktif geliştirme C++ tarafındadır.
 
@@ -18,6 +18,7 @@ içinde birleştirmektir.
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
+- Videoda YOLO + IoU tracking, ID etiketli AVI ve kare bazlı CSV raporu
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
 - Detection → tracking → embedding → indexing pipeline'ı
@@ -86,6 +87,9 @@ Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 
 **Otomatik nesne tespiti:** Model hazırlama, çalıştırma ve çıktı açıklamaları için
 [YOLO kılavuzu](docs/yolo.md).
+
+**Video takibi:** Yerel videoda tespit, ID atama ve sonuç kaydetme için
+[video kılavuzu](docs/video.md). Mevcut takipçi temel IoU algoritmasıdır; ByteTrack/Re-ID henüz yoktur.
 
 OpenCV araçları isteğe bağlıdır; varsayılan çekirdek derlemesi harici bağımlılık istemez.
 OpenCV 4 geliştirme paketi (C++ başlıkları, kütüphaneler ve Windows DLL'leri) gerekir.

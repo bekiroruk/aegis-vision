@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <cmath>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -10,14 +11,16 @@ namespace aegisvision {
 
 IoUTracker::IoUTracker(const float iou_threshold, const std::uint32_t max_missed_frames)
     : iou_threshold_(iou_threshold), max_missed_frames_(max_missed_frames) {
-    if (iou_threshold < 0.0F || iou_threshold > 1.0F) {
+    if (!std::isfinite(iou_threshold) || iou_threshold < 0.0F || iou_threshold > 1.0F) {
         throw std::invalid_argument("IoU threshold must be in [0, 1]");
     }
 }
 
 std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) {
     auto ordered = detections;
-    std::ranges::sort(ordered, std::greater{}, &Detection::score);
+    std::stable_sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) {
+        return a.score > b.score;
+    });
 
     std::unordered_set<std::uint64_t> unmatched;
     for (const auto& [track_id, track] : tracks_) {
@@ -35,7 +38,7 @@ std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) 
             const auto overlap = candidate.label == detection.label
                 ? detection.bbox.iou(candidate.bbox)
                 : 0.0F;
-            if (overlap > best_iou) {
+            if (overlap > best_iou || (overlap > 0 && overlap == best_iou && track_id < best_id)) {
                 best_iou = overlap;
                 best_id = track_id;
             }
