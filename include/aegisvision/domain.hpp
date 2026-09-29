@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,11 +37,21 @@ struct Track {
     std::uint32_t missed_frames{};
 };
 
+// Owned, interleaved 8-bit BGR pixels. The shared const buffer outlives adapters.
+// A frame may omit pixels for metadata-only / synthetic detector workflows.
+struct ImageBuffer {
+    int width{};
+    int height{};
+    std::size_t stride{};
+    std::vector<std::uint8_t> pixels;
+};
+
 struct Frame {
     std::string frame_id;
     std::string source_id;
     std::int64_t timestamp_ms{};
     std::vector<Detection> candidate_detections;
+    std::shared_ptr<const ImageBuffer> image;
 };
 
 struct SearchResult {

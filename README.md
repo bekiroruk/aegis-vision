@@ -5,7 +5,7 @@ modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
 içinde birleştirmektir.
 
-> Durum: C++ çekirdeği ve OpenCV görüntü/hizalama aracı hazır. Gerçek YOLO/TensorRT ve Qdrant adaptörleri sonraki
+> Durum: C++ çekirdeği, OpenCV görüntü/hizalama ve gerçek YOLOv8 nesne tespiti hazır. TensorRT ve Qdrant adaptörleri sonraki
 > kilometre taşlarında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
 > korunmaktadır; aktif geliştirme C++ tarafındadır.
 
@@ -17,6 +17,7 @@ içinde birleştirmektir.
 - Cosine similarity tabanlı yerel vektör indeksi
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
+- C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
 - Detection → tracking → embedding → indexing pipeline'ı
@@ -50,9 +51,9 @@ ctest --test-dir build --output-on-failure
 
 ## Mimari
 
-Bu şema hedef mimaridir. Mevcut detector önceden verilen kutuları okur; hash embedding
-yalnızca test içindir ve anlamsal arama sağlamaz. C++ `Frame` henüz gerçek piksel taşımaz;
-OpenCV aracı ayrı bir adaptör katmanıdır. `configs/pipeline.toml` referans taslağıdır,
+Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden inference yapar;
+eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
+ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. `configs/pipeline.toml` referans taslağıdır,
 C++ programı henüz TOML okumaz. OCR, RTSP ve harici servis entegrasyonları planlanmıştır.
 
 ```text
@@ -71,7 +72,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 ## Yol haritası
 
 1. [Tamamlandı] OpenCV görüntü yükleme, çizim ve feature matching
-2. ONNX Runtime ile YOLO detector adaptörü
+2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. DINOv2/CLIP embedding ve Qdrant istemcisi
 4. ByteTrack ve multi-camera Re-ID
 5. TensorRT FP16/INT8 benchmark
@@ -82,6 +83,9 @@ Başarı metrikleri model ve sistem seviyesinde birlikte izlenecek: mAP, IDF1,
 Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 
 ## Gerçek görsellerle kullanım
+
+**Otomatik nesne tespiti:** Model hazırlama, çalıştırma ve çıktı açıklamaları için
+[YOLO kılavuzu](docs/yolo.md).
 
 OpenCV araçları isteğe bağlıdır; varsayılan çekirdek derlemesi harici bağımlılık istemez.
 OpenCV 4 geliştirme paketi (C++ başlıkları, kütüphaneler ve Windows DLL'leri) gerekir.

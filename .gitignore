@@ -19,4 +19,6 @@ artifacts/
 data/
 work/
 outputs/
+*.onnx
+*.pt
 
