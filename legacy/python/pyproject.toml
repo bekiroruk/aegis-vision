@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visionforge"
+version = "0.1.0"
+description = "Modular, configuration-driven computer vision platform"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "VisionForge Contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+ml = ["numpy>=2.0", "opencv-python-headless>=4.10", "torch>=2.4"]
+dev = ["pytest>=8.3", "ruff>=0.8", "mypy>=1.13", "httpx>=0.27"]
+
+[project.scripts]
+visionforge = "visionforge.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/visionforge"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+

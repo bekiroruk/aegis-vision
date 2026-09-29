@@ -1,0 +1,25 @@
+[pipeline]
+enable_tracking = true
+enable_embeddings = true
+enable_ocr = false
+index_embeddings = true
+
+[tracking]
+iou_threshold = 0.30
+max_missed_frames = 20
+
+[detector]
+backend = "mock"
+model = "yolo11m"
+confidence_threshold = 0.35
+
+[embedding]
+backend = "mock"
+model = "dinov2-base"
+dimension = 8
+
+[runtime]
+device = "cpu"
+engine = "native"
+precision = "fp32"
+
