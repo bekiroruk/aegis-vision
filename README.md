@@ -5,8 +5,8 @@ modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
 içinde birleştirmektir.
 
-> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 nesne tespiti ve videoda IoU / iki aşamalı takip hazır. TensorRT ve Qdrant adaptörleri sonraki
-> kilometre taşlarında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
+> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 tespiti, video takibi ve CLIP + yerel Qdrant araması hazır. TensorRT sonraki
+> kilometre taşında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
 > korunmaktadır; aktif geliştirme C++ tarafındadır.
 
 ## Mevcut özellikler
@@ -16,6 +16,7 @@ içinde birleştirmektir.
 - Sınıf duyarlı IoU tracker
 - İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
 - Cosine similarity tabanlı yerel vektör indeksi
+- ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
@@ -56,7 +57,7 @@ ctest --test-dir build --output-on-failure
 Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden inference yapar;
 eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
 ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. `configs/pipeline.toml` referans taslağıdır,
-C++ programı henüz TOML okumaz. OCR, RTSP ve harici servis entegrasyonları planlanmıştır.
+C++ programı henüz TOML okumaz. OCR, RTSP ve Redis entegrasyonları planlanmıştır.
 
 ```text
 RTSP / Image
@@ -76,7 +77,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 1. [Tamamlandı] OpenCV görüntü yükleme, çizim ve feature matching
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
-4. CLIP görsel/metin embedding ve Qdrant ile gerçek anlamsal arama
+4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. Konfigürasyon yükleme, segmentation ve OCR/VLM adaptörleri
 6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
 7. RTSP/GStreamer ingest, kuyruk ve C++ servis katmanı
@@ -88,6 +89,9 @@ Başarı metrikleri model ve sistem seviyesinde birlikte izlenecek: mAP, IDF1,
 Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 
 ## Gerçek görsellerle kullanım
+
+**Metin/görsel araması:** Derleme, model export, Qdrant başlatma, görsel/kırpma indeksleme
+ve sorgu komutları için [CLIP + Qdrant kılavuzu](docs/search.md).
 
 **Otomatik nesne tespiti:** Model hazırlama, çalıştırma ve çıktı açıklamaları için
 [YOLO kılavuzu](docs/yolo.md).

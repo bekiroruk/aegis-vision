@@ -1,0 +1,9 @@
+# Development server, intentionally loopback-only. Run with project root as cwd.
+storage:
+  storage_path: ./artifacts/qdrant/storage
+  snapshots_path: ./artifacts/qdrant/snapshots
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+telemetry_disabled: true

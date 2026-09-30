@@ -9,22 +9,24 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - OpenCV görüntü okuma, kutu çizme, ORB eşleştirme ve RANSAC homografi.
 - YOLOv8 ONNX ile gerçek piksel verisinden CPU detection.
 - Yerel video okuma, IoU / iki aşamalı takip, ID etiketli video ve CSV/JSON raporları.
-- Bellekte cosine similarity indeksi ve demo embedding; **gerçek anlamsal arama değil**.
-- Redis/Qdrant Compose tanımları; **uygulama istemcileri ve GPU deployment hazır değil**.
+- Bellekte cosine similarity indeksi ve test amaçlı hash embedding.
+- Gerçek CLIP görsel/metin embedding ve C++ Qdrant istemcisi; kalıcı görsel/kırpma indeksi,
+  metin/görsel sorgu CLI'ı, Unicode tokenizer ve PyTorch referans testleri.
+- Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
 
 ## Kalan işler — önerilen sıra
 
-1. **Gerçek embedding ve arama.** CLIP görsel/metin encoder'larını C++ inference'a bağla;
-   modelle uyumlu preprocessing/tokenizer, nesne kırpma, normalization ve boyut kontrolü ekle.
-   Ardından Qdrant istemcisi, kalıcı kayıt ve görsel/metin sorgu CLI'ı geliştir.
-   Kabul: sabit örnek kümede referans embedding benzerliği ve etiketli Recall@K;
-   servis yeniden başladığında kayıtlar korunur. DINO görsel tanıma için ayrı alternatif;
-   tek başına metin araması sağlamaz. **Bir sonraki geliştirme adımı budur.**
+1. **Arama başlangıcı tamamlandı; kaliteyi genişlet.** CLIP/Qdrant akışı ve referans
+   testleri için [arama kılavuzu](search.md). Üç etiketli görselli smoke setinden sonra
+   daha büyük ve zor negatifli veriyle Recall@K, batch/dizin-video indeksleme ve
+   çok dilli model değerlendirmesi gerekir. DINO görsel tanıma için ayrı alternatiftir;
+   tek başına metin araması sağlamaz.
 
 2. **Gerçek konfigürasyon.** `configs/pipeline.toml` şu an taslaktır. C++ parser,
    şema/değer kontrolü, adaptör fabrikaları ve model/threshold seçimi ekle.
    Kabul: kod derlemeden pipeline değiştirilebilir; bilinmeyen alan/yanlış boyut,
    eksik model ve uyumsuz ayarlar anlaşılır hatayla reddedilir.
+   **Bir sonraki geliştirme adımı budur.**
 
 3. **Ölçülebilir model ve tracking kalitesi.** Küçük, lisansı uygun etiketli veri kümesi;
    sabit train/validation/test ayrımı ve tekrarlanabilir değerlendirme komutları oluştur.

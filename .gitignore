@@ -21,4 +21,5 @@ work/
 outputs/
 *.onnx
 *.pt
+.qdrant-initialized
 
