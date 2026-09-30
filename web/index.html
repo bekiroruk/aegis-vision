@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="tr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AegisVision · Video arama</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
+<main>
+<section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videonun içinde arayın.</h1><p>Kaydı seçin, nesneleri indeksleyin ve aradığınız ana metinle ulaşın.</p></section>
+<div id="notice" role="status" aria-live="polite"></div>
+<div class="workspace">
+<section class="panel player-panel"><div class="panel-title"><h2>Video kaynağı</h2><span id="duration" class="muted"></span></div>
+<label for="media">Yerel video</label><select id="media" aria-label="Yerel video"></select>
+<video id="player" controls muted playsinline preload="metadata"></video>
+<form id="index-form" class="index-controls"><div><label for="stride">Her kaç karede bir?</label><input id="stride" type="number" min="1" max="10000" value="15" required></div><div><label for="max-frames">Kare sınırı · 0 = tümü</label><input id="max-frames" type="number" min="0" max="1000000" value="0" required></div><button type="submit" id="index-button">Videoyu indeksle</button></form>
+<p class="hint">Nesneler otomatik bulunur. Arama sonuçlarından birine tıklayarak o ana gidin.</p></section>
+<aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
+</div>
+<section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
+<form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><button type="submit">Ara</button></form>
+<p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>
+<div class="panel-title"><p id="result-title" class="muted">Sonuçlar burada görünecek.</p></div><div id="results" class="results"></div>
+</section>
+<footer>Yerel C++ servis · YOLO + CLIP · Qdrant <span>Zamanlar kare/FPS üzerinden hesaplanır.</span></footer>
+</main></body></html>

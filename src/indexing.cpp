@@ -4,6 +4,7 @@
 #include <picosha2.h>
 #include <opencv2/videoio.hpp>
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -20,13 +21,22 @@ std::string utf8(const fs::path& path) {
     return {value.begin(), value.end()};
 }
 std::string digest(const Json& value) { return picosha2::hash256_hex_string(value.dump()); }
-std::string file_hash(const fs::path& path) {
+void check_cancelled(const IndexCancellation& cancelled) {
+    if (cancelled && cancelled()) throw IndexCancelled();
+}
+std::string file_hash(const fs::path& path, const IndexCancellation& cancelled = {}) {
     std::ifstream input(path, std::ios::binary);
     if (!input) throw std::runtime_error("Cannot hash input: " + utf8(path));
-    const auto hash = picosha2::hash256_hex_string(std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>());
+    picosha2::hash256_one_by_one hash;
+    std::array<char, 65536> buffer{};
+    while (input) {
+        check_cancelled(cancelled);
+        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        hash.process(buffer.begin(), buffer.begin() + input.gcount());
+    }
     if (input.bad()) throw std::runtime_error("Failed reading input: " + utf8(path));
-    return hash;
+    hash.finish();
+    return picosha2::get_hash_hex_string(hash);
 }
 bool image_extension(const fs::path& path) {
     auto extension = path.extension().string();
@@ -54,7 +64,8 @@ std::string yolo_index_signature(const std::filesystem::path& model, const visio
 }
 
 IndexSummary index_directory(const std::filesystem::path& directory, IEmbedder& embedder,
-    IVectorStore& store, const DirectoryIndexConfig& config, const IndexProgress& progress) {
+    IVectorStore& store, const DirectoryIndexConfig& config, const IndexProgress& progress,
+    const IndexCancellation& cancelled) {
     if (config.max_images < 1 || config.max_images > 100000)
         throw std::invalid_argument("Directory max_images must be 1..100000");
     if (!fs::is_directory(directory)) throw std::invalid_argument("Input must be a local directory");
@@ -63,6 +74,7 @@ IndexSummary index_directory(const std::filesystem::path& directory, IEmbedder& 
     summary.source_id = digest(Json::array({"directory-v1", utf8(root)}));
     std::vector<fs::path> files;
     const auto collect = [&](const fs::directory_entry& entry) {
+        check_cancelled(cancelled);
         const auto status = entry.symlink_status();
         if (fs::is_symlink(status)) { ++summary.skipped_entries; return; }
         if (fs::is_directory(status)) return;
@@ -83,16 +95,20 @@ IndexSummary index_directory(const std::filesystem::path& directory, IEmbedder& 
     if (files.empty()) throw std::invalid_argument("Directory has no supported image files");
     for (const auto& path : files) {
         try {
+            check_cancelled(cancelled);
             const auto image = vision::load_image(path);
             const BoundingBox box{0, 0, static_cast<float>(image.cols), static_cast<float>(image.rows)};
             // Path identity updates a changed image in place and is independent of traversal order.
             const auto id = "image-" + digest(Json::array({"directory-image-v1", utf8(path)}));
             auto vector = embedder.embed_image(vision::image_frame(image, id, summary.source_id),
                 {box, "image", 1, {}, {}});
+            const auto hash = file_hash(path, cancelled);
+            check_cancelled(cancelled);
             store.upsert(id, std::move(vector), {{"kind", "image"}, {"path", utf8(path)},
-                {"source_id", summary.source_id}, {"sha256", file_hash(path)}, {"bbox", bbox_json(box)}});
+                {"source_id", summary.source_id}, {"sha256", hash}, {"bbox", bbox_json(box)}});
             ++summary.indexed_items;
             if (progress) progress(summary);
+        } catch (const IndexCancelled&) { throw;
         } catch (const std::exception& error) {
             throw std::runtime_error("Indexing " + utf8(path) + " after " +
                 std::to_string(summary.indexed_items) + " completed items: " + error.what());
@@ -103,13 +119,14 @@ IndexSummary index_directory(const std::filesystem::path& directory, IEmbedder& 
 }
 
 IndexSummary index_video(const std::filesystem::path& input, IDetector& detector,
-    IEmbedder& embedder, IVectorStore& store, const VideoIndexConfig& config, const IndexProgress& progress) {
+    IEmbedder& embedder, IVectorStore& store, const VideoIndexConfig& config, const IndexProgress& progress,
+    const IndexCancellation& cancelled) {
     if (config.frame_stride < 1 || config.max_frames < 0 || config.detector_signature.empty() ||
         !std::isfinite(config.fallback_fps) || config.fallback_fps <= 0 || config.fallback_fps > 1000)
         throw std::invalid_argument("Invalid video indexing configuration");
     if (!fs::is_regular_file(input)) throw std::invalid_argument("Input must be an existing local video file");
     const auto path = fs::canonical(input);
-    const auto content_hash = file_hash(path);
+    const auto content_hash = file_hash(path, cancelled);
     IndexSummary summary;
     summary.source_id = digest(Json::array({"video-crops-v1", content_hash, config.detector_signature}));
     cv::VideoCapture capture(utf8(path));
@@ -119,6 +136,7 @@ IndexSummary index_video(const std::filesystem::path& input, IDetector& detector
     summary.source_fps = summary.used_fallback_fps ? config.fallback_fps : fps;
     cv::Mat image;
     while (!config.max_frames || summary.decoded_frames < static_cast<std::uint64_t>(config.max_frames)) {
+        check_cancelled(cancelled);
         if (!capture.read(image) || image.empty()) {
             summary.stop_reason = "end_of_stream_or_decode_stop"; break;
         }
@@ -139,9 +157,11 @@ IndexSummary index_video(const std::filesystem::path& input, IDetector& detector
                 std::tie(b.label, b.bbox.x1, b.bbox.y1, b.bbox.x2, b.bbox.y2, b.score);
         });
         for (std::size_t i = 0; i < detections.size(); ++i) {
+            check_cancelled(cancelled);
             const auto& detection = detections[i];
             const auto id = "video-" + digest(Json::array({summary.source_id, frame_index, i}));
             auto vector = embedder.embed_image(frame, detection);
+            check_cancelled(cancelled);
             store.upsert(id, std::move(vector), {{"kind", "video_crop"}, {"path", utf8(path)},
                 {"source_id", summary.source_id}, {"sha256", content_hash},
                 {"detector_signature", config.detector_signature}, {"frame_index", std::to_string(frame_index)},
@@ -149,6 +169,7 @@ IndexSummary index_video(const std::filesystem::path& input, IDetector& detector
                 {"source_fps", Json(summary.source_fps).dump()}, {"used_fallback_fps", summary.used_fallback_fps ? "true" : "false"},
                 {"bbox", bbox_json(detection.bbox)}, {"label", detection.label}, {"confidence", Json(detection.score).dump()}});
             ++summary.indexed_items;
+            if (progress) progress(summary);
         }
         if (progress) progress(summary);
     }

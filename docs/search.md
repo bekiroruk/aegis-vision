@@ -46,7 +46,8 @@ model indirme cache'i nedeniyle daha fazla disk alanı gerekir. Paket; `vision.o
 Başlatmada SHA256, tensor adı/türü/şekli ve embedding boyutu doğrulanır. Hash doğrulama
 ve model yükleme her CLI çağrısında tekrar yapılır; kısa demo çağrılarında başlangıç
 maliyeti belirgindir. Toplu komutlar modeli süreç içinde yeniden kullanır;
-uzun ömürlü servis ve tensor batch optimizasyonu sonraki aşamadır.
+uzun ömürlü [C++ servis](service.md) modelleri başlangıçta bir kez yükler.
+Tensor batch optimizasyonu sonraki aşamadır.
 
 ## Qdrant başlatma
 

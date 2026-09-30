@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-09-30. Aktif uygulama C++20'dir; Python yalnızca model hazırlama
+Güncelleme: 2026-10-01. Aktif uygulama C++20'dir; Python yalnızca model hazırlama
 ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -17,6 +17,8 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - Klasörden tam görsel ve örneklenmiş video karelerinden YOLO/CLIP nesne indeksleme;
   tekrar çalıştırmada sabit ID, dosya/kare/zaman/kutu metadata'sı.
 - Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
+- Yerel C++ HTTP servisi, sınırlı asenkron iş kuyruğu, ilerleme/iptal ve tarayıcıda
+  gerçek videoda metin arama, kutulu önizleme ve zamanına atlama; [servis kılavuzu](service.md).
 
 ## Kalan işler — önerilen sıra
 
@@ -39,8 +41,9 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 
-4. **Canlı video ve servis katmanı.** RTSP/GStreamer kaynağı, reconnect, gerçek PTS,
-   bounded queue/backpressure, cancellation ve C++ HTTP API/Redis worker geliştir.
+4. **Canlı video ve kalıcı servis katmanı.** Yerel C++ HTTP API, bounded queue ve
+   cancellation tamamlandı. RTSP/GStreamer kaynağı, reconnect, gerçek PTS,
+   kalıcı iş kuyruğu/Redis worker ve yeniden başlatmada job recovery geliştir.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.

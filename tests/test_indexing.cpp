@@ -142,6 +142,13 @@ void video_checks(const fs::path& root) {
     detector.empty = false; detector.invalid = true;
     rejects([&] { (void)index_video(input, detector, embedder, empty_store, config); }, "Invalid crop accepted");
     require(empty_store.records.empty(), "Invalid crops must fail before embedding/upsert");
+    detector.invalid = false;
+    bool cancel = false, cancelled = false;
+    try {
+        (void)index_video(input, detector, embedder, empty_store, config,
+            [&](const IndexSummary& progress) { if (progress.indexed_items == 1) cancel = true; }, [&] { return cancel; });
+    } catch (const IndexCancelled&) { cancelled = true; }
+    require(cancelled && empty_store.records.size() == 1, "Cancellation did not retain exactly the completed writes");
     config.frame_stride = 0;
     rejects([&] { (void)index_video(input, detector, embedder, store, config); }, "Zero stride accepted");
     config.frame_stride = 1;
