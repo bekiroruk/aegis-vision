@@ -6,10 +6,12 @@ option(AEGISVISION_WITH_OPENCV "Build image tools and geometric registration" OF
 
 add_library(aegisvision
     src/adapters.cpp
+    src/assignment.cpp
     src/domain.cpp
     src/geometry.cpp
     src/pipeline.cpp
     src/tracking.cpp
+    src/two_stage_tracker.cpp
     src/vector_store.cpp
 )
 target_include_directories(aegisvision PUBLIC
@@ -33,6 +35,9 @@ if(AEGISVISION_BUILD_TESTS)
     add_executable(aegisvision_tests tests/test_main.cpp)
     target_link_libraries(aegisvision_tests PRIVATE aegisvision)
     add_test(NAME aegisvision_tests COMMAND aegisvision_tests)
+    add_executable(aegisvision_tracking_tests tests/test_two_stage.cpp)
+    target_link_libraries(aegisvision_tracking_tests PRIVATE aegisvision)
+    add_test(NAME aegisvision_tracking_tests COMMAND aegisvision_tracking_tests)
 endif()
 
 install(TARGETS aegisvision aegisvision_demo)

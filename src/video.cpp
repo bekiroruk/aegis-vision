@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <set>
 #include <stdexcept>
 
@@ -32,7 +33,19 @@ VideoSummary process_video(const std::filesystem::path& input, const std::filesy
         config.fallback_fps <= 0 || config.fallback_fps > 1000) {
         throw std::invalid_argument("Invalid video configuration");
     }
-    IoUTracker tracker(config.tracking_iou, config.max_missed_frames);
+    std::unique_ptr<ITracker> tracker;
+    TwoStageTracker* two_stage = nullptr;
+    if (config.tracker_mode == TrackerMode::IoU) {
+        tracker = std::make_unique<IoUTracker>(config.tracking_iou, config.max_missed_frames);
+    } else if (config.tracker_mode == TrackerMode::TwoStage) {
+        auto instance = std::make_unique<TwoStageTracker>(TwoStageConfig{
+            config.low_confidence, config.high_confidence, config.new_track_confidence,
+            config.tracking_iou, config.max_missed_frames, true});
+        two_stage = instance.get();
+        tracker = std::move(instance);
+    } else {
+        throw std::invalid_argument("Unknown tracker mode");
+    }
     if (!fs::is_regular_file(input)) throw std::runtime_error("Input must be an existing local video file");
     if (fs::exists(output) && (!fs::is_directory(output) || !fs::is_empty(output))) {
         throw std::runtime_error("Output directory must be new or empty");
@@ -57,7 +70,7 @@ VideoSummary process_video(const std::filesystem::path& input, const std::filesy
     PipelineConfig pipeline_config;
     pipeline_config.enable_embeddings = false;
     pipeline_config.index_embeddings = false;
-    AnalysisPipeline pipeline(pipeline_config, detector, &tracker, nullptr, nullptr, nullptr);
+    AnalysisPipeline pipeline(pipeline_config, detector, tracker.get(), nullptr, nullptr, nullptr);
     VideoSummary summary;
     summary.source_fps = fps;
     std::set<std::uint64_t> ids;
@@ -105,13 +118,23 @@ VideoSummary process_video(const std::filesystem::path& input, const std::filesy
     summary.processing_fps = seconds > 0 ? summary.processed_frames / seconds : 0;
     summary.mean_analysis_ms = total_analysis_ms / summary.processed_frames;
     summary.unique_track_ids = ids.size();
+    if (two_stage) summary.tracking_stats = two_stage->stats();
     cv::FileStorage report("summary.json", cv::FileStorage::WRITE | cv::FileStorage::MEMORY |
         cv::FileStorage::FORMAT_JSON);
     report << "processed_frames" << summary.processed_frames << "unique_track_ids" << static_cast<double>(ids.size());
     report << "source_fps" << fps << "used_fallback_fps" << static_cast<int>(fallback);
     report << "processing_fps" << summary.processing_fps << "mean_analysis_ms" << summary.mean_analysis_ms;
     report << "timestamp_basis" << "frame_index / source_fps (CFR estimate)";
-    report << "stop_reason" << summary.stop_reason << "tracker" << "class-aware greedy IoU";
+    report << "stop_reason" << summary.stop_reason << "tracker" <<
+        (two_stage ? "two-stage linear-motion Hungarian" : "class-aware greedy IoU");
+    if (two_stage) {
+        report << "low_confidence_threshold" << config.low_confidence << "high_confidence_threshold" << config.high_confidence;
+        report << "new_track_confidence_threshold" << config.new_track_confidence;
+        report << "low_confidence_matches" << static_cast<double>(summary.tracking_stats.low_confidence_matches);
+        report << "reactivations" << static_cast<double>(summary.tracking_stats.reactivations);
+        report << "created_tracks" << static_cast<double>(summary.tracking_stats.created_tracks);
+        report << "expired_tracks" << static_cast<double>(summary.tracking_stats.expired_tracks);
+    }
     report << "tracking_iou" << config.tracking_iou << "max_missed_frames" << static_cast<double>(config.max_missed_frames);
     std::ofstream json(output / "summary.json");
     json << report.releaseAndGetString();

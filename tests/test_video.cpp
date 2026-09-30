@@ -85,6 +85,12 @@ int main() {
         const auto partial = vision::process_video(input, root / "limited", detector, limited);
         require(partial.processed_frames == 2 && partial.stop_reason == "frame_limit", "Frame limit ignored");
         require(decoded_frames(root / "limited/tracked.avi") == 2, "Limited video count wrong");
+        vision::VideoConfig two_stage;
+        two_stage.tracker_mode = vision::TrackerMode::TwoStage;
+        const auto improved = vision::process_video(input, root / "two-stage", detector, two_stage);
+        require(improved.unique_track_ids == 1 && improved.tracking_stats.reactivations == 1,
+            "Two-stage video adapter did not preserve/recover the track");
+        require(decoded_frames(root / "two-stage/tracked.avi") == 5, "Two-stage output video incomplete");
         detector.empty = true;
         require(vision::process_video(input, root / "empty", detector).unique_track_ids == 0, "Empty detections not handled");
         std::cout << "Video decode/encode, ID continuity, expiry, timestamps, limits and error tests passed\n";

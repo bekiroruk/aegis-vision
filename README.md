@@ -5,7 +5,7 @@ modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
 içinde birleştirmektir.
 
-> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 nesne tespiti ve videoda IoU takibi hazır. TensorRT ve Qdrant adaptörleri sonraki
+> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 nesne tespiti ve videoda IoU / iki aşamalı takip hazır. TensorRT ve Qdrant adaptörleri sonraki
 > kilometre taşlarında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
 > korunmaktadır; aktif geliştirme C++ tarafındadır.
 
@@ -14,6 +14,7 @@ içinde birleştirmektir.
 - Tür güvenli detection, track, frame ve search veri modelleri
 - Değiştirilebilir model ve altyapı portları
 - Sınıf duyarlı IoU tracker
+- İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
 - Cosine similarity tabanlı yerel vektör indeksi
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
@@ -74,11 +75,14 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 
 1. [Tamamlandı] OpenCV görüntü yükleme, çizim ve feature matching
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
-3. DINOv2/CLIP embedding ve Qdrant istemcisi
-4. ByteTrack ve multi-camera Re-ID
-5. TensorRT FP16/INT8 benchmark
-6. RTSP/GStreamer ingest ve asenkron servis katmanı
-7. Triton/Jetson deployment profilleri
+3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
+4. CLIP görsel/metin embedding ve Qdrant ile gerçek anlamsal arama
+5. Konfigürasyon yükleme, segmentation ve OCR/VLM adaptörleri
+6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
+7. RTSP/GStreamer ingest, kuyruk ve C++ servis katmanı
+8. TensorRT FP16/INT8, GPU Docker ve Triton/Jetson deployment
+
+Öncelikler, eksikler ve her adımın kabul ölçütleri: [ayrıntılı yol haritası](docs/roadmap.md).
 
 Başarı metrikleri model ve sistem seviyesinde birlikte izlenecek: mAP, IDF1,
 Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
@@ -89,7 +93,7 @@ Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 [YOLO kılavuzu](docs/yolo.md).
 
 **Video takibi:** Yerel videoda tespit, ID atama ve sonuç kaydetme için
-[video kılavuzu](docs/video.md). Mevcut takipçi temel IoU algoritmasıdır; ByteTrack/Re-ID henüz yoktur.
+[video kılavuzu](docs/video.md). Varsayılan IoU; `--tracker two-stage` ile hareket tahminli iki aşamalı takip seçilir. Tam ByteTrack/Re-ID henüz yoktur.
 
 OpenCV araçları isteğe bağlıdır; varsayılan çekirdek derlemesi harici bağımlılık istemez.
 OpenCV 4 geliştirme paketi (C++ başlıkları, kütüphaneler ve Windows DLL'leri) gerekir.
@@ -126,7 +130,8 @@ Hizalama düzlemsel yüzeyler ve yaklaşık saf kamera dönüşü içindir. Para
 nesneler, tekrarlayan dokular veya az ayrıntı içeren görsellerde güvenilir olmayabilir.
 Yetersiz eşleşmede program hata ve sıfırdan farklı çıkış kodu verir. Sentetik testte
 bilinen dönüşümün dört kontrol noktasındaki hatanın 2 piksel altında olması beklenir;
-bu, gerçek dünya doğruluk ölçümü değildir. Docker ve GitHub CI bu yerel aşamada çalıştırılmadı.
+bu, gerçek dünya doğruluk ölçümü değildir. Windows/Linux GitHub CI doğrulandı;
+Docker/GPU deployment henüz doğrulanmadı. CI model indirmez; gerçek YOLO smoke testi yerel modelle ayrıca çalışır.
 
 Yöntem referansları: [OpenCV özellik eşleştirme](https://docs.opencv.org/4.x/dc/dc3/tutorial_py_matcher.html),
 [OpenCV homografi](https://docs.opencv.org/4.x/d7/dff/tutorial_feature_homography.html).

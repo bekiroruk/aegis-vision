@@ -1,14 +1,20 @@
 #pragma once
 
 #include "aegisvision/contracts.hpp"
+#include "aegisvision/two_stage_tracker.hpp"
 #include <filesystem>
 
 namespace aegisvision::vision {
+enum class TrackerMode { IoU, TwoStage };
 struct VideoConfig {
+    TrackerMode tracker_mode{TrackerMode::IoU};
     float tracking_iou{0.3F};
     std::uint32_t max_missed_frames{20};
     int max_frames{0}; // 0 = entire local file, no frame skipping
     double fallback_fps{25.0};
+    float low_confidence{0.10F};
+    float high_confidence{0.35F};
+    float new_track_confidence{0.50F};
 };
 struct VideoSummary {
     int processed_frames{};
@@ -17,6 +23,7 @@ struct VideoSummary {
     double processing_fps{};
     double mean_analysis_ms{};
     std::string stop_reason;
+    TrackingStats tracking_stats;
 };
 
 // One tracker per invocation/source. The injected detector may own a loaded YOLO model.
