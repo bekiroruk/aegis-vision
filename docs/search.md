@@ -4,6 +4,8 @@ Bu modül gerçek CLIP ViT-B/32 görsel ve metin encoder'larını ONNX Runtime C
 çalıştırır. C++ inference, Unicode BPE tokenizer, nesne kırpma ve Qdrant REST istemcisi
 birlikte çalışır. Python uygulamanın çalışma zamanında gerekmez; sadece model export
 ve geliştirme değerlendirmesi için kullanılır.
+Model, koleksiyon ve bağlantı ayarlarını TOML dosyasından vermek için
+[konfigürasyon kılavuzuna](configuration.md) bakın.
 
 ## Yerel Windows kurulumu
 

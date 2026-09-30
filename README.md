@@ -5,8 +5,8 @@ modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
 içinde birleştirmektir.
 
-> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 tespiti, video takibi ve CLIP + yerel Qdrant araması hazır. TensorRT sonraki
-> kilometre taşında eklenecek. İlk Python fikir doğrulaması `legacy/python` altında
+> Durum: C++ çekirdeği, OpenCV görüntü/hizalama, YOLOv8 tespiti, video takibi,
+> CLIP + yerel Qdrant araması ve TOML konfigürasyonu hazır. İlk Python fikir doğrulaması `legacy/python` altında
 > korunmaktadır; aktif geliştirme C++ tarafındadır.
 
 ## Mevcut özellikler
@@ -17,10 +17,11 @@ içinde birleştirmektir.
 - İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
 - Cosine similarity tabanlı yerel vektör indeksi
 - ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
+- TOML dosyasıyla görüntü, video ve arama uygulamalarının model, takip ve servis ayarları
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
-- Videoda YOLO + IoU tracking, ID etiketli AVI ve kare bazlı CSV raporu
+- Videoda YOLO + IoU veya iki aşamalı takip, ID etiketli AVI ve kare bazlı CSV raporu
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
 - Detection → tracking → embedding → indexing pipeline'ı
@@ -56,8 +57,8 @@ ctest --test-dir build --output-on-failure
 
 Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden inference yapar;
 eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
-ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. `configs/pipeline.toml` referans taslağıdır,
-C++ programı henüz TOML okumaz. OCR, RTSP ve Redis entegrasyonları planlanmıştır.
+ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. C++ uygulamaları
+`configs/*.toml` dosyalarını okuyabilir; OCR, RTSP ve Redis entegrasyonları planlanmıştır.
 
 ```text
 RTSP / Image
@@ -78,7 +79,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
-5. Konfigürasyon yükleme, segmentation ve OCR/VLM adaptörleri
+5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
 6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
 7. RTSP/GStreamer ingest, kuyruk ve C++ servis katmanı
 8. TensorRT FP16/INT8, GPU Docker ve Triton/Jetson deployment
@@ -89,6 +90,9 @@ Başarı metrikleri model ve sistem seviyesinde birlikte izlenecek: mAP, IDF1,
 Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 
 ## Gerçek görsellerle kullanım
+
+**TOML ile çalıştırma:** Örnek dosyalar, doğrulama ve üç uygulamanın komutları için
+[konfigürasyon kılavuzu](docs/configuration.md).
 
 **Metin/görsel araması:** Derleme, model export, Qdrant başlatma, görsel/kırpma indeksleme
 ve sorgu komutları için [CLIP + Qdrant kılavuzu](docs/search.md).

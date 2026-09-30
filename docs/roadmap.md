@@ -12,6 +12,7 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - Bellekte cosine similarity indeksi ve test amaçlı hash embedding.
 - Gerçek CLIP görsel/metin embedding ve C++ Qdrant istemcisi; kalıcı görsel/kırpma indeksi,
   metin/görsel sorgu CLI'ı, Unicode tokenizer ve PyTorch referans testleri.
+- Sürümlü TOML şemasıyla görüntü, video ve arama ayarları; mod, backend, yol ve eşik doğrulaması.
 - Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
 
 ## Kalan işler — önerilen sıra
@@ -22,40 +23,33 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
    çok dilli model değerlendirmesi gerekir. DINO görsel tanıma için ayrı alternatiftir;
    tek başına metin araması sağlamaz.
 
-2. **Gerçek konfigürasyon.** `configs/pipeline.toml` şu an taslaktır. C++ parser,
-   şema/değer kontrolü, adaptör fabrikaları ve model/threshold seçimi ekle.
-   Kabul: kod derlemeden pipeline değiştirilebilir; bilinmeyen alan/yanlış boyut,
-   eksik model ve uyumsuz ayarlar anlaşılır hatayla reddedilir.
-   **Bir sonraki geliştirme adımı budur.**
-
-3. **Ölçülebilir model ve tracking kalitesi.** Küçük, lisansı uygun etiketli veri kümesi;
+2. **Ölçülebilir model ve tracking kalitesi.** Küçük, lisansı uygun etiketli veri kümesi;
    sabit train/validation/test ayrımı ve tekrarlanabilir değerlendirme komutları oluştur.
    Detection mAP, tracking IDF1/HOTA/ID switch ve arama Recall@K raporla. İhtiyaca göre
    fine-tuning, metric learning ve tam ByteTrack/Kalman + Re-ID ekle. Çoklu kamera için
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 
-4. **Segmentation, OCR ve VLM.** Önce maskeler ve sonuç sözleşmesi/testleri, ardından
+3. **Segmentation, OCR ve VLM.** Önce maskeler ve sonuç sözleşmesi/testleri, ardından
    OCR metin-kutu çıktısı ve ayrı VLM adaptörü ekle. Bunlar mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 
-5. **Canlı video ve servis katmanı.** RTSP/GStreamer kaynağı, reconnect, gerçek PTS,
+4. **Canlı video ve servis katmanı.** RTSP/GStreamer kaynağı, reconnect, gerçek PTS,
    bounded queue/backpressure, cancellation ve C++ HTTP API/Redis worker geliştir.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.
 
-6. **GPU optimizasyonu ve dağıtım.** TensorRT backend, FP16 eşdeğerlik testi,
+5. **GPU optimizasyonu ve dağıtım.** TensorRT backend, FP16 eşdeğerlik testi,
    temsilî calibration verisiyle INT8, model sürümleme ve GPU Docker imajı ekle.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,
    throughput ve GPU bellek raporu. CUDA/GPU uyumu doğrulanmadan tamamlandı sayılmaz.
 
-7. **Portföy teslimi ve ileri deployment.** Tek komutlu tekrar üretilebilir demo,
+6. **Portföy teslimi ve ileri deployment.** Tek komutlu tekrar üretilebilir demo,
    API/OpenAPI dokümanı, mimari karar kayıtları, model/veri lisans notları ve kısa
    demo videosu hazırla. Triton/Jetson profilleri uygun donanım varsa son aşamadır;
    cihazda ölçülmeyen hız için iddiada bulunulmaz.
 
-İş ilanındaki her maddeyi tek seferde kapsamak yerine önce gerçek arama demosunu
-uçtan uca bitirmek, sonra kalite ve operasyon katmanlarını genişletmek hedeflenir.
+İş ilanındaki diğer adımlar için kalite ölçümü ve operasyon katmanları genişletilecek.
 Tüm düzenlemeler bu bilgisayardaki repoda yapılır; derleme/test sonrası GitHub'a gönderilir.

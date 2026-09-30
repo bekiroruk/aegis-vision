@@ -22,7 +22,7 @@ add_library(aegisvision_search src/clip.cpp src/clip_tokenizer.cpp src/qdrant.cp
 target_include_directories(aegisvision_search PRIVATE "${search_sha_SOURCE_DIR}")
 target_link_libraries(aegisvision_search PUBLIC aegisvision_opencv nlohmann_json::nlohmann_json PRIVATE aegis_ort ICU::uc ICU::i18n httplib::httplib)
 add_executable(aegisvision_search_cli apps/search.cpp)
-target_link_libraries(aegisvision_search_cli PRIVATE aegisvision_search)
+target_link_libraries(aegisvision_search_cli PRIVATE aegisvision_search aegisvision_configuration)
 function(aegis_search_runtime target)
     aegisvision_runtime(${target})
     if(WIN32)

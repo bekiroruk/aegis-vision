@@ -1,8 +1,7 @@
-# Video tracking configuration. Paths are relative to this file.
 version = 1
 
 [pipeline]
-mode = "video"
+mode = "image"
 
 [detector]
 backend = "yolo_onnx"
@@ -12,19 +11,7 @@ nms_iou_threshold = 0.45
 input_size = 640
 max_detections = 300
 
-[tracking]
-backend = "two-stage"
-iou_threshold = 0.30
-max_missed_frames = 20
-low_confidence = 0.10
-new_track_confidence = 0.50
-
-[video]
-max_frames = 60
-fallback_fps = 25.0
-
 [runtime]
 device = "cpu"
 precision = "fp32"
 engine = "opencv-dnn"
-

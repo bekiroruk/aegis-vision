@@ -1,3 +1,4 @@
+#include "aegisvision/application_config.hpp"
 #include "aegisvision/yolo.hpp"
 #include "aegisvision/vision.hpp"
 #include "aegisvision/pipeline.hpp"
@@ -29,32 +30,47 @@ void help() {
         "Usage: aegisvision_detect MODEL.onnx IMAGE OUTPUT_DIR [CONFIDENCE [NMS_IOU]]\n"
         "Export contract: float32, batch=1, imgsz=640, COCO 80 classes, nms=False.\n"
         "Defaults: confidence=0.35, NMS IoU=0.45. Writes annotated.png, detections.tsv, report.json.\n";
+    std::cout << "Config mode: aegisvision_detect --config CONFIG.toml IMAGE OUTPUT_DIR\n";
 }
 
 int run(const std::vector<fs::path>& args) {
     try {
         if (args.size() == 2 && args[1] == "--help") { help(); return 0; }
-        if (args.size() < 4 || args.size() > 6) { help(); return 2; }
+        const bool configured = args.size() > 1 && args[1] == "--config";
+        if (configured ? args.size() != 5 : (args.size() < 4 || args.size() > 6)) { help(); return 2; }
         vision::YoloConfig config;
-        if (args.size() >= 5) config.confidence_threshold = threshold(args[4]);
-        if (args.size() == 6) config.nms_iou_threshold = threshold(args[5]);
-        const auto image = vision::load_image(args[2]);
+        fs::path image_path, output_path;
+        std::unique_ptr<IDetector> detector;
+        vision::ApplicationSettings settings;
+        if (configured) {
+            settings = vision::load_application_settings(args[2]);
+            if (settings.mode != vision::ApplicationMode::Image)
+                throw std::invalid_argument("Detection CLI requires pipeline.mode=image");
+            config = settings.detector;
+            image_path = args[3]; output_path = args[4];
+        } else {
+            if (args.size() >= 5) config.confidence_threshold = threshold(args[4]);
+            if (args.size() == 6) config.nms_iou_threshold = threshold(args[5]);
+            image_path = args[2]; output_path = args[3];
+        }
+        const auto image = vision::load_image(image_path);
         const auto start = std::chrono::steady_clock::now();
-        vision::YoloDetector detector(args[1], config);
+        if (configured) detector = vision::make_configured_detector(settings);
+        else detector = std::make_unique<vision::YoloDetector>(args[1], config);
         const auto loaded = std::chrono::steady_clock::now();
         PipelineConfig pipeline_config;
         pipeline_config.enable_tracking = false;
         pipeline_config.enable_embeddings = false;
         pipeline_config.index_embeddings = false;
-        AnalysisPipeline pipeline(pipeline_config, detector, nullptr, nullptr, nullptr, nullptr);
+        AnalysisPipeline pipeline(pipeline_config, *detector, nullptr, nullptr, nullptr, nullptr);
         const auto frame = vision::image_frame(image, "image-1", "local-image");
         const auto inference_start = std::chrono::steady_clock::now();
         const auto result = pipeline.analyze(frame);
         const double inference_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - inference_start).count();
         const double model_load_ms = std::chrono::duration<double, std::milli>(loaded - start).count();
-        vision::save_image(args[3] / "annotated.png", vision::annotate(image, result.detections));
-        std::ofstream boxes(args[3] / "detections.tsv");
+        vision::save_image(output_path / "annotated.png", vision::annotate(image, result.detections));
+        std::ofstream boxes(output_path / "detections.tsv");
         boxes << "# x1 y1 x2 y2 score label\n" << std::setprecision(8);
         cv::FileStorage report("report.json", cv::FileStorage::WRITE |
             cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_JSON);
@@ -72,7 +88,7 @@ int run(const std::vector<fs::path>& args) {
             std::cout << detection.label << " confidence=" << detection.score << '\n';
         }
         report << "]";
-        std::ofstream json(args[3] / "report.json");
+        std::ofstream json(output_path / "report.json");
         json << report.releaseAndGetString();
         boxes.flush(); json.flush();
         if (!boxes || !json) throw std::runtime_error("Cannot write detection report");

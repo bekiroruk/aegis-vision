@@ -1,3 +1,4 @@
+#include "aegisvision/application_config.hpp"
 #include "aegisvision/clip.hpp"
 #include "aegisvision/qdrant.hpp"
 #include "aegisvision/vision.hpp"
@@ -6,6 +7,7 @@
 #include <charconv>
 #include <cmath>
 #include <iostream>
+#include <optional>
 
 namespace {
 std::string utf8(const std::filesystem::path& path) {
@@ -27,6 +29,7 @@ int run(const std::vector<std::filesystem::path>& args) {
     try {
         if(args.size()==2 && args[1]=="--help") {
             std::cout << "Usage: aegisvision_search_cli BUNDLE PORT COLLECTION COMMAND [ARGS]\n"
+                "   or: aegisvision_search_cli --config CONFIG.toml COMMAND [ARGS]\n"
                 "  init                           Create collection if missing (never replace).\n"
                 "  index ID IMAGE [x1 y1 x2 y2]    Upsert image or detection crop.\n"
                 "  text QUERY [LIMIT]             Text-to-image search.\n"
@@ -34,16 +37,26 @@ int run(const std::vector<std::filesystem::path>& args) {
                 "Local Qdrant only (127.0.0.1); commands emit JSON. LIMIT defaults to 5.\n";
             return 0;
         }
-        if(args.size()<5) throw std::invalid_argument("Missing arguments; run --help");
-        const auto command=args[4].string();
-        if(!((command=="init" && args.size()==5) || (command=="index" && (args.size()==7 || args.size()==11)) ||
-             ((command=="text" || command=="image") && (args.size()==6 || args.size()==7))))
+        std::vector<std::filesystem::path> parsed=args;
+        std::optional<aegisvision::vision::ApplicationSettings> settings;
+        if(args.size()>1 && args[1]=="--config") {
+            if(args.size()<4) throw std::invalid_argument("Expected --config CONFIG.toml COMMAND [ARGS]");
+            settings=aegisvision::vision::load_application_settings(args[2]);
+            if(settings->mode!=aegisvision::vision::ApplicationMode::Search)
+                throw std::invalid_argument("Search CLI requires pipeline.mode=search");
+            parsed={args[0],settings->clip_bundle,std::to_string(settings->qdrant.port),settings->qdrant.collection};
+            parsed.insert(parsed.end(),args.begin()+3,args.end());
+        }
+        if(parsed.size()<5) throw std::invalid_argument("Missing arguments; run --help");
+        const auto command=parsed[4].string();
+        if(!((command=="init" && parsed.size()==5) || (command=="index" && (parsed.size()==7 || parsed.size()==11)) ||
+             ((command=="text" || command=="image") && (parsed.size()==6 || parsed.size()==7))))
             throw std::invalid_argument("Invalid command arguments; run --help");
-        aegisvision::QdrantConfig config;
-        config.port=integer(args[2]); config.collection=utf8(args[3]);
-        const int limit=(command=="text" || command=="image") && args.size()==7 ? integer(args[6]) : 5;
+        aegisvision::QdrantConfig config=settings ? settings->qdrant : aegisvision::QdrantConfig{};
+        config.port=integer(parsed[2]); config.collection=utf8(parsed[3]);
+        const int limit=(command=="text" || command=="image") && parsed.size()==7 ? integer(parsed[6]) : 5;
         if(limit<1 || limit>100) throw std::invalid_argument("Limit must be 1..100");
-        aegisvision::ClipEmbedder clip(args[1]);
+        aegisvision::ClipEmbedder clip(parsed[1]);
         config.embedding_space=clip.space_id();
         aegisvision::QdrantVectorStore store(config,command=="init");
         if(command=="init") {
@@ -51,20 +64,20 @@ int run(const std::vector<std::filesystem::path>& args) {
         }
         std::vector<float> vector;
         std::map<std::string,std::string> metadata;
-        if(command=="text") vector=clip.embed_text(utf8(args[5]));
+        if(command=="text") vector=clip.embed_text(utf8(parsed[5]));
         else {
-            const auto path=command=="index" ? args[6] : args[5];
+            const auto path=command=="index" ? parsed[6] : parsed[5];
             const auto image=aegisvision::vision::load_image(path);
             aegisvision::BoundingBox box{0,0,static_cast<float>(image.cols),static_cast<float>(image.rows)};
-            if(command=="index" && args.size()==11) box={coordinate(args[7]),coordinate(args[8]),coordinate(args[9]),coordinate(args[10])};
+            if(command=="index" && parsed.size()==11) box={coordinate(parsed[7]),coordinate(parsed[8]),coordinate(parsed[9]),coordinate(parsed[10])};
             if(box.x1<0 || box.y1<0 || box.x2>image.cols || box.y2>image.rows || box.area()<=0)
                 throw std::invalid_argument("Crop must be nonempty and inside the image");
             vector=clip.embed_image(aegisvision::vision::image_frame(image,"search","local"),{box,"image",1,{}, {}});
             metadata={{"path",utf8(std::filesystem::absolute(path))},{"bbox",nlohmann::json::array({box.x1,box.y1,box.x2,box.y2}).dump()}};
         }
         if(command=="index") {
-            store.upsert(utf8(args[5]),std::move(vector),metadata);
-            std::cout << nlohmann::json{{"indexed",utf8(args[5])},{"metadata",metadata}}.dump(2) << '\n'; return 0;
+            store.upsert(utf8(parsed[5]),std::move(vector),metadata);
+            std::cout << nlohmann::json{{"indexed",utf8(parsed[5])},{"metadata",metadata}}.dump(2) << '\n'; return 0;
         }
         auto results=nlohmann::json::array();
         for(const auto& result : store.search(vector,static_cast<std::size_t>(limit)))

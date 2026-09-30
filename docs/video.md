@@ -7,6 +7,7 @@ tek tracker kullanılır; videolar arasında takip durumu paylaşılmaz.
 ## Kullanım
 
 OpenCV ve modeli hazırlamak için [YOLO kılavuzunu](yolo.md) izleyin.
+TOML ile model/takip eşiklerini seçmek için [konfigürasyon kılavuzunu](configuration.md) izleyin.
 
 ```powershell
 cmake --build --preset opencv-local

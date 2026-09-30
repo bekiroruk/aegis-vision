@@ -1,3 +1,4 @@
+#include "aegisvision/application_config.hpp"
 #include "aegisvision/video.hpp"
 #include "aegisvision/yolo.hpp"
 #include <iostream>
@@ -9,12 +10,32 @@ int run(const std::vector<std::filesystem::path>& args) {
     try {
         if ((args.size() == 2 && args[1] == "--help") || args.size() < 4) {
             std::cout << "Usage: aegisvision_video MODEL.onnx INPUT_VIDEO NEW_OUTPUT_DIR [MAX_FRAMES] [--tracker iou|two-stage]\n"
+                "   or: aegisvision_video --config CONFIG.toml INPUT_VIDEO NEW_OUTPUT_DIR [MAX_FRAMES]\n"
                 "CPU YOLOv8; default: IoU tracker. Two-stage adds low-score recovery and motion prediction.\n"
                 "Writes tracked.avi (MJPEG), preview.jpg, tracks.csv and summary.json.\n"
                 "MAX_FRAMES: positive integer, omitted = entire file. Output directory must be empty.\n";
             return args.size() == 2 && args[1] == "--help" ? 0 : 2;
         }
         aegisvision::vision::VideoConfig config;
+        if (args[1] == "--config") {
+            if (args.size() != 5 && args.size() != 6)
+                throw std::invalid_argument("Expected --config CONFIG.toml INPUT_VIDEO NEW_OUTPUT_DIR [MAX_FRAMES]");
+            auto settings = aegisvision::vision::load_application_settings(args[2]);
+            if (settings.mode != aegisvision::vision::ApplicationMode::Video)
+                throw std::invalid_argument("Video CLI requires pipeline.mode=video");
+            if (args.size() == 6) {
+                const auto value = args[5].string();
+                const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), settings.video.max_frames);
+                if (error != std::errc{} || end != value.data() + value.size() || settings.video.max_frames < 1)
+                    throw std::invalid_argument("MAX_FRAMES must be a positive integer");
+            }
+            auto detector = aegisvision::vision::make_configured_detector(settings);
+            const auto summary = aegisvision::vision::process_video(args[3], args[4], *detector, settings.video);
+            std::cout << "frames=" << summary.processed_frames << " unique_track_ids=" << summary.unique_track_ids
+                << " processing_fps=" << summary.processing_fps << " mean_analysis_ms=" << summary.mean_analysis_ms
+                << " low_confidence_matches=" << summary.tracking_stats.low_confidence_matches << '\n';
+            return 0;
+        }
         bool saw_limit = false, saw_tracker = false;
         for (std::size_t i = 4; i < args.size(); ++i) {
             if (args[i] == "--tracker") {
