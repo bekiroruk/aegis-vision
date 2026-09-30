@@ -59,6 +59,9 @@ QdrantVectorStore::QdrantVectorStore(QdrantConfig config,bool create) : impl_(st
         throw std::invalid_argument("Existing Qdrant collection must use matching unnamed Cosine vectors; left unchanged");
 }
 QdrantVectorStore::~QdrantVectorStore()=default;
+std::size_t QdrantVectorStore::point_count() const {
+    return response(impl_->client.Get(impl_->path)).at("result").at("points_count").get<std::size_t>();
+}
 void QdrantVectorStore::upsert(std::string id,std::vector<float> vector,std::map<std::string,std::string> metadata) {
     if(id.empty() || id.size()>4096) throw std::invalid_argument("Item ID must contain 1..4096 bytes");
     const Json payload{{"item_id",id},{"space_id",impl_->config.embedding_space},{"metadata",metadata}};

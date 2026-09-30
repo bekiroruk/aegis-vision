@@ -13,14 +13,16 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - Gerçek CLIP görsel/metin embedding ve C++ Qdrant istemcisi; kalıcı görsel/kırpma indeksi,
   metin/görsel sorgu CLI'ı, Unicode tokenizer ve PyTorch referans testleri.
 - Sürümlü TOML şemasıyla görüntü, video ve arama ayarları; mod, backend, yol ve eşik doğrulaması.
+- COCO validation kırpmaları için toplu indeksleme ve Recall@K/Hit@K değerlendirme komutları.
 - Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
 
 ## Kalan işler — önerilen sıra
 
-1. **Arama başlangıcı tamamlandı; kaliteyi genişlet.** CLIP/Qdrant akışı ve referans
-   testleri için [arama kılavuzu](search.md). Üç etiketli görselli smoke setinden sonra
-   daha büyük ve zor negatifli veriyle Recall@K, batch/dizin-video indeksleme ve
-   çok dilli model değerlendirmesi gerekir. DINO görsel tanıma için ayrı alternatiftir;
+1. **Arama kalitesini genişlet.** CLIP/Qdrant akışı ve referans testleri için
+   [arama kılavuzu](search.md); 64 COCO kırpmalı başlangıç ölçümü için
+   [benchmark](search-benchmark.md). Sonraki işler: dizin/video indeksleme,
+   daha büyük bağımsız test kümesi ve çok dilli model değerlendirmesi.
+   DINO görsel tanıma için ayrı alternatiftir;
    tek başına metin araması sağlamaz.
 
 2. **Ölçülebilir model ve tracking kalitesi.** Küçük, lisansı uygun etiketli veri kümesi;

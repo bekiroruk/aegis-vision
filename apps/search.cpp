@@ -1,12 +1,15 @@
 #include "aegisvision/application_config.hpp"
 #include "aegisvision/clip.hpp"
 #include "aegisvision/qdrant.hpp"
+#include "aegisvision/search_benchmark.hpp"
 #include "aegisvision/vision.hpp"
 #include "aegisvision/yolo.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <iostream>
+#include <fstream>
 #include <optional>
 
 namespace {
@@ -34,6 +37,8 @@ int run(const std::vector<std::filesystem::path>& args) {
                 "  index ID IMAGE [x1 y1 x2 y2]    Upsert image or detection crop.\n"
                 "  text QUERY [LIMIT]             Text-to-image search.\n"
                 "  image IMAGE [LIMIT]            Image-to-image search.\n"
+                "  batch-index MANIFEST.json      Index labeled image/crop manifest in one process.\n"
+                "  evaluate MANIFEST.json REPORT.json  Compute macro Recall@1/5/10.\n"
                 "Local Qdrant only (127.0.0.1); commands emit JSON. LIMIT defaults to 5.\n";
             return 0;
         }
@@ -50,7 +55,8 @@ int run(const std::vector<std::filesystem::path>& args) {
         if(parsed.size()<5) throw std::invalid_argument("Missing arguments; run --help");
         const auto command=parsed[4].string();
         if(!((command=="init" && parsed.size()==5) || (command=="index" && (parsed.size()==7 || parsed.size()==11)) ||
-             ((command=="text" || command=="image") && (parsed.size()==6 || parsed.size()==7))))
+             ((command=="text" || command=="image") && (parsed.size()==6 || parsed.size()==7)) ||
+             (command=="batch-index" && parsed.size()==6) || (command=="evaluate" && parsed.size()==7)))
             throw std::invalid_argument("Invalid command arguments; run --help");
         aegisvision::QdrantConfig config=settings ? settings->qdrant : aegisvision::QdrantConfig{};
         config.port=integer(parsed[2]); config.collection=utf8(parsed[3]);
@@ -61,6 +67,48 @@ int run(const std::vector<std::filesystem::path>& args) {
         aegisvision::QdrantVectorStore store(config,command=="init");
         if(command=="init") {
             std::cout << nlohmann::json{{"collection",config.collection},{"space_id",clip.space_id()}}.dump(2) << '\n'; return 0;
+        }
+        if(command=="batch-index" || command=="evaluate") {
+            const auto benchmark=aegisvision::load_search_benchmark(parsed[5]);
+            if(command=="batch-index") {
+                std::size_t indexed=0;
+                for(const auto& item:benchmark.items) {
+                    const auto image=aegisvision::vision::load_image(item.image);
+                    const auto box=item.bbox.value_or(aegisvision::BoundingBox{
+                        0,0,static_cast<float>(image.cols),static_cast<float>(image.rows)});
+                    if(box.x2>image.cols || box.y2>image.rows)
+                        throw std::invalid_argument("Benchmark crop outside image: "+item.id);
+                    const auto vector=clip.embed_image(
+                        aegisvision::vision::image_frame(image,item.id,"benchmark"),{box,item.label,1,{}, {}});
+                    const auto path=utf8(std::filesystem::absolute(item.image));
+                    store.upsert(item.id,vector,{{"path",path},{"label",item.label},{"dataset",benchmark.dataset},
+                        {"bbox",nlohmann::json::array({box.x1,box.y1,box.x2,box.y2}).dump()}});
+                    ++indexed;
+                    std::cerr << "\rIndexed " << indexed << '/' << benchmark.items.size() << std::flush;
+                }
+                std::cerr << '\n';
+                std::cout << nlohmann::json{{"dataset",benchmark.dataset},{"indexed",indexed},
+                    {"collection",config.collection},{"space_id",clip.space_id()}}.dump(2) << '\n';
+            } else {
+                if(store.point_count()!=benchmark.items.size())
+                    throw std::invalid_argument("Benchmark requires a dedicated collection with exactly the manifest item count");
+                std::vector<std::vector<aegisvision::SearchResult>> ranked;
+                const auto top_k=std::min<std::size_t>(10,benchmark.items.size());
+                for(const auto& query:benchmark.queries)
+                    ranked.push_back(store.search(clip.embed_text(query.text),top_k));
+                auto report=aegisvision::score_search_benchmark(benchmark,ranked);
+                report["collection"]=config.collection;
+                report["space_id"]=clip.space_id();
+                report["manifest"]=utf8(std::filesystem::absolute(parsed[5]));
+                const auto target=std::filesystem::absolute(parsed[6]);
+                if(target.has_parent_path()) std::filesystem::create_directories(target.parent_path());
+                std::ofstream output(target,std::ios::binary|std::ios::trunc);
+                if(!output) throw std::runtime_error("Cannot open benchmark report");
+                output << report.dump(2) << '\n';
+                if(!output) throw std::runtime_error("Cannot write benchmark report");
+                std::cout << report.dump(2) << '\n';
+            }
+            return 0;
         }
         std::vector<float> vector;
         std::map<std::string,std::string> metadata;

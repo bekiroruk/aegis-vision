@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "dataset": "unit",
+  "items": [
+    {"id": "red", "image": "search_benchmark.ppm", "label": "color", "bbox": [0, 0, 1, 1]},
+    {"id": "blue", "image": "search_benchmark.ppm", "label": "other"}
+  ],
+  "queries": [{"text": "a colored square", "label": "color"}]
+}

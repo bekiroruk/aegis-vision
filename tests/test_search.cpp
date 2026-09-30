@@ -1,5 +1,6 @@
 #include "aegisvision/clip.hpp"
 #include "aegisvision/qdrant.hpp"
+#include "aegisvision/search_benchmark.hpp"
 #include "aegisvision/vision.hpp"
 #include "aegisvision/yolo.hpp"
 #include <httplib.h>
@@ -37,7 +38,7 @@ void unit() {
 
     httplib::Server server;
     server.Get("/collections/test",[](const auto&,auto& response) {
-        response.set_content(R"({"status":"ok","result":{"config":{"params":{"vectors":{"size":2,"distance":"Cosine"}}}}})","application/json");
+        response.set_content(R"({"status":"ok","result":{"points_count":1,"config":{"params":{"vectors":{"size":2,"distance":"Cosine"}}}}})","application/json");
     });
     server.Put("/collections/test/points",[](const auto& request,auto& response) {
         const auto point=Json::parse(request.body).at("points").at(0);
@@ -58,6 +59,7 @@ void unit() {
     require(server.is_running(),"HTTP fixture not ready");
     QdrantConfig config{"127.0.0.1",port,"test",2,"test-space",2};
     QdrantVectorStore store(config);
+    require(store.point_count()==1,"Point count invalid");
     store.upsert("a\"b",{3,4},{{"label","bus"}});
     const auto found=store.search({3,4},1);
     require(found.size()==1 && found[0].item_id=="a\"b" && found[0].metadata.at("label")=="bus","Search response invalid");
@@ -66,6 +68,25 @@ void unit() {
     rejects([&] { (void)store.search({1,0},99); },"HTTP failure swallowed");
     config.dimension=3;
     rejects([&] { QdrantVectorStore bad(config); },"Incompatible collection accepted");
+
+    const auto loaded=load_search_benchmark(std::filesystem::path(__FILE__).parent_path()/"fixtures/search_benchmark.json");
+    require(loaded.dataset=="unit" && loaded.items.size()==2 && loaded.items[0].bbox.has_value() &&
+        loaded.items[0].bbox->x2==1 && loaded.queries[0].label=="color","Benchmark manifest parsing failed");
+
+    SearchBenchmark benchmark{"hard-negatives",
+        {{"cat-1",{},"cat",{}},{"cat-2",{},"cat",{}},{"dog-1",{},"dog",{}}},
+        {{"a photo of a cat","cat"},{"a photo of a dog","dog"}}};
+    const std::vector<std::vector<SearchResult>> rankings={
+        {{"dog-1",0.9f,{}},{"cat-1",0.8f,{}},{"cat-2",0.7f,{}}},
+        {{"dog-1",0.9f,{}},{"cat-1",0.8f,{}},{"cat-2",0.7f,{}}}};
+    const auto scored=score_search_benchmark(benchmark,rankings);
+    require(scored.at("macro_recall_at_1")==0.5 && scored.at("macro_recall_at_5")==1.0 &&
+        scored.at("hit_at_1")==0.5 && scored.at("per_query").at(0).at("recall_at_5")==1.0,
+        "Recall@K or Hit@K calculation failed");
+    auto outside=rankings; outside[0][0].item_id="unknown";
+    rejects([&] { (void)score_search_benchmark(benchmark,outside); },"Foreign benchmark result accepted");
+    auto duplicate=rankings; duplicate[0][1].item_id="dog-1";
+    rejects([&] { (void)score_search_benchmark(benchmark,duplicate); },"Duplicate benchmark result accepted");
 }
 void reference(const std::filesystem::path& bundle) {
     std::ifstream file(bundle/"reference.json"); const auto fixtures=Json::parse(file);

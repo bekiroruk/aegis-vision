@@ -17,6 +17,7 @@ içinde birleştirmektir.
 - İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
 - Cosine similarity tabanlı yerel vektör indeksi
 - ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
+- COCO validation nesne kırpmalarını toplu indeksleme ve Recall@K/Hit@K raporu
 - TOML dosyasıyla görüntü, video ve arama uygulamalarının model, takip ve servis ayarları
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
@@ -96,6 +97,9 @@ Recall@K, FPS, p50/p95 gecikme ve GPU bellek kullanımı.
 
 **Metin/görsel araması:** Derleme, model export, Qdrant başlatma, görsel/kırpma indeksleme
 ve sorgu komutları için [CLIP + Qdrant kılavuzu](docs/search.md).
+
+**Arama kalitesi:** 64 COCO validation kırpmasıyla tekrarlanabilir toplu indeksleme
+ve Recall@K ölçümü için [benchmark kılavuzu](docs/search-benchmark.md).
 
 **Otomatik nesne tespiti:** Model hazırlama, çalıştırma ve çıktı açıklamaları için
 [YOLO kılavuzu](docs/yolo.md).

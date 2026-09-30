@@ -126,8 +126,8 @@ gerçek Qdrant restart testi çalışır. Tam encoder referans testi yereldir.
 
 Bu script yeni/ayrı koleksiyon ister, koleksiyon silmez. Kayıtları C++ CLI ile ekler;
 metinden arama Recall@1 ve aynı görseli sorgulayan self-retrieval raporunu kaydeder.
-Üç kolay örnekteki sonuç genel kalite benchmark'ı değildir; geniş veri kümesi,
-zor negatifler ve farklı fotoğraflarla Recall@K değerlendirmesi henüz yapılmadı.
+Üç kolay örnekteki sonuç genel kalite benchmark'ı değildir. Daha büyük ve benzer
+sınıflı başlangıç değerlendirmesi için aşağıdaki COCO kırpma ölçümüne bakın.
 
 2026-09-30 yerel sonucu: üç metin sorgusunda 3/3 Recall@1; üç aynı-görsel sorgusunda
 3/3 self-retrieval. Metin cosine skorları otobüs 0.2744, meyve 0.3053, babun 0.3004.
@@ -136,6 +136,9 @@ entegrasyon kayıtları hem gerçek CLIP otobüs sorgusu tekrar okundu. Windows'
 tam kapanmadan tekrar başlatmak WAL dosya kilidi hatasına yol açabilir; eski sürecin
 çıkışını bekleyin, veri klasörünü silmeyin. Değerlendirme JSON'u yerelde
 `outputs/search-demo/evaluation.json` altındadır.
+
+Sekiz sınıf × sekiz COCO validation kırpması için toplu indeksleme ve gerçek
+Recall@K değerlendirmesi: [COCO arama benchmark'ı](search-benchmark.md).
 
 Kaynaklar: [CLIP](https://github.com/openai/CLIP),
 [ONNX Runtime C++](https://onnxruntime.ai/docs/get-started/with-cpp.html),

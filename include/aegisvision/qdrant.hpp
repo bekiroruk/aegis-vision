@@ -19,6 +19,7 @@ public:
     ~QdrantVectorStore();
     void upsert(std::string,std::vector<float>,std::map<std::string,std::string>) override;
     [[nodiscard]] std::vector<SearchResult> search(const std::vector<float>&,std::size_t limit=10) const override;
+    [[nodiscard]] std::size_t point_count() const;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
