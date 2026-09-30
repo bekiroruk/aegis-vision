@@ -18,6 +18,7 @@ içinde birleştirmektir.
 - Cosine similarity tabanlı yerel vektör indeksi
 - ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
 - COCO validation nesne kırpmalarını toplu indeksleme ve Recall@K/Hit@K raporu
+- Klasör görsellerini ve örneklenmiş video karelerindeki YOLO nesnelerini CLIP/Qdrant ile indeksleme
 - TOML dosyasıyla görüntü, video ve arama uygulamalarının model, takip ve servis ayarları
 - Homografi ile nokta dönüşümü
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
@@ -100,6 +101,9 @@ ve sorgu komutları için [CLIP + Qdrant kılavuzu](docs/search.md).
 
 **Arama kalitesi:** 64 COCO validation kırpmasıyla tekrarlanabilir toplu indeksleme
 ve Recall@K ölçümü için [benchmark kılavuzu](docs/search-benchmark.md).
+
+**Klasör/video indeksleme:** Komutlar, tekrar çalıştırma ve kare/zaman metadata'sı
+için [indeksleme kılavuzu](docs/indexing.md).
 
 **Otomatik nesne tespiti:** Model hazırlama, çalıştırma ve çıktı açıklamaları için
 [YOLO kılavuzu](docs/yolo.md).

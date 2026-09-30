@@ -45,7 +45,8 @@ model indirme cache'i nedeniyle daha fazla disk alanı gerekir. Paket; `vision.o
 `text.onnx`, `tokenizer.json`, `manifest.json` ve test referanslarını içerir.
 Başlatmada SHA256, tensor adı/türü/şekli ve embedding boyutu doğrulanır. Hash doğrulama
 ve model yükleme her CLI çağrısında tekrar yapılır; kısa demo çağrılarında başlangıç
-maliyeti belirgindir. Uzun ömürlü servis ve batch optimizasyonu sonraki aşamadır.
+maliyeti belirgindir. Toplu komutlar modeli süreç içinde yeniden kullanır;
+uzun ömürlü servis ve tensor batch optimizasyonu sonraki aşamadır.
 
 ## Qdrant başlatma
 
@@ -71,8 +72,8 @@ dosyaları yoktur; REST araması bundan etkilenmez. Veriler Git'e eklenmez.
 
 Nesne kırpması için `index ID IMAGE x1 y1 x2 y2` kullanın; kutu görüntünün içinde
 olmalıdır. `ClipEmbedder`, `IEmbedder` arayüzünü uyguladığı için mevcut detection →
-embedding → indexing pipeline'ına da bağlanabilir. CLI henüz otomatik YOLO taraması,
-dizin toplu indeksleme veya video indeksleme yapmaz.
+embedding → indexing pipeline'ına da bağlanabilir. Klasör taraması ve videoda
+YOLO kırpma indeksleme komutları için [indeksleme kılavuzu](indexing.md).
 
 `init` eksik koleksiyonu oluşturur; mevcut koleksiyonu silmez veya sıfırlamaz.
 Var olan koleksiyon 512 boyutlu, adsız Cosine vektörleri kullanmalıdır. Aynı model

@@ -1,5 +1,6 @@
 #include "aegisvision/application_config.hpp"
 #include "aegisvision/clip.hpp"
+#include "aegisvision/indexing.hpp"
 #include "aegisvision/qdrant.hpp"
 #include "aegisvision/search_benchmark.hpp"
 #include "aegisvision/vision.hpp"
@@ -38,7 +39,10 @@ int run(const std::vector<std::filesystem::path>& args) {
                 "  text QUERY [LIMIT]             Text-to-image search.\n"
                 "  image IMAGE [LIMIT]            Image-to-image search.\n"
                 "  batch-index MANIFEST.json      Index labeled image/crop manifest in one process.\n"
+                "  index-directory DIR [--recursive]  Index whole images (up to 10000).\n"
+                "  index-video DETECTOR.toml VIDEO [STRIDE [MAX_FRAMES]]  Index YOLO crops.\n"
                 "  evaluate MANIFEST.json REPORT.json  Compute macro Recall@1/5/10.\n"
+                "Video: image-mode detector config; stride defaults to 30; max frames omitted = entire file.\n"
                 "Local Qdrant only (127.0.0.1); commands emit JSON. LIMIT defaults to 5.\n";
             return 0;
         }
@@ -56,17 +60,62 @@ int run(const std::vector<std::filesystem::path>& args) {
         const auto command=parsed[4].string();
         if(!((command=="init" && parsed.size()==5) || (command=="index" && (parsed.size()==7 || parsed.size()==11)) ||
              ((command=="text" || command=="image") && (parsed.size()==6 || parsed.size()==7)) ||
+             (command=="index-directory" && (parsed.size()==6 || (parsed.size()==7 && parsed[6]=="--recursive"))) ||
+             (command=="index-video" && parsed.size()>=7 && parsed.size()<=9) ||
              (command=="batch-index" && parsed.size()==6) || (command=="evaluate" && parsed.size()==7)))
             throw std::invalid_argument("Invalid command arguments; run --help");
         aegisvision::QdrantConfig config=settings ? settings->qdrant : aegisvision::QdrantConfig{};
         config.port=integer(parsed[2]); config.collection=utf8(parsed[3]);
         const int limit=(command=="text" || command=="image") && parsed.size()==7 ? integer(parsed[6]) : 5;
         if(limit<1 || limit>100) throw std::invalid_argument("Limit must be 1..100");
+        aegisvision::VideoIndexConfig video_index;
+        std::optional<aegisvision::vision::ApplicationSettings> detector_settings;
+        if(command=="index-video") {
+            if(parsed.size()>=8) video_index.frame_stride=integer(parsed[7]);
+            if(parsed.size()==9) video_index.max_frames=integer(parsed[8]);
+            if(video_index.frame_stride<1 || (parsed.size()==9 && video_index.max_frames<1))
+                throw std::invalid_argument("STRIDE and MAX_FRAMES must be positive integers");
+            detector_settings=aegisvision::vision::load_application_settings(parsed[5]);
+            if(detector_settings->mode!=aegisvision::vision::ApplicationMode::Image)
+                throw std::invalid_argument("Video indexing requires an image-mode detector config (no tracking)");
+        }
         aegisvision::ClipEmbedder clip(parsed[1]);
         config.embedding_space=clip.space_id();
         aegisvision::QdrantVectorStore store(config,command=="init");
         if(command=="init") {
             std::cout << nlohmann::json{{"collection",config.collection},{"space_id",clip.space_id()}}.dump(2) << '\n'; return 0;
+        }
+        if(command=="index-directory" || command=="index-video") {
+            const auto progress=[](const aegisvision::IndexSummary& summary) {
+                std::cerr << "\rIndexed " << summary.indexed_items << " items; sampled "
+                    << summary.sampled_frames << " frames" << std::flush;
+            };
+            aegisvision::IndexSummary summary;
+            if(command=="index-directory") {
+                aegisvision::DirectoryIndexConfig options;
+                options.recursive=parsed.size()==7;
+                summary=aegisvision::index_directory(parsed[5],clip,store,options,progress);
+            } else {
+                video_index.detector_signature=aegisvision::yolo_index_signature(
+                    detector_settings->detector_model,detector_settings->detector);
+                auto detector=aegisvision::vision::make_configured_detector(*detector_settings);
+                summary=aegisvision::index_video(parsed[6],*detector,clip,store,video_index,progress);
+            }
+            std::cerr << '\n';
+            nlohmann::json report{{"command",command},{"source_id",summary.source_id},
+                {"indexed_items",summary.indexed_items},{"skipped_entries",summary.skipped_entries},
+                {"stop_reason",summary.stop_reason},{"collection",config.collection},{"space_id",clip.space_id()}};
+            if(command=="index-video") {
+                report["decoded_frames"]=summary.decoded_frames;
+                report["sampled_frames"]=summary.sampled_frames;
+                report["source_fps"]=summary.source_fps;
+                report["used_fallback_fps"]=summary.used_fallback_fps;
+                report["timestamp_basis"]="frame_index/source_fps (CFR estimate)";
+                report["frame_stride"]=video_index.frame_stride;
+                report["detector_signature"]=video_index.detector_signature;
+            }
+            std::cout << report.dump(2) << '\n';
+            return 0;
         }
         if(command=="batch-index" || command=="evaluate") {
             const auto benchmark=aegisvision::load_search_benchmark(parsed[5]);

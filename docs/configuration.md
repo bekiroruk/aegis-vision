@@ -55,12 +55,18 @@ Qdrant `127.0.0.1:6333` üzerinde çalışırken:
 ./build/search/Release/aegisvision_search_cli.exe --config configs/search.toml index bus artifacts/samples/bus.jpg
 ./build/search/Release/aegisvision_search_cli.exe --config configs/search.toml text "a photo of a bus" 5
 ./build/search/Release/aegisvision_search_cli.exe --config configs/search.toml image artifacts/samples/bus.jpg 5
+./build/search/Release/aegisvision_search_cli.exe --config configs/search.toml index-directory artifacts/samples
+./build/search/Release/aegisvision_search_cli.exe --config configs/search.toml index-video configs/image.toml artifacts/samples/moving-bus.avi 10 30
 ```
 
 `[embedding].dimension` ve `[vector_store].dimension` 512 olmalıdır. Yalnızca
 `clip_onnx` ve yerel `qdrant` desteklenir. Koleksiyon adı, port ve timeout
 dosyadan okunur. `init` var olan koleksiyonu silmez. Arama verilerini yönetme
 ayrıntıları için [arama kılavuzu](search.md).
+
+`index-video`, arama konfigürasyonuna ek olarak image modunda bir detector
+konfigürasyonu alır. Bu akışta takipçi çalıştırılmaz; kare aralığı ve maksimum
+kare sayısı komut argümanlarıdır. [İndeksleme ayrıntıları](indexing.md).
 
 Şema belirtilmeyen anahtarları ve moda uymayan bölümleri reddeder. `runtime`
 yalnızca `cpu`, `fp32` ve moda göre `opencv-dnn`/`onnxruntime` değerlerini kabul
