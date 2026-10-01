@@ -16,6 +16,9 @@ struct VideoIndexConfig {
     int max_frames{0}; // 0 = entire local file; counts decoded, not sampled frames.
     double fallback_fps{25.0};
     std::string detector_signature; // Model + preprocessing + detector settings identity.
+    // Trusted provenance, not user request fields. Cannot override reserved crop fields.
+    std::map<std::string,std::string> source_metadata;
+    std::vector<std::map<std::string,std::string>> frame_metadata;
 };
 struct IndexSummary {
     std::string source_id;

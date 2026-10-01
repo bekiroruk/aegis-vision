@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <set>
+#include <regex>
 
 namespace aegisvision {
 namespace {
@@ -21,6 +22,14 @@ ServiceConfig prepare(ServiceConfig config) {
         throw std::invalid_argument("Service requires media/web directories and a detector signature");
     config.media_root = fs::canonical(config.media_root);
     config.web_root = fs::canonical(config.web_root);
+    if (config.live.archive.enabled) {
+        const auto expected = config.media_root / "live-archive";
+        if (!config.live.archive.root.empty() && fs::absolute(config.live.archive.root).lexically_normal() != expected)
+            throw std::invalid_argument("Live archive root must be media_root/live-archive");
+        if (fs::is_symlink(fs::symlink_status(expected)) || fs::weakly_canonical(expected) != expected)
+            throw std::invalid_argument("Live archive root cannot be a symlink or directory alias");
+        config.live.archive.root = expected;
+    }
     if (!config.persistence.database.empty()) {
         if (config.persistence.context.empty()) throw std::invalid_argument("Persistent service requires a model/store context");
         config.persistence.context = Json::array({"local-service-v1", utf8(config.media_root),
@@ -49,10 +58,12 @@ int integer(const Json& value, const char* key, int fallback, int minimum, int m
 LocalService::LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config,
     LiveDetectorFactory live_detector, vision::LiveCaptureFactory live_capture)
     : detector_(detector), embedder_(embedder), store_(store), config_(prepare(std::move(config))),
+      archive_owner_(config_.live.archive.enabled ? std::make_unique<vision::ArchiveOwner>(config_.live.archive.root) : nullptr),
       jobs_([this](const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
           return execute(request, progress, cancel);
       }, config_.max_pending, config_.max_retained, config_.persistence),
-      live_(config_.live, std::move(live_detector), std::move(live_capture)) {
+      live_(config_.live, std::move(live_detector), std::move(live_capture),
+        [this](const vision::ArchivedSegment& clip) { (void)archive_submit(clip.session_id,clip.index); }) {
     routes();
 }
 LocalService::~LocalService() { stop(); }
@@ -75,6 +86,11 @@ fs::path LocalService::media_path(const std::string& relative) const {
     if (inside.empty() || inside.is_absolute() || *inside.begin() == ".." ||
         !fs::is_regular_file(path) || !video_extension(path))
         throw std::invalid_argument("Video must exist inside media_root with a supported extension");
+    if (*inside.begin() == "live-archive" && path.filename() != "clip.mp4")
+        throw std::invalid_argument("Raw or staging archive files are not public media");
+    if (*inside.begin() == "live-archive") {
+        verify_archive_media(path);
+    }
     return path;
 }
 LocalService::Json LocalService::validate(Json request) const {
@@ -82,12 +98,14 @@ LocalService::Json LocalService::validate(Json request) const {
         throw std::invalid_argument("Expected an object with a string type");
     const auto type = request.at("type").get<std::string>();
     const std::set<std::string> allowed = type == "index_video" ?
-        std::set<std::string>{"type", "path", "stride", "max_frames"} : std::set<std::string>{"type", "query", "limit"};
+        std::set<std::string>{"type", "path", "stride", "max_frames"} : std::set<std::string>{"type", "query", "limit", "scope"};
     for (const auto& [key, value] : request.items()) {
         (void)value; if (!allowed.contains(key)) throw std::invalid_argument("Unknown field: " + key);
     }
     if (type == "index_video") {
         const auto path = media_path(request.at("path").get<std::string>());
+        if (*path.lexically_relative(config_.media_root).begin() == "live-archive")
+            throw std::invalid_argument("Use the archive indexing endpoint for managed live clips");
         request["source_bytes"] = fs::file_size(path);
         request["source_modified"] = std::to_string(fs::last_write_time(path).time_since_epoch().count());
         request["stride"] = integer(request, "stride", 15, 1, 10000);
@@ -97,6 +115,9 @@ LocalService::Json LocalService::validate(Json request) const {
         if (query.empty() || query.size() > 1024 || query.find_first_not_of(" \r\n\t") == std::string::npos)
             throw std::invalid_argument("query must contain 1..1024 bytes of nonblank text");
         request["limit"] = integer(request, "limit", 8, 1, 20);
+        const auto scope = request.value("scope",std::string("all"));
+        if (scope != "all" && scope != "live") throw std::invalid_argument("scope must be all or live");
+        request["scope"] = scope;
     } else throw std::invalid_argument("type must be index_video or search");
     return request;
 }
@@ -107,6 +128,7 @@ LocalService::Json LocalService::summary(const IndexSummary& value) const {
 }
 LocalService::Json LocalService::execute(const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
     if (cancel) throw IndexCancelled();
+    if (request.at("type") == "index_live_archive") return index_archive(request,progress,cancel);
     if (request.at("type") == "index_video") {
         const auto path = media_path(request.at("path").get<std::string>());
         if (request.at("source_bytes") != fs::file_size(path) || request.at("source_modified") !=
@@ -124,7 +146,9 @@ LocalService::Json LocalService::execute(const Json& request, const JobQueue::Pr
     auto vector = embedder_.embed_text(request.at("query").get<std::string>());
     if (cancel) throw IndexCancelled();
     auto results = Json::array();
-    for (const auto& match : store_.search(vector, request.at("limit").get<std::size_t>())) {
+    const auto filter = request.value("scope",std::string("all")) == "live" ?
+        std::map<std::string,std::string>{{"origin","live_archive"}} : std::map<std::string,std::string>{};
+    for (const auto& match : store_.search_filtered(vector, request.at("limit").get<std::size_t>(), filter)) {
         Json result{{"id", match.item_id}, {"score", match.score}, {"metadata", match.metadata}};
         // Only videos within this service's media root get a playable URL/preview.
         if (match.metadata.contains("path") && match.metadata.contains("frame_index")) {
@@ -136,7 +160,7 @@ LocalService::Json LocalService::execute(const Json& request, const JobQueue::Pr
         }
         results.push_back(std::move(result));
     }
-    return {{"query", request.at("query")}, {"results", results}};
+    return {{"query", request.at("query")}, {"scope",request.value("scope",std::string("all"))}, {"results", results}};
 }
 bool LocalService::accept(const httplib::Request& request, httplib::Response& response) const {
         const auto host = request.get_header_value("Host");
@@ -181,11 +205,27 @@ void LocalService::routes() {
         if (!accept(request, response)) return;
         try {
             const auto body = Json::parse(request.body);
-            if (!body.is_object() || body.size() != 1 || !body.contains("source_id") || !body.at("source_id").is_string())
-                throw std::invalid_argument("Expected only a configured source_id; arbitrary URLs are not accepted");
-            reply(response, live_.start(body.at("source_id").get<std::string>()), 202);
+            if (!body.is_object() || !body.contains("source_id") || !body.at("source_id").is_string() ||
+                (body.contains("archive") && !body.at("archive").is_boolean()) ||
+                body.size() != (body.contains("archive") ? 2 : 1))
+                throw std::invalid_argument("Expected configured source_id and optional boolean archive; URLs are not accepted");
+            reply(response, live_.start(body.at("source_id").get<std::string>(),body.value("archive",false)), 202);
         } catch (const LiveSessionBusy& e) { reply(response, {{"error", e.what()}}, 409);
         } catch (const std::exception& e) { reply(response, {{"error", e.what()}}, 400); }
+    });
+    http_.Get("/api/live/archive", [this](const auto&, auto& response) { reply(response,archive_list()); });
+    http_.Post("/api/live/archive/index", [this](const auto& request, auto& response) {
+        if (!accept(request,response)) return;
+        try {
+            const auto body = Json::parse(request.body);
+            if (!body.is_object() || body.size()!=2 || !body.contains("session_id") || !body.at("session_id").is_string() ||
+                !body.contains("segment_index")) throw std::invalid_argument("Expected archive session_id and segment_index");
+            const auto id = archive_submit(body.at("session_id").get<std::string>(),integer(body,"segment_index",0,1,8));
+            reply(response,jobs_.get(id),202);
+        } catch (const ArchiveJobBusy& e) { reply(response,{{"error",e.what()}},409);
+        } catch (const JobQueueFull& e) { reply(response,{{"error",e.what()}},429);
+        } catch (const JobStorageError& e) { reply(response,{{"error",e.what()}},503);
+        } catch (const std::exception&) { reply(response,{{"error","Invalid or unavailable sealed archive segment"}},400); }
     });
     http_.Post(R"(/api/live/(live-[0-9]+-[0-9]+)/stop)", [this](const httplib::Request& request, httplib::Response& response) {
         if (!accept(request, response)) return;

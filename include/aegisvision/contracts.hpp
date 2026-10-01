@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 #include <vector>
 
 namespace aegisvision {
@@ -46,6 +47,14 @@ public:
         std::map<std::string, std::string> metadata) = 0;
     [[nodiscard]] virtual std::vector<SearchResult> search(
         const std::vector<float>& vector, std::size_t limit = 10) const = 0;
+    // Exact metadata predicates must be applied BEFORE top-K selection. Adapters
+    // without filtering fail explicitly; post-filtering a top-K list loses recall.
+    [[nodiscard]] virtual std::vector<SearchResult> search_filtered(
+        const std::vector<float>& vector, std::size_t limit,
+        const std::map<std::string, std::string>& metadata) const {
+        if (!metadata.empty()) throw std::invalid_argument("Vector store does not support metadata filtering");
+        return search(vector, limit);
+    }
 };
 
 }  // namespace aegisvision

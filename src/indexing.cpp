@@ -11,6 +11,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tuple>
+#include <set>
 
 namespace aegisvision {
 namespace {
@@ -124,11 +125,23 @@ IndexSummary index_video(const std::filesystem::path& input, IDetector& detector
     if (config.frame_stride < 1 || config.max_frames < 0 || config.detector_signature.empty() ||
         !std::isfinite(config.fallback_fps) || config.fallback_fps <= 0 || config.fallback_fps > 1000)
         throw std::invalid_argument("Invalid video indexing configuration");
+    const std::set<std::string> reserved{"kind","path","source_id","sha256","detector_signature",
+        "frame_index","timestamp_ms","timestamp_basis","source_fps","used_fallback_fps","bbox","label","confidence"};
+    const auto check_metadata = [&](const auto& metadata) {
+        if (metadata.size() > 16) throw std::invalid_argument("Too many provenance fields");
+        for (const auto& [key,value] : metadata)
+            if (key.empty() || key.size()>64 || key.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos ||
+                reserved.contains(key) || value.size()>1024) throw std::invalid_argument("Invalid or reserved provenance key");
+    };
+    check_metadata(config.source_metadata);
+    if (config.frame_metadata.size()>1000) throw std::invalid_argument("Too many frame provenance entries");
+    for (const auto& metadata : config.frame_metadata) check_metadata(metadata);
     if (!fs::is_regular_file(input)) throw std::invalid_argument("Input must be an existing local video file");
     const auto path = fs::canonical(input);
     const auto content_hash = file_hash(path, cancelled);
     IndexSummary summary;
     summary.source_id = digest(Json::array({"video-crops-v1", content_hash, config.detector_signature}));
+    if (!config.source_metadata.empty()) summary.source_id = digest(Json::array({summary.source_id, config.source_metadata}));
     cv::VideoCapture capture(utf8(path));
     if (!capture.isOpened()) throw std::runtime_error("Cannot open input video; check codec support");
     const double fps = capture.get(cv::CAP_PROP_FPS);
@@ -162,12 +175,18 @@ IndexSummary index_video(const std::filesystem::path& input, IDetector& detector
             const auto id = "video-" + digest(Json::array({summary.source_id, frame_index, i}));
             auto vector = embedder.embed_image(frame, detection);
             check_cancelled(cancelled);
-            store.upsert(id, std::move(vector), {{"kind", "video_crop"}, {"path", utf8(path)},
+            std::map<std::string,std::string> metadata{{"kind", "video_crop"}, {"path", utf8(path)},
                 {"source_id", summary.source_id}, {"sha256", content_hash},
                 {"detector_signature", config.detector_signature}, {"frame_index", std::to_string(frame_index)},
                 {"timestamp_ms", std::to_string(timestamp_ms)}, {"timestamp_basis", "frame_index/source_fps (CFR estimate)"},
                 {"source_fps", Json(summary.source_fps).dump()}, {"used_fallback_fps", summary.used_fallback_fps ? "true" : "false"},
-                {"bbox", bbox_json(detection.bbox)}, {"label", detection.label}, {"confidence", Json(detection.score).dump()}});
+                {"bbox", bbox_json(detection.bbox)}, {"label", detection.label}, {"confidence", Json(detection.score).dump()}};
+            metadata.insert(config.source_metadata.begin(),config.source_metadata.end());
+            if (!config.frame_metadata.empty()) {
+                if (frame_index >= config.frame_metadata.size()) throw std::runtime_error("Frame provenance does not match encoded clip");
+                metadata.insert(config.frame_metadata[static_cast<std::size_t>(frame_index)].begin(),config.frame_metadata[static_cast<std::size_t>(frame_index)].end());
+            }
+            store.upsert(id,std::move(vector),std::move(metadata));
             ++summary.indexed_items;
             if (progress) progress(summary);
         }

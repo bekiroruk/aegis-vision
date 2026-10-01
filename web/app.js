@@ -3,6 +3,8 @@ const terminal = state => ['succeeded', 'failed', 'cancelled'].includes(state);
 const stateText = {queued:'Sırada',running:'Çalışıyor',succeeded:'Tamamlandı',failed:'Hata',cancelled:'İptal edildi'};
 let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
+let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
+const archiveActions = new Set();
 const mediaUrl = path => '/media/' + path.split('/').map(encodeURIComponent).join('/');
 function notice(text) { $('notice').textContent = text; }
 async function api(path, body) {
@@ -16,6 +18,11 @@ function element(tag, text, className) {
   if(className) node.className = className; return node;
 }
 const liveStateText = {starting:'Model hazırlanıyor',running:'Analiz çalışıyor',stopping:'Durduruluyor',stopped:'Durduruldu',completed:'Süre tamamlandı',failed:'Hata'};
+const archiveStateText = {recording:'Kaydediliyor',active:'Kaydediliyor',disabled:'Kapalı',idle:'Hazır',stopped:'Kayıt durdu',completed:'Kayıt tamamlandı',finished:'Kayıt tamamlandı',limit_reached:'Kayıt sınırına ulaşıldı',quota_reached:'Kota doldu',quota:'Kota doldu',full:'Kota doldu',failed:'Arşiv hatası',error:'Arşiv hatası'};
+function archiveLimits(config) {
+  if (!config) return 'Arşiv bu sunucuda etkin değil.';
+  return `${config.segment_seconds} sn/parça · oturumda en fazla ${config.max_segments_per_session} parça · toplam ${config.max_total_segments} parça / ${Math.round(config.max_bytes / 1048576)} MiB. Analiz kareleri kaydedilir; otomatik silme yok.`;
+}
 function hideLive(text) {
   $('live-image').hidden = true; $('live-placeholder').hidden = false; $('live-placeholder').textContent = text;
   if (liveObjectUrl) { URL.revokeObjectURL(liveObjectUrl); liveObjectUrl = ''; }
@@ -27,9 +34,11 @@ function showLive(session) {
   $('live-start').disabled = !liveEnabled || active || liveAction;
   $('live-stop').disabled = !active || !!session?.cancel_requested || liveAction;
   $('live-source').disabled = active || liveAction;
+  $('live-archive').disabled = !archiveAvailable || active || liveAction;
   $('live-metrics').replaceChildren();
   if (!session) { $('live-state').textContent = liveEnabled ? 'Başlatılmaya hazır' : 'Kaynak tanımlanmamış'; hideLive(liveEnabled ? 'Yapılandırılmış kaynağı başlatın.' : 'Canlı kaynak bu sunucuda etkin değil.'); return; }
   if (session.source_id) $('live-source').value = session.source_id;
+  if (session.archive && active) $('live-archive').checked = !!session.archive.enabled;
   const reconnecting = active && session.connection_state === 'reconnecting';
   $('live-state').textContent = reconnecting ? 'Yeniden bağlanıyor…' : liveStateText[session.state] || session.state;
   const entries = [
@@ -39,6 +48,13 @@ function showLive(session) {
     ['Görüntü yaşı',session.has_preview ? `${Number(session.decode_age_ms).toFixed(0)} ms` : 'Güncel kare yok']
   ];
   entries.forEach(([label,value]) => { const cell = element('div'); cell.append(element('small',label),element('strong',String(value))); $('live-metrics').append(cell); });
+  if (session.archive?.enabled) {
+    const cell = element('div');
+    cell.append(element('small','Arşiv'),element('strong',archiveStateText[session.archive.state] || session.archive.state || 'Etkin'),element('small',`${session.archive.closed_segments || 0} kapatılan parça`));
+    if (session.archive.index_queue_failures) cell.append(element('small',`${session.archive.index_queue_failures} parça için indekslemeyi tekrar deneyin.`));
+    if (session.archive.error) cell.append(element('small',session.archive.error));
+    $('live-metrics').append(cell);
+  }
   if (!session.has_preview) hideLive(session.error || (reconnecting ? 'Yayın kesildi. Yeniden bağlantı bekleniyor.' : active ? 'Güncel analiz karesi bekleniyor…' : 'Oturum kapandı. Yeniden başlatabilirsiniz.'));
 }
 async function refreshLive() {
@@ -53,6 +69,7 @@ async function refreshLive() {
       let response;
       try { response = await fetch(`/api/live/${session.id}/preview.jpg`,{signal:controller.signal,cache:'no-store'}); }
       finally { clearTimeout(timer); }
+      if (revision !== liveRevision || liveSession?.id !== session.id) return;
       if (response.status === 204) hideLive('Güncel kare bekleniyor…');
       else if (response.ok && response.headers.get('Content-Type')?.startsWith('image/jpeg')) {
         const blob = await response.blob(), nextUrl = URL.createObjectURL(blob);
@@ -65,20 +82,20 @@ async function refreshLive() {
         if (oldUrl) URL.revokeObjectURL(oldUrl);
       } else hideLive('Önizleme alınamadı. Bağlantı yeniden kontrol ediliyor.');
     }
-  } catch(error) { hideLive('Canlı servise ulaşılamıyor.'); $('live-state').textContent = 'Bağlantı yok'; }
+  } catch(error) { if (revision === liveRevision) { hideLive('Canlı servise ulaşılamıyor.'); $('live-state').textContent = 'Bağlantı yok'; } }
   finally { livePolling = false; }
 }
 async function liveCommand(action) {
   if (liveAction) return; liveAction = true; ++liveRevision; showLive(liveSession); notice('');
   try {
-    if (action === 'start') showLive(await api('/api/live/start',{source_id:$('live-source').value}));
+    if (action === 'start') showLive(await api('/api/live/start',{source_id:$('live-source').value,archive:archiveAvailable && $('live-archive').checked}));
     else if (liveSession) showLive(await api(`/api/live/${liveSession.id}/stop`,{}));
   } catch(error) { notice(error.message); }
-  finally { ++liveRevision; liveAction = false; showLive(liveSession); await refreshLive(); }
+  finally { ++liveRevision; liveAction = false; showLive(liveSession); await refreshLive(); await refreshArchive(); }
 }
 $('live-start').addEventListener('click',() => liveCommand('start'));
 $('live-stop').addEventListener('click',() => liveCommand('stop'));
-document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshLive(); });
+document.addEventListener('visibilitychange',() => { if (!document.hidden) { refreshLive(); refreshArchive(); } });
 window.addEventListener('pagehide',() => { if (liveObjectUrl) URL.revokeObjectURL(liveObjectUrl); });
 function playAt(path, seconds) {
   const player = $('player');
@@ -86,14 +103,68 @@ function playAt(path, seconds) {
   const seek = () => { player.currentTime = seconds; player.play().catch(() => {}); };
   if (player.src !== target) { player.src = target; player.addEventListener('loadedmetadata', seek, {once:true}); }
   else seek();
-  $('media').value = path;
+  addMedia(path); $('media').value = path;
   player.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function addMedia(path) {
+  if (!Array.from($('media').options).some(option => option.value === path)) {
+    const option = element('option',path); option.value = path; $('media').append(option);
+  }
+  $('index-button').disabled = false;
+}
+async function retryArchive(segment) {
+  const key = `${segment.session_id}:${segment.segment_index}`;
+  if (archiveActions.has(key)) return;
+  archiveActions.add(key); ++archiveRevision; notice('');
+  document.querySelectorAll('[data-archive-retry]').forEach(button => { if (button.dataset.archiveRetry === key) button.disabled = true; });
+  try { await api('/api/live/archive/index',{session_id:segment.session_id,segment_index:segment.segment_index}); await refresh(); }
+  catch(error) { notice(error.message); }
+  finally { archiveActions.delete(key); ++archiveRevision; await refreshArchive(); }
+}
+function showArchive(data) {
+  const container = $('archive-segments'); container.replaceChildren();
+  const allSegments = data.segments || [];
+  // Arrival is session-relative, so it cannot order clips from different sessions.
+  const segments = [...allSegments].sort((a,b) => String(b.session_id).localeCompare(String(a.session_id),undefined,{numeric:true}) || Number(b.segment_index) - Number(a.segment_index)).slice(0,8);
+  $('archive-state').textContent = data.enabled ? `${allSegments.length} kayıt parçası` : 'Etkin değil';
+  if (data.config && archiveAvailable) $('archive-help').textContent = archiveLimits(data.config);
+  if (!segments.length) { container.append(element('p',data.enabled ? 'Kaydet ve arşivde ara seçeneğiyle başlayın. İlk parça kapandıktan sonra burada görünür.' : 'Sunucuda canlı arşiv etkin değil.','empty')); return; }
+  segments.forEach(segment => {
+    const card = element('article',undefined,'archive-card');
+    const indexState = segment.index_state || 'pending';
+    const seconds = Number(segment.playback_duration_seconds), fps = Number(segment.source_fps);
+    const duration = segment.playback_duration_seconds != null && Number.isFinite(seconds) && seconds > 0 ? `${seconds.toFixed(1)} sn klip` : 'Klip hazır değil';
+    const rate = segment.source_fps != null && Number.isFinite(fps) && fps > 0 ? `${fps} FPS oynatma` : 'Oynatma hızı bilinmiyor';
+    const count = Number.isInteger(segment.frames) && segment.frames >= 0 ? `${segment.frames} analiz karesi` : 'Kare sayısı bilinmiyor';
+    const part = Number.isInteger(segment.segment_index) ? `Parça ${segment.segment_index}` : 'Arşiv parçası';
+    card.append(element('strong',`${part} · ${duration}`),element('small',`İndeks: ${stateText[indexState] || (indexState === 'pending' ? 'Bekliyor' : indexState)}`),element('small',`${count} · ${rate}`),element('small',`Oturum: ${segment.session_id || 'Bilinmiyor'}`,'archive-session'));
+    if (segment.source_session !== undefined) card.append(element('small',`Bağlantı oturumu: ${segment.source_session}`));
+    if (segment.error) card.append(element('small',segment.error,'archive-error'));
+    const actions = element('div',undefined,'archive-actions');
+    const open = element('button','Kaydı aç'); open.type = 'button'; open.disabled = !segment.media_path;
+    if (segment.media_path) { addMedia(segment.media_path); open.addEventListener('click',() => playAt(segment.media_path,0)); }
+    actions.append(open);
+    if (['pending','failed','cancelled'].includes(indexState)) {
+      const retry = element('button','İndekslemeyi dene','secondary'); retry.type = 'button';
+      const key = `${segment.session_id}:${segment.segment_index}`; retry.dataset.archiveRetry = key;
+      retry.disabled = archiveActions.has(key) || typeof segment.session_id !== 'string' || !Number.isInteger(segment.segment_index); retry.addEventListener('click',() => retryArchive(segment)); actions.append(retry);
+    }
+    card.append(actions); container.append(card);
+  });
+}
+async function refreshArchive() {
+  if (archivePolling || document.hidden) return;
+  archivePolling = true;
+  const revision = archiveRevision;
+  try { const data = await api('/api/live/archive'); if (revision === archiveRevision) showArchive(data); }
+  catch(error) { if (revision === archiveRevision) $('archive-state').textContent = 'Arşive ulaşılamıyor'; }
+  finally { archivePolling = false; }
 }
 function showResults(job) {
   displayedSearch = job.id;
   $('results').replaceChildren();
   const matches = job.result.results;
-  $('result-title').textContent = `“${job.result.query}” · ${matches.length} sonuç`;
+  $('result-title').textContent = `${job.request?.scope === 'live' ? 'Canlı arşiv · ' : ''}“${job.result.query}” · ${matches.length} sonuç`;
   if (!matches.length) { $('results').append(element('p','Sonuç bulunamadı. Önce bir video indeksleyin.','empty')); return; }
   matches.forEach((match, index) => {
     const card = element('button',undefined,'result'); card.type = 'button';
@@ -104,9 +175,11 @@ function showResults(job) {
       card.addEventListener('click',() => playAt(match.media_path,seconds));
     } else card.disabled = true;
     const body = element('span',undefined,'result-body');
+    if (metadata.origin === 'live_archive') body.append(element('span','Canlı arşiv','archive-badge'));
     body.append(element('strong',`${metadata.label || 'Nesne'} · ${seconds.toFixed(1)} sn`),
       element('small',match.media_path || 'Kaynak bu medya klasöründe değil'),
       element('small',`Kare ${metadata.frame_index ?? '—'} · Benzerlik ${Number(match.score).toFixed(3)}`));
+    if (metadata.origin === 'live_archive') body.append(element('small',`Arşiv oturumu ${metadata.live_session_id || '—'} · Klip konumu, kamera zamanı değil`));
     card.append(body); $('results').append(card);
   });
 }
@@ -116,11 +189,11 @@ function showJobs(jobs) {
   jobs.slice(0,12).forEach(job => {
     const row = element('div',undefined,'job');
     const title = element('div',undefined,'job-title');
-    title.append(element('strong',job.request.type === 'search' ? 'Metin araması' : 'Video indeksleme'),
+    title.append(element('strong',job.request.type === 'search' ? 'Metin araması' : job.request.type === 'index_live_archive' ? 'Canlı arşiv indeksleme' : 'Video indeksleme'),
       element('span',job.cancel_requested && !terminal(job.state) ? 'İptal bekleniyor' : stateText[job.state],'state'));
-    row.append(title,element('p',job.request.path || job.request.query));
+    row.append(title,element('p',job.request.path || job.request.query || (job.request.type === 'index_live_archive' ? `${job.request.session_id} · Parça ${job.request.segment_index}` : '')));
     if (job.recoveries > 0) row.append(element('p',`Yeniden başlatma sonrası kurtarıldı · Deneme ${job.attempts}`));
-    if (job.request.type === 'index_video') row.append(element('p',`${job.progress.decoded_frames || 0} kare okundu · ${job.progress.indexed_items || 0} nesne kaydı`));
+    if (['index_video','index_live_archive'].includes(job.request.type)) row.append(element('p',`${job.progress.decoded_frames || 0} kare okundu · ${job.progress.indexed_items || 0} nesne kaydı`));
     if (job.error) row.append(element('p',job.error));
     if (!terminal(job.state)) {
       const cancel = element('button','İptal','cancel'); cancel.type = 'button'; cancel.disabled = job.cancel_requested;
@@ -144,12 +217,13 @@ async function refresh() {
 }
 $('index-form').addEventListener('submit',async event => {
   event.preventDefault(); notice('');
+  if ($('media').value.startsWith('live-archive/')) { notice('Canlı kayıtları yeniden indekslemek için arşiv kartındaki “İndekslemeyi dene” düğmesini kullanın.'); return; }
   try { await api('/api/jobs',{type:'index_video',path:$('media').value,stride:Number($('stride').value),max_frames:Number($('max-frames').value)}); await refresh(); }
   catch(error) { notice(error.message); }
 });
 $('search-form').addEventListener('submit',async event => {
   event.preventDefault(); notice('');
-  try { await api('/api/jobs',{type:'search',query:$('query').value,limit:8}); await refresh(); }
+  try { await api('/api/jobs',{type:'search',query:$('query').value,limit:8,scope:$('search-scope').value}); await refresh(); }
   catch(error) { notice(error.message); }
 });
 $('media').addEventListener('change',() => { $('player').src = mediaUrl($('media').value); });
@@ -160,14 +234,18 @@ async function start() {
     const live = await api('/api/live/sources');
     live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
     liveEnabled = live.sources.length > 0;
+    archiveAvailable = !!live.archive_available;
+    $('live-archive').checked = archiveAvailable;
+    $('archive-help').textContent = archiveAvailable ? archiveLimits(live.archive_config) : 'Canlı arşiv bu sunucuda etkin değil. Önizleme tek başına kullanılabilir.';
     if (!liveEnabled) { hideLive('Canlı kaynak bu sunucuda etkin değil.'); $('live-help').textContent = 'Sunucuyu -LiveUrl seçeneğiyle başlatın; tarayıcıdan keyfî URL kabul edilmez.'; }
-    else $('live-help').textContent = `${live.duration_seconds} saniyelik oturum · yaklaşık 2 önizleme/sn · kalıcı kayıt/indeksleme yapmaz.`;
+    else $('live-help').textContent = `${live.duration_seconds} saniyelik oturum · yaklaşık 2 önizleme/sn · kayıt ve indeksleme yalnızca seçeneği açarsanız yapılır.`;
     await refreshLive(); setInterval(refreshLive,500);
+    await refreshArchive(); setInterval(refreshArchive,2000);
     setInterval(() => { if (liveObjectUrl && performance.now() >= liveExpiresAt) hideLive('Güncel analiz karesi bekleniyor…'); },250);
     const data = await api('/api/media');
-    data.videos.forEach(video => { const option = element('option',video.path); option.value = video.path; $('media').append(option); });
+    data.videos.forEach(video => addMedia(video.path));
     if (data.videos.length) $('player').src = mediaUrl(data.videos[0].path);
-    else { $('index-button').disabled = true; notice('Medya klasöründe video yok. Bir MP4 ekleyip sayfayı yenileyin.'); }
+    else if (!$('media').options.length) { $('index-button').disabled = true; notice('Medya klasöründe video yok. Bir MP4 ekleyin veya canlı arşiv oluşturun.'); }
     await refresh(); setInterval(refresh,1000);
   } catch(error) { notice(error.message); $('health').textContent = 'Servise ulaşılamıyor'; }
 }

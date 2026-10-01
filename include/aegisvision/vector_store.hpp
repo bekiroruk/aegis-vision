@@ -18,6 +18,8 @@ public:
         std::map<std::string, std::string> metadata) override;
     [[nodiscard]] std::vector<SearchResult> search(
         const std::vector<float>& vector, std::size_t limit = 10) const override;
+    [[nodiscard]] std::vector<SearchResult> search_filtered(const std::vector<float>& vector,
+        std::size_t limit, const std::map<std::string, std::string>& metadata) const override;
 
 private:
     struct Item {

@@ -44,6 +44,10 @@ void InMemoryVectorStore::upsert(
 
 std::vector<SearchResult> InMemoryVectorStore::search(
     const std::vector<float>& vector, const std::size_t limit) const {
+    return search_filtered(vector, limit, {});
+}
+std::vector<SearchResult> InMemoryVectorStore::search_filtered(const std::vector<float>& vector,
+    const std::size_t limit, const std::map<std::string, std::string>& metadata) const {
     if (limit == 0) {
         throw std::invalid_argument("Search limit must be positive");
     }
@@ -55,6 +59,10 @@ std::vector<SearchResult> InMemoryVectorStore::search(
     std::vector<SearchResult> results;
     results.reserve(items_.size());
     for (const auto& [item_id, item] : items_) {
+        if (!std::all_of(metadata.begin(), metadata.end(), [&](const auto& entry) {
+            const auto found = item.metadata.find(entry.first);
+            return found != item.metadata.end() && found->second == entry.second;
+        })) continue;
         const auto score = std::inner_product(
             query.begin(), query.end(), item.vector.begin(), 0.0F);
         results.push_back(SearchResult{item_id, score, item.metadata});

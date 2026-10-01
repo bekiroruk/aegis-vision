@@ -33,6 +33,9 @@ Terminal açık kalmalıdır; kapatmak için Ctrl+C. Özel klasör/port:
 Qdrant koleksiyonu veya medya kökü değiştirildiğinde farklı veritabanı seçin:
 `./scripts/start_service.ps1 -JobDatabase artifacts/service/other-jobs.sqlite`.
 Aynı iş veritabanını iki servis aynı anda açamaz; ikinci süreç hata verir.
+Arşiv etkinse medya kökündeki `live-archive` ayrıca native tek-süreç sahiplik
+kilidiyle korunur. Farklı DB seçilse bile aynı arşive ikinci yazıcı reddedilir;
+OS kilidi süreç kapanınca serbest bırakır. Kilit dosyasını açık serviste silmeyin.
 SQLite 3.53.4 kaynakları CMake ile sabit SHA3-256 kontrolünden geçirilerek derlenir;
 ayrı SQLite kurulumu gerekmez.
 
@@ -46,7 +49,7 @@ CLIP ve YOLO başlangıçta bir kez yüklenir. `service-search.toml` ayrı
 `aegis_service` koleksiyonunu kullanır; yoksa oluşturur, mevcut verileri sıfırlamaz.
 İngilizce sorgularla başlayın: `a person walking on the street`.
 
-## Süre sınırlı canlı önizleme
+## Süre sınırlı canlı önizleme ve aranabilir arşiv
 
 `./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians` canlı paneli
 etkinleştirir. Varsayılan profil `configs/live-preview.toml` ile 180 saniyedir;
@@ -55,13 +58,31 @@ relay/publisher/servis kurulumu ve kesinti testi [canlı video kılavuzunda](liv
 Canlı URL tarayıcıdan alınmaz, yalnızca sunucuda tanımlı kaynak ID'si seçilir.
 
 Dosya/arama worker'ından ayrı tek canlı worker ve ayrı YOLO instance'ı kullanılır;
-canlı analiz SQLite iş kuyruğuna girmez. Canlı görüntü arşivlenmez/indekslenmez.
+canlı capture SQLite iş kuyruğuna girmez. **Kaydet ve arşivde ara** seçeneği
+yalnızca analiz karelerini sınırlı parçalara kaydeder; kapanan parçalar aynı dosya
+worker'ında sonlu encoder/CLIP/Qdrant işlerine dönüşür. İlave CLIP modeli yüklenmez.
 HTTP istemcileri aynı son JPEG'i paylaşır; uzun ömürlü MJPEG bağlantısı veya istemci
 başına decoder yoktur. Ekran yaklaşık 2 FPS önizlemedir, tam video/ses değildir.
 Disconnect/stop ve 2 saniyeden eski decode-arrival görüntüsünde önizleme temizlenir.
 Bu yaş kamera-ağ gecikmesini ölçmez. En fazla bir aktif oturum, süre sınırı ve
 tek son terminal özeti tutulur; yeni oturum eski ID'yi geçersiz kılar. Servis
 yeniden açılınca canlı oturum/geçmiş kurtarılmaz ve otomatik kamera bağlantısı yapılmaz.
+
+Arşiv parçası en fazla 10 saniyelik arrival aralığı/100 analiz karesidir; oturumda
+4, toplamda 8 parça ve 256 MiB sınırı vardır. Kayıt/encoder sınırları ve gerçek
+zaman ile klip zamanı ayrımı [canlı arşiv kılavuzundadır](live-video.md#canlı-yayını-kaydet-ve-arşivde-ara).
+Kota dolduğunda önizleme devam eder; mevcut kayıtlar otomatik silinmez.
+FFmpeg PATH'te olmalıdır; başlatıcıda `-Ffmpeg` ile özel executable verilebilir.
+Sunucu başlangıcında sabit encoder seçilir; HTTP'den komut/URL kabul edilmez.
+
+Arşiv kartları en yeni sekiz parçayı gösterir; doğrulanmış MP4'ü **Kaydı aç** ile
+oynatın. Kuyruk doluysa pending parça için **İndekslemeyi dene** kullanın. Aramada
+**Yalnızca canlı arşiv** seçeneği dosya indekslerini dışarıda bırakır. Kamera
+kaydının tam FPS arşivi değildir; yalnızca analiz kareleri CFR klibe dönüşür.
+Servis yeniden açıldığında kapalı parçalar manifestlerden listelenir ve kabul
+edilmiş SQLite işleri kurtarılır. İş geçmişinden budanan başarılı parçaların
+tamamlanma kaydı korunur. Kabul edilmemiş pending parçalar kendiliğinden kuyruğa
+verilmez; kullanıcı retry isteği gerekir. Canlı capture hiçbir durumda auto-resume etmez.
 
 ## Gerçek kamera kaydı
 
@@ -104,11 +125,13 @@ Tüm POST istekleri `Content-Type: application/json` gerektirir.
 | `POST /api/jobs/{id}/cancel` | Bekleyen işi kaldırır veya çalışan işten iptal ister |
 | `GET /api/preview/{search_job_id}/{result_index}.jpg` | Kutusu çizilmiş gerçek sonuç karesi |
 | `GET /media/{relative_path}` | Byte-range destekli video; tarayıcı codec desteği gerekir |
-| `GET /api/live/sources` | Sunucudaki kaynak ID/etiketleri; URL döndürmez |
+| `GET /api/live/sources` | Sunucudaki kaynak ID/etiketleri ve arşiv kullanılabilirliği/kotalar; URL döndürmez |
 | `GET /api/live` | `session: null` veya anlık/son oturum özeti |
-| `POST /api/live/start` | `{"source_id":"local-pedestrians"}`; `202`, başka aktif oturumda `409` |
+| `POST /api/live/start` | `{"source_id":"local-pedestrians","archive":true}`; `202`, başka aktif oturumda `409`; archive varsayılan false |
 | `POST /api/live/{id}/stop` | `{}`; durdurma isteği `202`, bilinmeyen eski ID `404` |
 | `GET /api/live/{id}/preview.jpg` | Taze JPEG `200`, görüntü yok/eski `204`, bilinmeyen ID `404` |
+| `GET /api/live/archive` | Kapalı parçalar, oynatılabilir medya yolu, indeksleme durumu/iş ID'si ve kotalar |
+| `POST /api/live/archive/index` | `{"session_id":"live-…","segment_index":1}`; `202`, zaten sırada/çalışıyorsa `409`, kuyruk doluysa `429` |
 
 İndeksleme ve arama gövdeleri:
 
@@ -117,13 +140,18 @@ Tüm POST istekleri `Content-Type: application/json` gerektirir.
 ```
 
 ```json
-{"type":"search","query":"a person walking on the street","limit":8}
+{"type":"search","query":"a person walking on the street","limit":8,"scope":"live"}
 ```
 
 Durumlar: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
 `stride`: 1–10000; `max_frames`: 0–1000000 (0 = tüm kayıt); `limit`: 1–20.
+`scope`: `all` (varsayılan) veya `live`; canlı kapsamı Qdrant `origin: live_archive`
+filtresini kullanır. Canlı arşiv sonucunda `live_session_id`, `live_source_id`,
+`source_session`, `tracking_epoch` metadata'sı ve MP4 medya yolu bulunur.
 Yollar medya köküne göre verilmelidir. Mutlak yollar, kökten kaçış ve dışarıya
 işaret eden symlink'ler reddedilir. UI yalnızca kökün doğrudan altındaki videoları listeler.
+Canlı MP4 yolları arşiv kartları/sonuçlardan oynatıcıya eklenir. `live-archive`
+alt ağacına sıradan `index_video` işi kabul edilmez; ham/staging dosyaları HTTP'de sunulmaz.
 
 Canlı oturum durumları ayrı sözleşmedir: `starting`, `running`, `stopping`,
 `stopped`, `completed`, `failed`; bağlantı `connecting`, `live`, `reconnecting`,
@@ -132,6 +160,14 @@ Canlı oturum durumları ayrı sözleşmedir: `starting`, `running`, `stopping`,
 `has_preview` izlenir. JPEG başlıkları sequence/session/epoch ve decode yaşı verir.
 Stop işbirlikçidir; in-flight model yüklemesi/inference ve backend deadline beklenir.
 Detaylı model/decoder hata metni ve kaynak URL'si API yanıtlarına eklenmez.
+
+Canlı özette `archive: {enabled,state,error,closed_segments,index_queue_failures}`
+kayıt durumunu bildirir. `/api/live/archive` parçaları `session_id`, `source_id`,
+1 tabanlı `segment_index`, `frames`, `source_fps`, `arrival_start_ms`,
+`arrival_end_ms`, `media_path` (hazır değilse null), `playback_duration_seconds`,
+`index_state`, `job_id` ve `error` taşır. İndeks durumları normal iş durumlarına
+ek olarak `pending` olabilir. Arrival monotonic uygulama zamanıdır; MP4 içindeki
+`timestamp_ms` kodlanmış CFR kare/FPS konumudur, kamera PTS değildir.
 
 ## Kuyruk, tutarlılık ve sınırlar
 
@@ -142,6 +178,8 @@ Detaylı model/decoder hata metni ve kaynak URL'si API yanıtlarına eklenmez.
 - HTTP 202 yalnızca SQLite commit sonrası döner. Durum, sonuç ve iptal isteği
   kalıcıdır; ilerleme yaklaşık saniyede bir diske kaydedilir. Ani kapanmada son
   checkpoint bir saniye kadar geriden gelebilir; tamamlanan vektör yazımları korunur.
+  Bu kalıcılık sözü sonlu `/api/jobs` ve arşiv indeksleme işleri içindir; canlı
+  start/stop `202` yalnızca geçici oturum isteğinin kabul edildiğini bildirir.
 - Yeniden başlatmada bekleyen işler aynı ID ile çalışır; `running` işler baştan
   tekrar indekslenir. Kare konumundan devam edilmez. Sabit Qdrant ID'leri aynı
   kaydı günceller. Dağıtık exactly-once garantisi yoktur; teslimat at-least-once'dur.
@@ -169,6 +207,14 @@ Detaylı model/decoder hata metni ve kaynak URL'si API yanıtlarına eklenmez.
   içerik güvenlik politikası vardır; kimlik doğrulama/TLS yoktur. Dış ağa açmayın.
 - Kaynak dosyaları işlem boyunca değiştirmeyin. Video yükleme endpoint'i yoktur;
   kendi MP4 dosyanızı medya klasörüne koyup sayfayı yenileyin.
+- Canlı arşiv disk/kare/parça limitleriyle sınırlandırılmıştır; sonsuz RTSP işi
+  SQLite worker'ını işgal etmez. Sınırlı encoder alt süreci sonlu işler içinde
+  çalışır; CPU yarışması ve kuyrukta aramanın beklemesi mümkündür. Arşiv hatası
+  canlı önizlemeyi başarılı arşiv gibi göstermez ve capture'ı durdurmaz.
+  Slot başına 32 MiB raw/encoded/manifest rezervasyonu uygulama kabul kontrolüdür;
+  OS filesystem kotası değildir. Ham ve yayımlanan MP4 için 12 MiB kontrol edilir.
+  FFmpeg `-fs` advisory olduğundan geçici dosya kısa süre aşabilir; son boyut/decode
+  kontrolünü geçmeyen klip HTTP'de yayımlanmaz. Dış süreç yazımları kapsam dışıdır.
 - Kare zamanı `frame_index / FPS` üzerinden hesaplanır; VFR/RTSP gerçek PTS desteği
   henüz yoktur. Önizleme arşivden yeniden çözülür, indeksleme anındaki dosya korunmalıdır.
 
@@ -187,6 +233,32 @@ gerçek YOLO/CLIP/Qdrant kamera denemesi ayrı entegrasyon doğrulamasıdır.
 `aegisvision_live_service` testi ayrı canlı modeli, tek aktif oturumu, stale/kopmuş
 JPEG'i, yeni source session/epoch'u, stop ve cleanup'ı doğrular. Gerçek RTSP/web
 kesinti testi için `scripts/test_live_dashboard.ps1` kullanılır.
+
+Arşiv doğrulaması ayrıca parça/session sınırlarını, kota altında önizlemenin
+devam etmesini, dolu kuyrukta pending parçayı, retry tekilleştirmesini, encoder
+hata/iptal/deadline davranışını, raw dosya erişim reddini ve canlı arama filtresini
+kapsar. Gerçek RTSP → MP4 → CLIP/Qdrant → tarayıcı denemesi bir entegrasyon
+kontrolüdür; kamera PTS, detection doğruluğu veya performans benchmark'ı değildir.
+
+Yerel relay/Qdrant/canlı servis açık, başka publisher/aktif oturum yok ve arşiv
+kotasında en az iki boş slot varken gerçek uçtan uca kontrol:
+
+```powershell
+./scripts/test_live_archive.ps1 -Output outputs/live-archive-test
+```
+
+FFmpeg PATH'te, `artifacts/media/pedestrians.mp4` mevcut olmalı; yeni çıktı dizini
+kullanın. Script kendi publisher/oturumunu yönetir; oluşturulan arşiv parçaları
+medya kökünde kalır ve tekrarlar kotayı tüketir. Önkoşullar ve artefaktların
+ayrıntıları [canlı arşiv testinde](live-video.md#gerçek-rtsp--aranabilir-arşiv-testi).
+
+2026-10-02 gerçek YOLO/CLIP/Qdrant smoke doğrulaması **118 okunan, 63 analiz edilen
+kareden 62 ve 1 karelik iki MP4** üretti (6,2 ve 0,1 sn). İki indeks işi tamamlandı;
+canlı kapsamlı metin araması 8 sonuç döndürdü, MP4 range `206` doğrulandı. İlk
+sonuç kodlanmış klibin 30. karesi / 3000 ms konumundaydı. Kanıt:
+`outputs/live-archive-verified/report.json`, `search.json` ve JPEG önizlemeler.
+Bu gerçek kayıt üzerinden yerel sistem kontrolüdür; fiziksel kamera, etiketli
+doğruluk ölçümü veya throughput benchmark'ı değildir.
 
 Teknik referanslar: [SQLite WAL](https://sqlite.org/wal.html),
 [SQLite locking mode](https://sqlite.org/pragma.html#pragma_locking_mode),

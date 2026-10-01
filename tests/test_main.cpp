@@ -42,6 +42,9 @@ void test_vector_search() {
     store.upsert("red", {1, 0}, {{"label", "red"}});
     store.upsert("blue", {0, 1}, {{"label", "blue"}});
     check(store.search({0.9F, 0.1F}).front().item_id == "red", "nearest vector first");
+    const auto filtered=store.search_filtered({1,0},1,{{"label","blue"}});
+    check(filtered.size()==1 && filtered.front().item_id=="blue", "metadata filtering precedes top-K");
+    check(store.search_filtered({1,0},1,{{"label","missing"}}).empty(), "missing metadata must not match");
 }
 
 void test_homography() {

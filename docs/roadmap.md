@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-01. Aktif uygulama C++20'dir; Python yalnızca model hazırlama
+Güncelleme: 2026-10-02. Aktif uygulama C++20'dir; Python yalnızca model hazırlama
 ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -25,6 +25,9 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
   reconnect/backoff, oturum ayrımı ve süre sınırlı YOLO/takip kaydı; [canlı video](live-video.md).
 - Aynı analiz motoruyla tarayıcıdan canlı oturum başlatma/durdurma, kutulu JPEG önizleme,
   kesintide görüntüyü temizleme ve ayrı model instance'ıyla eşzamanlı dosya/metin araması.
+- İsteğe bağlı analiz-kare arşivi: sınırlı segment/disk kotası, doğrulanmış MP4,
+  sonlu SQLite encoder/CLIP/Qdrant işleri, canlı kapsamlı arama ve klip anına atlama.
+  Kamera PTS/tam yayın FPS arşivi değildir; arrival/kare/epoch eşlemesi manifestte korunur.
 
 ## Kalan işler — önerilen sıra
 
@@ -49,9 +52,10 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 
 4. **Canlı video ve kalıcı servis katmanı.** Yerel C++ HTTP API, bounded queue ve
    cancellation ve SQLite job recovery tamamlandı. RTSP/FFmpeg kayıt CLI'ı,
-   reconnect/backpressure ve süre sınırlı canlı web ekranı tamamlandı. GStreamer adaptörü,
-   kamera/stream PTS, canlı nesnelerin kalıcı indekslenmesi ve çoklu worker/Redis lease
-   desteği geliştir. Canlı önizleme şu an dosyaya veya Qdrant'a yazmaz.
+   reconnect/backpressure, süre sınırlı canlı web ekranı ve kota sınırlı canlı nesne
+   arşivi/indeksi tamamlandı. GStreamer adaptörü, kamera/stream PTS, tam FPS/sesli
+   kayıt ve çoklu worker/Redis lease desteği geliştir. Mevcut arşiv yalnızca analiz
+   karelerini kaydeder; kota dolunca capture yerine yalnızca arşiv durur.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.

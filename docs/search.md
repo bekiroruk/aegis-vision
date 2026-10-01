@@ -11,6 +11,10 @@ Model, koleksiyon ve bağlantı ayarlarını TOML dosyasından vermek için
 
 OpenCV geliştirme kurulumu için [YOLO kılavuzu](yolo.md). Ardından proje kökünde:
 
+Arama/servis testlerinin gerçek MP4 encoder kontrolleri için `ffmpeg` PATH'te
+olmalıdır; varsayılan yalnız-çekirdek testleri bunu gerektirmez. Linux arama
+kurulumunda da `ffmpeg` paketi gerekir; CI bunu OpenCV bağımlılıklarıyla kurar.
+
 ```powershell
 ./scripts/setup_search.ps1 -WithQdrant
 cmake -S . -B build/search -G "Visual Studio 17 2022" -A x64 -DAEGISVISION_WITH_OPENCV=ON -DAEGISVISION_WITH_SEARCH=ON -DOpenCV_DIR=C:/opencv/opencv/build -DONNXRUNTIME_ROOT="$PWD/artifacts/deps/ort/onnxruntime-win-x64-1.23.2" -DICU_ROOT="$PWD/artifacts/deps/icu"

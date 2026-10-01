@@ -10,9 +10,10 @@
 <section class="panel live-panel" aria-labelledby="live-heading">
 <div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
 <div class="live-workspace"><div class="live-view"><img id="live-image" alt="Canlı yayındaki nesne tespitleri ve takip kimlikleri" hidden><div id="live-placeholder" class="live-placeholder">Yapılandırılmış kaynağı başlatın.</div></div>
-<div class="live-controls"><label for="live-source">Sunucuda tanımlanan kaynak</label><select id="live-source"></select><div class="live-buttons"><button id="live-start" type="button" disabled>Canlı analizi başlat</button><button id="live-stop" type="button" class="secondary" disabled>Durdur</button></div>
+<div class="live-controls"><label for="live-source">Sunucuda tanımlanan kaynak</label><select id="live-source"></select><label class="archive-opt-in" for="live-archive"><input id="live-archive" type="checkbox" disabled><span>Kaydet ve arşivde ara</span></label><p id="archive-help" class="hint">Arşiv kullanılabilirliği kontrol ediliyor.</p><div class="live-buttons"><button id="live-start" type="button" disabled>Canlı analizi başlat</button><button id="live-stop" type="button" class="secondary" disabled>Durdur</button></div>
 <div id="live-metrics" class="live-metrics" aria-live="polite"></div><p id="live-help" class="hint">Yaklaşık 2 kez/sn yenilenen analiz önizlemesi; sesli/tam hızlı video yayını değildir.</p><p class="hint">Eski kareler biriktirilmez. Kopma sonrası takip kimlikleri yeni oturuma aittir. Görüntü yaşı decode'dan ölçülür; kamera gecikmesi değildir.</p></div></div>
 </section>
+<section class="panel archive-panel" aria-labelledby="archive-heading"><div class="panel-title"><h2 id="archive-heading">Canlı arşiv</h2><span id="archive-state" class="badge subtle">Hazırlanıyor…</span></div><p class="hint archive-description">Yalnızca analiz edilen kareler kaydedilir. Kayıt süresi gerçek yayın süresi değildir; sonuçlara tıklayınca klibin içindeki ana gidilir. Kota dolunca arşiv durur, canlı önizleme devam eder. Kayıtlar otomatik silinmez.</p><div id="archive-segments" class="archive-segments"><p class="empty">Henüz arşiv parçası yok.</p></div></section>
 <div class="workspace">
 <section class="panel player-panel"><div class="panel-title"><h2>Video kaynağı</h2><span id="duration" class="muted"></span></div>
 <label for="media">Yerel video</label><select id="media" aria-label="Yerel video"></select>
@@ -22,9 +23,9 @@
 <aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
 </div>
 <section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
-<form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><button type="submit">Ara</button></form>
+<form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><select id="search-scope" aria-label="Arama kapsamı"><option value="all">Tüm kayıtlar</option><option value="live">Yalnızca canlı arşiv</option></select><button type="submit">Ara</button></form>
 <p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>
 <div class="panel-title"><p id="result-title" class="muted">Sonuçlar burada görünecek.</p></div><div id="results" class="results"></div>
 </section>
-<footer>Yerel C++ servis · YOLO + CLIP · Qdrant <span>Zamanlar kare/FPS üzerinden hesaplanır.</span></footer>
+<footer>Yerel C++ servis · YOLO + CLIP · Qdrant <span>Zamanlar klip kare/FPS konumudur; kamera PTS değildir.</span></footer>
 </main></body></html>

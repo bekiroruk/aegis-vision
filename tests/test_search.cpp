@@ -49,8 +49,10 @@ void unit() {
     server.Post("/collections/test/points/search",[](const auto& request,auto& response) {
         const auto body=Json::parse(request.body);
         const auto space=body.at("filter").at("must").at(0).at("match").at("value");
+        const auto& must=body.at("filter").at("must");
+        if(must.size()>1) require(must.size()==2 && must.at(1).at("key")=="metadata.origin", "Nested payload filter missing");
         if(body.at("limit")==99) { response.status=503; response.set_content("unavailable","text/plain"); return; }
-        response.set_content(Json{{"status","ok"},{"result",Json::array({Json{{"score",1.0},{"payload",{{"item_id","a\"b"},{"space_id",space},{"metadata",{{"label","bus"}}}}}}})}}.dump(),"application/json");
+        response.set_content(Json{{"status","ok"},{"result",Json::array({Json{{"score",1.0},{"payload",{{"item_id","a\"b"},{"space_id",space},{"metadata",{{"label","bus"},{"origin","live_archive"}}}}}}})}}.dump(),"application/json");
     });
     const int port=server.bind_to_any_port("127.0.0.1"); require(port>0,"Cannot bind test HTTP server");
     std::thread worker([&] { server.listen_after_bind(); });
@@ -63,6 +65,9 @@ void unit() {
     store.upsert("a\"b",{3,4},{{"label","bus"}});
     const auto found=store.search({3,4},1);
     require(found.size()==1 && found[0].item_id=="a\"b" && found[0].metadata.at("label")=="bus","Search response invalid");
+    require(store.search_filtered({3,4},1,{{"origin","live_archive"}}).size()==1,"Live archive filtering failed");
+    rejects([&] { (void)store.search_filtered({3,4},1,{{"origin","wrong"}}); },"Out-of-filter response accepted");
+    rejects([&] { (void)store.search_filtered({3,4},1,{{"origin.x","live_archive"}}); },"Arbitrary nested filter path accepted");
     rejects([&] { (void)store.search({1},1); },"Wrong dimension accepted");
     rejects([&] { (void)store.search({1,0},0); },"Zero limit accepted");
     rejects([&] { (void)store.search({1,0},99); },"HTTP failure swallowed");
@@ -138,7 +143,7 @@ void live(int port,const std::string& collection,bool write) {
     QdrantVectorStore store(config,write);
     if(write) {
         store.upsert("bus",{1,0,0},{{"label","old"}});
-        store.upsert("bus",{1,0,0},{{"label","bus"}});
+        store.upsert("bus",{1,0,0},{{"label","bus"},{"origin","live_archive"}});
         store.upsert("fruit",{0,1,0},{{"label","fruit"}});
         config.embedding_space="integration-other";
         QdrantVectorStore other(config);
@@ -147,6 +152,8 @@ void live(int port,const std::string& collection,bool write) {
     const auto results=store.search({1,0,0},10);
     require(results.size()==2 && results[0].item_id=="bus" && results[0].metadata.at("label")=="bus","Persistent search/idempotency/space isolation failed");
     require(results[0].score>.999,"Cosine score mismatch");
+    const auto archived=store.search_filtered({1,0,0},10,{{"origin","live_archive"}});
+    require(archived.size()==1 && archived.front().item_id=="bus","Persistent nested metadata filter failed");
     std::cout << "Qdrant persistence/idempotency/space isolation passed\n";
 }
 }

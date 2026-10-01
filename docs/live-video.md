@@ -13,8 +13,10 @@ Web ekranı ve kayıt CLI'ı aynı `analyze_stream` motorunu kullanır. Ekran, k
 JPEG'i yaklaşık saniyede iki kez yeniler; ses veya tam FPS video oynatıcı değildir.
 Canlı worker kendi YOLO modelini yükler; dosya/CLIP kuyruğunun modelini paylaşmaz.
 Bu nedenle canlı analiz sırasında metin araması çalışabilir, ancak CPU/RAM paylaşılır
-ve toplam RAM kullanımı ek model nedeniyle artar. Canlı oturum dosyaya, Qdrant'a
-veya SQLite'a yazılmaz; servis yeniden açılınca kendiliğinden başlamaz.
+ve toplam RAM kullanımı ek model nedeniyle artar. Canlı capture oturumu geçicidir;
+servis yeniden açılınca kendiliğinden başlamaz. İsteğe bağlı arşiv seçeneği yalnızca
+analiz edilen kareleri kısa kliplere kaydeder ve sonlu indeksleme işlerini mevcut
+SQLite kuyruğuna verir. Böylece CLIP modeli çoğaltılmadan canlı kayıtlar Qdrant'ta aranabilir.
 
 Önce [servis kurulumu](service.md) ile YOLO, CLIP ve Qdrant hazırlanmış olmalı.
 Qdrant zaten çalışırken proje kökünde aşağıdaki üç terminali açık tutun:
@@ -41,7 +43,7 @@ Varsayılan `configs/live-preview.toml` profili 180 saniyede durur; `-LiveConfig
 ile başka stream profili seçilebilir. Kaynak URL'si yalnızca servis başlangıcında
 verilir; tarayıcı kaynak ID'si gönderir. Keyfî URL, kimlik bilgisi ve token kabul
 edilmez. `-LiveUrl` verilmezse canlı bölüm devre dışıdır; dosya araması çalışır.
-Doğrudan executable komutunun son üç argümanı `JOB_DB STREAM.toml RTSP_URL`'dir.
+Başlatıcı `-Ffmpeg` ile encoder yolunu kabul eder; varsayılan `ffmpeg` PATH'te olmalıdır.
 
 Bu demo fiziksel kameraya bağlandığımız anlamına gelmez: gerçek OpenCV yaya kaydı
 FFmpeg → MediaMTX → RTSP → C++ YOLO/takip → tarayıcı zincirinden geçer.
@@ -54,6 +56,66 @@ Kopmada eski görüntü gösterilmez. Decode-arrival yaşı 2 saniyeyi aşan JPE
 tarayıcı da kendi süre kontrolüyle donmuş görüntüyü kaldırır. Bu yaş kamera PTS'si
 veya kamera-ağ gecikmesi değildir. Önizleme en fazla 960×720 ve 2 MiB'dir; istemci
 başına yeni decoder/model kurulmaz, tek değişmez son JPEG paylaşılır.
+
+## Canlı yayını kaydet ve arşivde ara
+
+Bu özellik 2026-10-02'de eklendi; aşağıdaki eski RTSP smoke sonuçları kendi
+2026-10-01 tarihleriyle korunmuştur.
+
+Canlı paneldeki **Kaydet ve arşivde ara** seçeneğini kontrol edip oturumu başlatın.
+Sunucuda arşiv kullanılabiliyorsa seçenek başlangıçta açıktır; işaretini kaldırınca
+yalnızca geçici önizleme çalışır. API'de `archive` gönderilmezse kayıt yapılmaz.
+Kaydın başladığı ve kota/hata durumları sayaçların yanında gösterilir.
+
+- Parçalar 10 saniyelik decode-arrival aralığında, 100 analiz karesi sınırında,
+  bağlantı/format sınırında veya stop sırasında kapanır. Tek parça farklı bağlantı
+  oturumlarını birleştirmez; takip epoch/kimlikleri sidecar metadata'da korunur.
+- Oturum başına en fazla 4, medya kökünde toplam en fazla 8 parça ve 256 MiB arşiv
+  sınırı vardır. Kota dolunca yalnızca kayıt durur; canlı analiz ve önizleme sürer.
+  Eski kayıtlar otomatik silinmez. Kapalı serviste kendi arşivinizi yedekleyip
+  bilinçli olarak yönetin; açık servis sırasında dosyaları değiştirmeyin.
+  Raw/encoded/manifest bütçesi için slot başına 32 MiB rezervasyon hesaplanır.
+  Bu uygulama kabul kotasıdır, OS disk kotası değildir; dış süreç yazımları ve
+  kısa süreli encoder taşması karşısında mutlak disk limiti garantisi vermez.
+- Analiz kareleri ham MJPEG olarak kaydedilir; sonlu iş FFmpeg ile tarayıcı uyumlu
+  MP4 üretip decode kare sayısını doğrular. Her ham/final MP4 en fazla 12 MiB'dir;
+  encoder `-fs` ile sınırlandırılsa da bu advisory'dir ve geçici dosya kısa süre
+  sınırı aşabilir. Final boyut kontrolünü geçmeyen dosya yayımlanmaz.
+  encoder alt süreci 30 saniye deadline'ına ve iş iptaline tabidir. Ham/staging
+  dosyaları HTTP'de açılmaz; doğrulanmış MP4 hazır olmadan **Kaydı aç** etkinleşmez.
+- Otomatik indeksleme, dosya/arama worker'ının sınırlı kuyruğunu ve mevcut CLIP
+  modelini kullanır. Varsayılan örnekleme her 10 analiz karesinde birdir. Kuyruk
+  doluysa parça `pending` kalır; sonsuz backlog veya otomatik retry döngüsü yoktur.
+  **İndekslemeyi dene** ile pending/failed/cancelled parçalara sonlu yeni iş verilir.
+- **Canlı arşiv** kartlarında klip oynatma uzunluğu ve indeksleme durumu görünür.
+  Arama kapsamını **Yalnızca canlı arşiv** seçin; sonuçtaki **Canlı arşiv** rozeti
+  kaynağı ayırır. Sonuca tıklama MP4'ün ilgili kodlanmış kare konumunu açar.
+
+Arşiv, kamera yayınını tam FPS kaydetmez: yalnızca analiz edilen kareler 10 FPS
+CFR klibe dönüşür. Örneğin 10 saniyelik canlı aralıkta 65 analiz karesi varsa
+klip 6,5 saniyedir; `timestamp_ms` bu **klipteki konumdur**, gerçek kamera zamanı
+veya stream PTS değildir. `manifest.json` kare/kaynak sequence, source session,
+tracking epoch ve monotonic arrival eşlemesini korur. Bu metadata zaman eşleme
+altyapısıdır; kamera PTS, ses ve kayıpsız tam yayın arşivi henüz yoktur.
+
+Kayıtlar medya kökünde `live-archive/<live-session>/segment-0001/` altında tutulur.
+`manifest.json`, ham kayıt ve doğrulanmış `clip.mp4` yereldir; modeller ve kayıtlar
+Git'e eklenmez. Yeniden başlatma canlı capture'ı başlatmaz; SQLite'a kabul edilmiş
+sonlu işler normal kuyruk kurtarma kurallarına tabidir. Kapalı manifestler yeniden
+listelenir; kabul edilmemiş pending parçalar otomatik kuyruğa girmez ve manuel
+retry ister. Başarılı indekslemenin tamamlanma kaydı, SQLite iş geçmişi budansa
+da korunur. Qdrant metadata'sındaki
+`origin: live_archive`, live session/source ve bağlantı/epoch alanları dosya
+indeksleriyle karışmadan arama filtresini sağlar. Generic `index_video` ile bu
+alt ağacı yeniden indekslemek yerine arşiv kartındaki özel retry endpoint'ini kullanın.
+
+Arşiv kökünde SQLite'tan bağımsız native tek-süreç sahiplik kilidi bulunur.
+Aynı medya arşivini iki servis farklı iş DB'leriyle de olsa birlikte yazamaz;
+ikinci başlangıç reddedilir. Süreç kapanınca OS kilidi bırakır. Kilit dosyasını
+çalışan serviste silmeyin; dosyanın var olması tek başına aktif sahiplik değildir.
+
+[API sözleşmesi](service.md#api) ve kararın gerekçesi
+[ADR-0011](adr/0011-live-searchable-archive.md) içinde açıklanmıştır.
 
 ## Kullanım
 
@@ -175,6 +237,40 @@ yeni session ve epoch ile analiz geri döndü, eşzamanlı arama dört sonuç ta
 Bu sistem entegrasyon kontrolüdür; model doğruluğu veya performans benchmark'ı değildir.
 Deterministik `aegisvision_live_service` testi ayrıca stale JPEG, HTTP doğrulaması,
 paralel başlatma, stop, süre sınırı, model hatası ve worker cleanup'ı kontrol eder.
+
+## Gerçek RTSP → aranabilir arşiv testi
+
+Yukarıdaki yerel relay, Qdrant ve 180 saniyelik canlı servis çalışıyor olmalı;
+publisher terminalini başlatmayın. Başka publisher/aktif canlı oturum bulunmamalı,
+arşiv kotasında en az iki boş parça slotu olmalı. FFmpeg PATH'te ve gerçek yaya
+kaydı `artifacts/media/pedestrians.mp4` yerinde olmalıdır. Yeni çıktı dizini kullanın:
+
+```powershell
+./scripts/test_live_archive.ps1 -Output outputs/live-archive-test
+```
+
+Script kendi gizli FFmpeg publisher'ını başlatır; opt-in arşivli oturumda ilk
+JPEG ve kapalı parça bekler, kendi oturumunu durdurur, encoder/indeks işlerinin
+tamamlanmasını kontrol eder. MP4 byte-range `206`, gerçek CLIP ile `scope: live`
+araması, yalnızca `origin: live_archive` sonuçları ve kutulu arama JPEG'i doğrulanır.
+Sonunda yalnızca kendi publisher'ını kapatır. `live-preview.jpg`,
+`search-preview.jpg`, `search.json` ve `report.json` çıktı kanıtlarıdır.
+Medya kökündeki üretilen arşiv parçaları tutulur; test tekrarları kotayı tüketir,
+mevcut kayıtlar otomatik silinmez ve var olan çıktı dizini üzerine yazılmaz.
+
+2026-10-02 gerçek Windows/CPU YOLOv8n + CLIP + Qdrant entegrasyonu geçti:
+**118 decode, 63 analiz; 62 ve 1 karelik iki parça**, sırasıyla 6,2 ve 0,1 saniyelik
+doğrulanmış MP4. İki parça da indekslendi; canlı kapsamlı arama **8 sonuç** döndürdü
+ve MP4 range isteği `206` oldu. İlk sonuç klipteki 30. kare / `timestamp_ms: 3000`
+konumundaydı; manifestteki kaynak arrival eşlemesi farklı bir zaman eksenidir.
+Kanıtlar `outputs/live-archive-verified/report.json` ve `search.json` içindedir.
+
+Bu, gerçek kamera kaydının yerel RTSP üzerinden uçtan uca smoke kontrolüdür;
+fiziksel kameraya bağlanma, etiketli detection/arama doğruluğu, camera PTS veya
+performans benchmark'ı değildir. Deterministik `aegisvision_archive_service`
+testi ayrıca canlı/dosya kapsam ayrımını, retry tekilleştirmesini, ham/sahipsiz
+medya erişim reddini, sealed içerik bütünlüğünü ve yeniden açılış katalog/geçmişini
+kontrol eder.
 
 Referanslar: [OpenCV open/read timeout özellikleri](https://docs.opencv.org/4.12.0/d4/d15/group__videoio__flags__base.html),
 [FFmpeg stream analiz süresi](https://ffmpeg.org/ffmpeg-formats.html),

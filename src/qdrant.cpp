@@ -70,8 +70,19 @@ void QdrantVectorStore::upsert(std::string id,std::vector<float> vector,std::map
     if(result.at("result").at("status")!="completed") throw std::runtime_error("Qdrant write is not completed");
 }
 std::vector<SearchResult> QdrantVectorStore::search(const std::vector<float>& vector,std::size_t limit) const {
+    return search_filtered(vector,limit,{});
+}
+std::vector<SearchResult> QdrantVectorStore::search_filtered(const std::vector<float>& vector,std::size_t limit,
+    const std::map<std::string,std::string>& metadata) const {
     if(limit<1 || limit>100) throw std::invalid_argument("Search limit must be 1..100");
-    const Json filter{{"must",Json::array({Json{{"key","space_id"},{"match",{{"value",impl_->config.embedding_space}}}}})}};
+    if(metadata.size()>8) throw std::invalid_argument("At most eight metadata filters supported");
+    auto must=Json::array({Json{{"key","space_id"},{"match",{{"value",impl_->config.embedding_space}}}}});
+    for(const auto& [key,value]:metadata) {
+        if(!std::regex_match(key,std::regex("[A-Za-z0-9_]{1,64}")) || value.empty() || value.size()>1024)
+            throw std::invalid_argument("Invalid exact metadata filter");
+        must.push_back({{"key","metadata."+key},{"match",{{"value",value}}}});
+    }
+    const Json filter{{"must",must}};
     const Json body{{"vector",impl_->vector(vector)},{"limit",limit},{"with_payload",true},{"filter",filter}};
     const auto result=response(impl_->client.Post(impl_->path+"/points/search",body.dump(),"application/json"));
     std::vector<SearchResult> matches;
@@ -79,6 +90,9 @@ std::vector<SearchResult> QdrantVectorStore::search(const std::vector<float>& ve
         const auto& payload=point.at("payload");
         const float score=point.at("score").get<float>();
         if(!std::isfinite(score) || payload.at("space_id")!=impl_->config.embedding_space) throw std::runtime_error("Invalid Qdrant search response");
+        for(const auto& [key,value]:metadata)
+            if(!payload.at("metadata").contains(key) || payload.at("metadata").at(key)!=value)
+                throw std::runtime_error("Qdrant returned a result outside the metadata filter");
         matches.push_back({payload.at("item_id").get<std::string>(),score,payload.at("metadata").get<std::map<std::string,std::string>>()});
     }
     return matches;

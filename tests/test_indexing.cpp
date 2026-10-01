@@ -143,6 +143,19 @@ void video_checks(const fs::path& root) {
     rejects([&] { (void)index_video(input, detector, embedder, empty_store, config); }, "Invalid crop accepted");
     require(empty_store.records.empty(), "Invalid crops must fail before embedding/upsert");
     detector.invalid = false;
+    config.source_metadata={{"origin","live_archive"},{"live_session_id","live-1-1"}};
+    for(int i=0;i<7;++i) config.frame_metadata.push_back({{"live_arrival_ms",std::to_string(i*150)}});
+    RecordingStore archive_store;
+    const auto archived=index_video(input,detector,embedder,archive_store,config);
+    require(archived.source_id!=summary.source_id && !archive_store.records.empty(),"Archive identity must preserve provenance");
+    for(const auto& [id,row]:archive_store.records) {
+        (void)id; const auto frame=std::stoi(row.at("frame_index"));
+        require(row.at("origin")=="live_archive" && std::stoi(row.at("live_arrival_ms"))==frame*150 &&
+            std::stoi(row.at("timestamp_ms"))==frame*100,"CFR seek and live arrival provenance were conflated");
+    }
+    config.source_metadata["timestamp_ms"]="override";
+    rejects([&] { (void)index_video(input,detector,embedder,archive_store,config); },"Reserved provenance override accepted");
+    config.source_metadata.clear(); config.frame_metadata.clear();
     bool cancel = false, cancelled = false;
     try {
         (void)index_video(input, detector, embedder, empty_store, config,

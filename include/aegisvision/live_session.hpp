@@ -1,5 +1,6 @@
 #pragma once
 #include "aegisvision/live.hpp"
+#include "aegisvision/live_archive.hpp"
 #include <nlohmann/json.hpp>
 #include <mutex>
 #include <thread>
@@ -12,6 +13,7 @@ struct LiveServiceConfig {
     std::vector<LivePreset> sources;
     vision::LiveConfig stream;
     vision::VideoConfig tracking;
+    vision::LiveArchiveConfig archive;
 };
 using LiveDetectorFactory = std::function<std::unique_ptr<IDetector>()>;
 class LiveSessionBusy : public std::runtime_error {
@@ -27,23 +29,25 @@ struct LivePreview {
 // immutable latest JPEG. No per-client capture/inference or durable job replay.
 class LiveSessions {
 public:
-    LiveSessions(LiveServiceConfig config = {}, LiveDetectorFactory detector = {}, vision::LiveCaptureFactory capture = {});
+    LiveSessions(LiveServiceConfig config = {}, LiveDetectorFactory detector = {}, vision::LiveCaptureFactory capture = {},
+        vision::LiveArchive::Callback archived = {});
     ~LiveSessions();
     nlohmann::json sources() const;
     nlohmann::json current() const; // null before first start; last terminal summary retained.
-    nlohmann::json start(const std::string& source_id);
+    nlohmann::json start(const std::string& source_id, bool archive = false);
     bool request_stop(const std::string& id);
     bool contains(const std::string& id) const;
     LivePreview preview(const std::string& id) const;
     void shutdown();
 private:
     using Clock = std::chrono::steady_clock;
-    void run(LivePreset preset);
+    void run(LivePreset preset, bool archive);
     nlohmann::json snapshot_locked() const;
     LivePreview preview_locked() const;
     LiveServiceConfig config_;
     LiveDetectorFactory detector_;
     vision::LiveCaptureFactory capture_;
+    vision::LiveArchive::Callback archived_;
     mutable std::mutex state_mutex_;
     std::mutex operation_mutex_;
     std::thread worker_;
@@ -54,5 +58,6 @@ private:
     vision::LiveSummary summary_;
     Clock::time_point started_, arrived_, finished_;
     LivePreview preview_;
+    nlohmann::json archive_;
 };
 }
