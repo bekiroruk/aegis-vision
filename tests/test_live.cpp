@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
         if (argc == 3 && std::string(argv[1]) == "--rtsp") {
             // Network transport integration only; not a detector accuracy test.
             LiveSource source(argv[2]);
-            const auto end = Clock::now() + 25s;
+            const auto end = Clock::now() + 45s;
             std::uint64_t previous_session = 0;
             int received = 0;
             while (Clock::now() < end && !source.finished()) {

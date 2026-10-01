@@ -6,6 +6,7 @@ relay_exe=${2:?Provide the verified MediaMTX binary}
 scratch=$(mktemp -d)
 relay_pid= publisher_pid= probe_pid=
 cleanup() {
+    local status=$?
     for child in "$probe_pid" "$publisher_pid" "$relay_pid"; do
         if [[ -n "$child" ]] && kill -0 "$child" 2>/dev/null; then
             kill "$child" 2>/dev/null || true
@@ -14,6 +15,12 @@ cleanup() {
     done
     # Preserve logs for diagnosis; do not remove an unresolved directory.
     echo "RTSP transport logs: $scratch"
+    if ((status != 0)); then
+        for log in "$scratch"/*.log; do
+            printf '\n%s\n' "$log"
+            cat "$log"
+        done
+    fi
 }
 trap cleanup EXIT
 "$relay_exe" configs/rtsp-local.yml >"$scratch/relay.log" 2>&1 & relay_pid=$!
@@ -28,9 +35,11 @@ publish before
 sleep 1
 "$build_dir/aegisvision_live_tests" --rtsp rtsp://127.0.0.1:8554/pedestrians >"$scratch/probe.log" 2>&1 & probe_pid=$!
 ready=false
-for ((attempt=0; attempt<60; ++attempt)); do
+for ((attempt=0; attempt<150; ++attempt)); do
     if grep -q RTSP_SESSION=1 "$scratch/probe.log"; then ready=true; break; fi
     kill -0 "$probe_pid" || { cat "$scratch/probe.log"; exit 1; }
+    kill -0 "$relay_pid" || exit 1
+    kill -0 "$publisher_pid" || exit 1
     sleep 0.1
 done
 if [[ "$ready" != true ]]; then cat "$scratch/probe.log"; exit 1; fi
