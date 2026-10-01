@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const terminal = state => ['succeeded', 'failed', 'cancelled'].includes(state);
 const stateText = {queued:'Sırada',running:'Çalışıyor',succeeded:'Tamamlandı',failed:'Hata',cancelled:'İptal edildi'};
 let displayedSearch = '', polling = false;
+let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
 const mediaUrl = path => '/media/' + path.split('/').map(encodeURIComponent).join('/');
 function notice(text) { $('notice').textContent = text; }
 async function api(path, body) {
@@ -14,6 +15,71 @@ function element(tag, text, className) {
   const node = document.createElement(tag); if(text !== undefined) node.textContent = text;
   if(className) node.className = className; return node;
 }
+const liveStateText = {starting:'Model hazırlanıyor',running:'Analiz çalışıyor',stopping:'Durduruluyor',stopped:'Durduruldu',completed:'Süre tamamlandı',failed:'Hata'};
+function hideLive(text) {
+  $('live-image').hidden = true; $('live-placeholder').hidden = false; $('live-placeholder').textContent = text;
+  if (liveObjectUrl) { URL.revokeObjectURL(liveObjectUrl); liveObjectUrl = ''; }
+  $('live-image').removeAttribute('src'); liveSequence = '';
+}
+function showLive(session) {
+  liveSession = session;
+  const active = !!session?.active;
+  $('live-start').disabled = !liveEnabled || active || liveAction;
+  $('live-stop').disabled = !active || !!session?.cancel_requested || liveAction;
+  $('live-source').disabled = active || liveAction;
+  $('live-metrics').replaceChildren();
+  if (!session) { $('live-state').textContent = liveEnabled ? 'Başlatılmaya hazır' : 'Kaynak tanımlanmamış'; hideLive(liveEnabled ? 'Yapılandırılmış kaynağı başlatın.' : 'Canlı kaynak bu sunucuda etkin değil.'); return; }
+  if (session.source_id) $('live-source').value = session.source_id;
+  const reconnecting = active && session.connection_state === 'reconnecting';
+  $('live-state').textContent = reconnecting ? 'Yeniden bağlanıyor…' : liveStateText[session.state] || session.state;
+  const entries = [
+    ['Analiz edilen',session.processed_frames],['Okunan',session.decoded_frames],['Atlanan',session.dropped_frames],
+    ['Bağlantı oturumu',session.sessions],['Kuyruk tepe / sınır',`${session.queue_high_watermark} / ${session.queue_capacity}`],
+    ['Ortalama analiz',`${Number(session.mean_analysis_ms).toFixed(0)} ms`],
+    ['Görüntü yaşı',session.has_preview ? `${Number(session.decode_age_ms).toFixed(0)} ms` : 'Güncel kare yok']
+  ];
+  entries.forEach(([label,value]) => { const cell = element('div'); cell.append(element('small',label),element('strong',String(value))); $('live-metrics').append(cell); });
+  if (!session.has_preview) hideLive(session.error || (reconnecting ? 'Yayın kesildi. Yeniden bağlantı bekleniyor.' : active ? 'Güncel analiz karesi bekleniyor…' : 'Oturum kapandı. Yeniden başlatabilirsiniz.'));
+}
+async function refreshLive() {
+  if (livePolling || document.hidden) return;
+  livePolling = true;
+  const revision = liveRevision;
+  try {
+    const data = await api('/api/live'); if (revision !== liveRevision) return; showLive(data.session);
+    const session = data.session;
+    if (session?.has_preview && `${session.id}:${session.preview_sequence}` !== liveSequence) {
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(),5000), fetchStarted = performance.now();
+      let response;
+      try { response = await fetch(`/api/live/${session.id}/preview.jpg`,{signal:controller.signal,cache:'no-store'}); }
+      finally { clearTimeout(timer); }
+      if (response.status === 204) hideLive('Güncel kare bekleniyor…');
+      else if (response.ok && response.headers.get('Content-Type')?.startsWith('image/jpeg')) {
+        const blob = await response.blob(), nextUrl = URL.createObjectURL(blob);
+        const expiresAt = fetchStarted + 2000 - Number(response.headers.get('X-Decode-Age-Ms') || 2000);
+        if (revision !== liveRevision || liveSession?.id !== session.id || liveSession.cancel_requested || performance.now() >= expiresAt) { URL.revokeObjectURL(nextUrl); return; }
+        const oldUrl = liveObjectUrl; liveObjectUrl = nextUrl;
+        liveExpiresAt = expiresAt;
+        liveSequence = `${session.id}:${response.headers.get('X-Live-Sequence')}`;
+        $('live-image').src = nextUrl; $('live-image').hidden = false; $('live-placeholder').hidden = true;
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+      } else hideLive('Önizleme alınamadı. Bağlantı yeniden kontrol ediliyor.');
+    }
+  } catch(error) { hideLive('Canlı servise ulaşılamıyor.'); $('live-state').textContent = 'Bağlantı yok'; }
+  finally { livePolling = false; }
+}
+async function liveCommand(action) {
+  if (liveAction) return; liveAction = true; ++liveRevision; showLive(liveSession); notice('');
+  try {
+    if (action === 'start') showLive(await api('/api/live/start',{source_id:$('live-source').value}));
+    else if (liveSession) showLive(await api(`/api/live/${liveSession.id}/stop`,{}));
+  } catch(error) { notice(error.message); }
+  finally { ++liveRevision; liveAction = false; showLive(liveSession); await refreshLive(); }
+}
+$('live-start').addEventListener('click',() => liveCommand('start'));
+$('live-stop').addEventListener('click',() => liveCommand('stop'));
+document.addEventListener('visibilitychange',() => { if (!document.hidden) refreshLive(); });
+window.addEventListener('pagehide',() => { if (liveObjectUrl) URL.revokeObjectURL(liveObjectUrl); });
 function playAt(path, seconds) {
   const player = $('player');
   const target = new URL(mediaUrl(path), location.href).href;
@@ -91,6 +157,13 @@ $('player').addEventListener('loadedmetadata',() => { $('duration').textContent 
 async function start() {
   try {
     await api('/api/health');
+    const live = await api('/api/live/sources');
+    live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
+    liveEnabled = live.sources.length > 0;
+    if (!liveEnabled) { hideLive('Canlı kaynak bu sunucuda etkin değil.'); $('live-help').textContent = 'Sunucuyu -LiveUrl seçeneğiyle başlatın; tarayıcıdan keyfî URL kabul edilmez.'; }
+    else $('live-help').textContent = `${live.duration_seconds} saniyelik oturum · yaklaşık 2 önizleme/sn · kalıcı kayıt/indeksleme yapmaz.`;
+    await refreshLive(); setInterval(refreshLive,500);
+    setInterval(() => { if (liveObjectUrl && performance.now() >= liveExpiresAt) hideLive('Güncel analiz karesi bekleniyor…'); },250);
     const data = await api('/api/media');
     data.videos.forEach(video => { const option = element('option',video.path); option.value = video.path; $('media').append(option); });
     if (data.videos.length) $('player').src = mediaUrl(data.videos[0].path);

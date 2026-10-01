@@ -1,6 +1,7 @@
 #pragma once
 #include "aegisvision/jobs.hpp"
 #include "aegisvision/indexing.hpp"
+#include "aegisvision/live_session.hpp"
 #include <httplib.h>
 #include <filesystem>
 
@@ -12,12 +13,14 @@ struct ServiceConfig {
     std::size_t max_pending{8};
     std::size_t max_retained{128};
     JobPersistence persistence;
+    LiveServiceConfig live;
 };
 // Loopback-only HTTP API. Model/store references must outlive the service.
-// All model operations execute on one queue worker, never HTTP worker threads.
+// File/search models execute on the queue worker. Live owns a separate model/worker.
 class LocalService {
 public:
-    LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config);
+    LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config,
+        LiveDetectorFactory live_detector = {}, vision::LiveCaptureFactory live_capture = {});
     ~LocalService();
     int bind(int port); // 0 chooses a free port, useful for integration tests.
     bool listen();
@@ -35,6 +38,7 @@ private:
     IVectorStore& store_;
     ServiceConfig config_;
     JobQueue jobs_;
+    LiveSessions live_;
     httplib::Server http_;
     int port_{};
 };

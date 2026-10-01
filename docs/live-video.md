@@ -1,4 +1,4 @@
-# Canlı RTSP kayıt ve analiz
+# Canlı RTSP analiz, önizleme ve kayıt
 
 C++ `aegisvision_stream`, OpenCV FFmpeg backend'iyle RTSP okur. Ayrı capture thread'i
 sürekli decode eder; YOLO ve takip başka thread'de analiz edilir. Yetişmeyen analiz
@@ -6,6 +6,54 @@ eski kareleri biriktirmez: drop-oldest kuyruğu varsayılan **1 kare**, en fazla
 ve 64 MiB piksel verisidir. Tek kabul edilen kare en fazla 32 MiB, CV_8UC3'tür.
 Bu sınırlar decoder/FFmpeg tamponlarının veya modelin toplam belleğini sınırlamaz;
 kaynak paket tamponu/gecikmesi ayrıca ölçülmelidir. Gerçek zaman garantisi yoktur.
+
+## Tarayıcıda canlı analiz
+
+Web ekranı ve kayıt CLI'ı aynı `analyze_stream` motorunu kullanır. Ekran, kutulu
+JPEG'i yaklaşık saniyede iki kez yeniler; ses veya tam FPS video oynatıcı değildir.
+Canlı worker kendi YOLO modelini yükler; dosya/CLIP kuyruğunun modelini paylaşmaz.
+Bu nedenle canlı analiz sırasında metin araması çalışabilir, ancak CPU/RAM paylaşılır
+ve toplam RAM kullanımı ek model nedeniyle artar. Canlı oturum dosyaya, Qdrant'a
+veya SQLite'a yazılmaz; servis yeniden açılınca kendiliğinden başlamaz.
+
+Önce [servis kurulumu](service.md) ile YOLO, CLIP ve Qdrant hazırlanmış olmalı.
+Qdrant zaten çalışırken proje kökünde aşağıdaki üç terminali açık tutun:
+
+```powershell
+# Bir kez: sabit sürüm ve SHA256 kontrolüyle yerel relay hazırlama
+./scripts/prepare_rtsp_relay.ps1
+# Terminal 1: yalnızca loopback TCP relay
+./artifacts/deps/mediamtx/mediamtx.exe configs/rtsp-local.yml
+```
+
+```powershell
+# Terminal 2: gerçek kamera kaydını yerel RTSP olarak tekrar yayınlama
+ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 -i artifacts/media/pedestrians.mp4 -an -c:v libx264 -preset ultrafast -tune zerolatency -g 10 -keyint_min 10 -pix_fmt yuv420p -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/pedestrians
+```
+
+```powershell
+# Terminal 3: web servisinde önceden tanımlı canlı kaynağı etkinleştirme
+./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians
+```
+
+<http://127.0.0.1:8090> adresinde **Canlı analizi başlat** düğmesini kullanın.
+Varsayılan `configs/live-preview.toml` profili 180 saniyede durur; `-LiveConfig`
+ile başka stream profili seçilebilir. Kaynak URL'si yalnızca servis başlangıcında
+verilir; tarayıcı kaynak ID'si gönderir. Keyfî URL, kimlik bilgisi ve token kabul
+edilmez. `-LiveUrl` verilmezse canlı bölüm devre dışıdır; dosya araması çalışır.
+Doğrudan executable komutunun son üç argümanı `JOB_DB STREAM.toml RTSP_URL`'dir.
+
+Bu demo fiziksel kameraya bağlandığımız anlamına gelmez: gerçek OpenCV yaya kaydı
+FFmpeg → MediaMTX → RTSP → C++ YOLO/takip → tarayıcı zincirinden geçer.
+Kaynak, MP4 hazırlama ve lisans notları [servis kılavuzundadır](service.md).
+
+Her servis en fazla bir canlı oturum tutar; ikinci başlatma `409` verir. Stop isteği
+hemen `202` döner ve önizlemeyi temizler. Worker sürmekte olan model yüklemesi,
+inference veya open/read çağrısını zorla kesmez; bitiş deadline'ı beklenebilir.
+Kopmada eski görüntü gösterilmez. Decode-arrival yaşı 2 saniyeyi aşan JPEG sunulmaz;
+tarayıcı da kendi süre kontrolüyle donmuş görüntüyü kaldırır. Bu yaş kamera PTS'si
+veya kamera-ağ gecikmesi değildir. Önizleme en fazla 960×720 ve 2 MiB'dir; istemci
+başına yeni decoder/model kurulmaz, tek değişmez son JPEG paylaşılır.
 
 ## Kullanım
 
@@ -33,7 +81,8 @@ kullanılır; `[video]` uyumsuzdur. Kaynak URL'si komuta verilir, TOML'ye yazıl
 | Ayar | Varsayılan / sınır | İşlev |
 |---|---|---|
 | duration_seconds | 30 / 1–86400 | Bağlantı bekleme dahil kayıt süresi; örnek dosyada 45 |
-| open_timeout_ms / read_timeout_ms | 3000 / 2000, 1–5000 | FFmpeg open/read deadline |
+| open_timeout_ms | 8000 / 1–15000 | FFmpeg bağlantı ve stream probing deadline |
+| read_timeout_ms | 2000 / 1–5000 | FFmpeg read deadline |
 | reconnect_initial_ms / reconnect_max_ms | 250 / 2000, 1–5000 | Üstel backoff; initial ≤ max |
 | max_outage_ms | 15000 / 1–600000 | İlk/son decode'dan sonra kesinti sınırı |
 | max_frame_age_ms | 1000 / 1–10000 | Kuyruktan alınırken decode-arrival yaş sınırı |
@@ -68,8 +117,13 @@ sonsuz RTSP işi eklenmez ve bu kayıt işi SQLite ile kurtarılmaz.
 gecikmesini içermez. AVI kare atlamalarını ve bağlantı kopukluğunu zaman olarak
 korumaz: 61 kare / 10 FPS = 6,1 saniyelik oynatma, 45 saniyelik canlı oturum değildir.
 Senkronizasyon için kamera/stream PTS sonraki adımdır. Format/boyut değişirse
-kayıt güvenli şekilde durur; sessiz resize veya aynı dosyada yeni format yapılmaz.
+kayıt hata verir; sessiz resize veya aynı dosyada yeni format yapılmaz.
 Hata halinde kısmi dosyalar kalabilir; rapor yazımı başarısızsa komut hata verir.
+
+Önceki Linux transport çalışmasında 3 saniyelik open deadline, başarılı RTSP TCP
+bağlantısından sonra FFmpeg stream probing aşamasını kesiyordu. Varsayılan 8 saniyeye
+yükseltildi: FFmpeg'in varsayılan analiz süresi 5 saniyedir. Bu uygulama deadline'ıdır,
+8 saniyelik açılma garantisi veya kamera gecikmesi ölçümü değildir.
 
 ## Tekrarlanabilir gerçek görüntülü Windows testi
 
@@ -103,6 +157,26 @@ Model indirmez ve detection kalitesini test etmez. Deterministik fake capture
 testleri ayrıca overflow, owned buffer, stale frame, outage, format, concurrent
 stop ve analiz exception'ında reader cleanup kontrolü yapar.
 
+## Canlı web ekranı kesinti testi
+
+Relay ve yukarıdaki 180 saniyelik canlı servis zaten çalışırken, başka aktif
+oturum ve publisher yoksa:
+
+```powershell
+./scripts/test_live_dashboard.ps1 -Output outputs/live-dashboard-recovery
+```
+
+Script yalnızca kendi FFmpeg süreçlerini başlatır/kapatır. Gerçek ilk JPEG,
+publisher kesilince `204`, yeniden yayında yeni source session/tracking epoch,
+en fazla 1 karelik kuyruk ve canlı analiz sürerken CLIP metin araması doğrulanır.
+Sonunda kendi canlı oturumunu durdurur. `before.jpg`, `recovered.jpg` ve
+`report.json` kanıtları yereldedir; repoya eklenmez. 2026-10-01 yerel doğrulamada
+yeni session ve epoch ile analiz geri döndü, eşzamanlı arama dört sonuç tamamladı.
+Bu sistem entegrasyon kontrolüdür; model doğruluğu veya performans benchmark'ı değildir.
+Deterministik `aegisvision_live_service` testi ayrıca stale JPEG, HTTP doğrulaması,
+paralel başlatma, stop, süre sınırı, model hatası ve worker cleanup'ı kontrol eder.
+
 Referanslar: [OpenCV open/read timeout özellikleri](https://docs.opencv.org/4.12.0/d4/d15/group__videoio__flags__base.html),
+[FFmpeg stream analiz süresi](https://ffmpeg.org/ffmpeg-formats.html),
 [MediaMTX yapılandırması](https://mediamtx.org/docs/references/configuration-file),
 [MediaMTX FFmpeg yayını](https://mediamtx.org/docs/publish/ffmpeg).

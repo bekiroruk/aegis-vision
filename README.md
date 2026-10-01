@@ -25,6 +25,7 @@ içinde birleştirmektir.
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
 - Videoda YOLO + IoU veya iki aşamalı takip, ID etiketli AVI ve kare bazlı CSV raporu
 - RTSP/FFmpeg canlı kaynak: timeout, reconnect, sınırlı drop-oldest kuyruğu ve oturum bazlı takip
+- Tarayıcıdan süre sınırlı canlı analiz başlatma/durdurma, kutulu JPEG önizleme ve kesinti sayaçları
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
 - Detection → tracking → embedding → indexing pipeline'ı
@@ -84,8 +85,8 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
 6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
-7. [Yerel servis ve RTSP CLI tamamlandı] C++ HTTP API, SQLite kurtarma ve video arama ekranı;
-   RTSP reconnect/backpressure; canlı web ekranı, kamera PTS ve Redis bekliyor
+7. [Yerel servis, RTSP CLI ve canlı ekran tamamlandı] C++ HTTP API, SQLite kurtarma,
+   video arama ve canlı önizleme; RTSP reconnect/backpressure; kamera PTS ve Redis bekliyor
 8. TensorRT FP16/INT8, GPU Docker ve Triton/Jetson deployment
 
 Öncelikler, eksikler ve her adımın kabul ölçütleri: [ayrıntılı yol haritası](docs/roadmap.md).
@@ -116,8 +117,9 @@ için [indeksleme kılavuzu](docs/indexing.md).
 **Video takibi:** Yerel videoda tespit, ID atama ve sonuç kaydetme için
 [video kılavuzu](docs/video.md). Varsayılan IoU; `--tracker two-stage` ile hareket tahminli iki aşamalı takip seçilir. Tam ByteTrack/Re-ID henüz yoktur.
 
-**Canlı RTSP:** Bağlantı kesilince yeniden bağlanan, eski kareleri biriktirmeyen kayıt/analiz
-komutu ve gerçek yaya videosuyla otomatik kesinti testi için [canlı video kılavuzu](docs/live-video.md).
+**Canlı RTSP:** Tarayıcıda canlı analiz için `./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians`.
+Önce yerel yayın kurulmalıdır; üç terminalle kurulum, kayıt komutu ve gerçek yaya
+videosuyla kesinti testi için [canlı video kılavuzu](docs/live-video.md).
 
 OpenCV araçları isteğe bağlıdır; varsayılan çekirdek derlemesi harici bağımlılık istemez.
 OpenCV 4 geliştirme paketi (C++ başlıkları, kütüphaneler ve Windows DLL'leri) gerekir.

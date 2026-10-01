@@ -51,7 +51,7 @@ std::unique_ptr<ITracker> make_tracker(const VideoConfig& config) {
 
 void validate_live_config(const LiveConfig& c) {
     if (c.duration_seconds < 1 || c.duration_seconds > 86400 ||
-        c.open_timeout_ms < 1 || c.open_timeout_ms > 5000 ||
+        c.open_timeout_ms < 1 || c.open_timeout_ms > 15000 ||
         c.read_timeout_ms < 1 || c.read_timeout_ms > 5000 ||
         c.reconnect_initial_ms < 1 || c.reconnect_max_ms < c.reconnect_initial_ms ||
         c.reconnect_max_ms > 5000 || c.max_outage_ms < 1 || c.max_outage_ms > 600000 ||
@@ -97,7 +97,8 @@ struct LiveSource::Impl {
                 if (Clock::now() - last_arrival >= Ms(config.max_outage_ms)) {
                     reason = "outage_limit"; break;
                 }
-                { std::lock_guard lock(mutex); ++stats.connection_attempts; }
+                { std::lock_guard lock(mutex); ++stats.connection_attempts;
+                  stats.connection_state = stats.sessions ? "reconnecting" : "connecting"; }
                 auto capture = factory();
                 if (!capture) throw std::runtime_error("Capture factory returned null");
                 bool opened = false;
@@ -111,7 +112,7 @@ struct LiveSource::Impl {
                         if (stop_requested()) break;
                         if (!read || image.empty()) {
                             std::lock_guard lock(mutex);
-                            ++stats.read_failures; clear_queue();
+                            ++stats.read_failures; clear_queue(); stats.connection_state = "reconnecting";
                             break;
                         }
                         const auto arrived = Clock::now();
@@ -127,6 +128,7 @@ struct LiveSource::Impl {
                         {
                             std::lock_guard lock(mutex);
                             if (first) { ++stats.sessions; first = false; }
+                            stats.connection_state = "live";
                             frame.session = stats.sessions;
                             frame.sequence = ++stats.decoded_frames;
                             const auto bytes = frame.image.total() * frame.image.elemSize();
@@ -153,7 +155,8 @@ struct LiveSource::Impl {
             }
         } catch (const std::exception&) { reason = "capture_error"; }
         catch (...) { reason = "capture_error"; }
-        { std::lock_guard lock(mutex); clear_queue(); stats.stop_reason = reason; done = true; }
+        { std::lock_guard lock(mutex); clear_queue(); stats.stop_reason = reason;
+          stats.connection_state = "stopped"; done = true; }
         changed.notify_all();
     }
 };
@@ -191,22 +194,14 @@ std::optional<LiveFrame> LiveSource::next(Ms wait) {
     return std::nullopt;
 }
 
-LiveSummary process_stream(const std::string& url, const std::filesystem::path& output,
-    IDetector& detector, const VideoConfig& tracking, const LiveConfig& config, LiveCaptureFactory factory) {
-    namespace fs = std::filesystem;
+LiveSummary analyze_stream(const std::string& url, IDetector& detector, const VideoConfig& tracking,
+    const LiveConfig& config, const std::atomic_bool& cancel, LiveFrameSink sink,
+    LiveProgress progress, LiveCaptureFactory factory) {
     validate_rtsp_url(url); validate_live_config(config);
-    auto tracker = make_tracker(tracking); // Fail before starting the reader / touching outputs.
-    if (fs::exists(output) && (!fs::is_directory(output) || !fs::is_empty(output)))
-        throw std::invalid_argument("Output directory must be new or empty");
-    fs::create_directories(output);
-    std::ofstream rows(output / "tracks.csv");
-    std::ofstream frames(output / "frames.csv");
-    rows << "output_frame,source_sequence,source_session,tracking_epoch,arrival_ms,track_id,label,confidence,x1,y1,x2,y2\n";
-    frames << "output_frame,source_sequence,source_session,tracking_epoch,arrival_ms,decode_age_ms,analysis_ms\n";
-    if (!rows || !frames) throw std::runtime_error("Cannot open live reports");
+    auto tracker = make_tracker(tracking);
+    if (!sink) throw std::invalid_argument("Live frame sink required");
+    if (cancel) { LiveSummary cancelled; cancelled.stop_reason = "cancelled"; return cancelled; }
     LiveSource source(url, config, std::move(factory));
-    cv::VideoWriter writer;
-    cv::Size output_size;
     LiveSummary summary;
     const auto started = Clock::now();
     std::uint64_t session = 0;
@@ -215,29 +210,20 @@ LiveSummary process_stream(const std::string& url, const std::filesystem::path& 
     PipelineConfig pipeline_config;
     pipeline_config.enable_embeddings = false; pipeline_config.index_embeddings = false;
     while (true) {
+        if (cancel) { summary.stop_reason = "cancelled"; break; }
         if (Clock::now() - started >= std::chrono::seconds(config.duration_seconds)) {
             summary.stop_reason = "duration_limit"; break;
         }
         auto frame = source.next();
+        summary.source = source.stats();
+        if (progress) progress(summary);
+        if (cancel) { summary.stop_reason = "cancelled"; break; }
         if (!frame) {
             if (source.finished()) { summary.stop_reason = source.stats().stop_reason; break; }
             continue;
         }
-        if (!writer.isOpened()) {
-            output_size = frame->image.size();
-            if (output_size.width % 2 || output_size.height % 2) {
-                throw std::runtime_error("MJPEG output requires even frame dimensions");
-            }
-            writer.open(utf8(output / "tracked.avi"), cv::CAP_OPENCV_MJPEG,
-                cv::VideoWriter::fourcc('M','J','P','G'), config.output_fps, output_size);
-            if (!writer.isOpened()) throw std::runtime_error("Cannot open live video writer");
-        }
-        if (frame->image.size() != output_size) {
-            summary.stop_reason = "frame_format_changed"; break;
-        }
         if (session != frame->session || frame->arrival_ms - previous_arrival > config.tracking_gap_ms) {
             tracker = make_tracker(tracking); ++summary.tracking_epochs;
-            std::cout << "live session=" << frame->session << " tracking_epoch=" << summary.tracking_epochs << std::endl;
         }
         session = frame->session; previous_arrival = frame->arrival_ms;
         AnalysisPipeline pipeline(pipeline_config, detector, tracker.get(), nullptr, nullptr, nullptr);
@@ -247,35 +233,76 @@ LiveSummary process_stream(const std::string& url, const std::filesystem::path& 
         auto result = pipeline.analyze(image_frame(frame->image, std::to_string(frame->sequence),
             "rtsp-session-" + std::to_string(session), frame->arrival_ms));
         const double analysis_ms = std::chrono::duration<double, std::milli>(Clock::now() - analysis_started).count();
+        if (cancel) { summary.stop_reason = "cancelled"; break; }
         total_analysis += analysis_ms;
+        ++summary.processed_frames;
+        summary.mean_analysis_ms = total_analysis / summary.processed_frames;
+        summary.source = source.stats();
+        sink(*frame, result, summary, age, analysis_ms);
+        if (progress) progress(summary);
+    }
+    source.stop(); summary.source = source.stats();
+    if (progress) progress(summary);
+    return summary;
+}
+
+LiveSummary process_stream(const std::string& url, const std::filesystem::path& output,
+    IDetector& detector, const VideoConfig& tracking, const LiveConfig& config, LiveCaptureFactory factory) {
+    namespace fs = std::filesystem;
+    validate_rtsp_url(url); validate_live_config(config);
+    (void)make_tracker(tracking);
+    if (fs::exists(output) && (!fs::is_directory(output) || !fs::is_empty(output)))
+        throw std::invalid_argument("Output directory must be new or empty");
+    fs::create_directories(output);
+    std::ofstream rows(output / "tracks.csv"), frames(output / "frames.csv");
+    rows << "output_frame,source_sequence,source_session,tracking_epoch,arrival_ms,track_id,label,confidence,x1,y1,x2,y2\n";
+    frames << "output_frame,source_sequence,source_session,tracking_epoch,arrival_ms,decode_age_ms,analysis_ms\n";
+    if (!rows || !frames) throw std::runtime_error("Cannot open live reports");
+    cv::VideoWriter writer;
+    cv::Size output_size;
+    std::atomic_bool cancel{false};
+    int epoch = 0;
+    auto summary = analyze_stream(url, detector, tracking, config, cancel,
+      [&](const LiveFrame& frame, const AnalysisResult& result, const LiveSummary& current, double age, double analysis_ms) {
+        if (!writer.isOpened()) {
+            output_size = frame.image.size();
+            if (output_size.width % 2 || output_size.height % 2)
+                throw std::runtime_error("MJPEG output requires even frame dimensions");
+            writer.open(utf8(output / "tracked.avi"), cv::CAP_OPENCV_MJPEG,
+                cv::VideoWriter::fourcc('M','J','P','G'), config.output_fps, output_size);
+            if (!writer.isOpened()) throw std::runtime_error("Cannot open live video writer");
+        }
+        if (frame.image.size() != output_size) throw std::runtime_error("Live recording frame format changed");
+        if (epoch != current.tracking_epochs) {
+            epoch = current.tracking_epochs;
+            std::cout << "live session=" << frame.session << " tracking_epoch=" << epoch << std::endl;
+        }
+        const int index = current.processed_frames - 1;
         std::vector<Detection> display;
         for (const auto& track : result.tracks) {
-            display.push_back({track.bbox, "E" + std::to_string(summary.tracking_epochs) + "/ID " +
+            display.push_back({track.bbox, "E" + std::to_string(epoch) + "/ID " +
                 std::to_string(track.track_id) + " " + track.label, track.score, {}, {}});
             std::string label;
             for (char c : track.label) { if (c == '"') label += '"'; label += c; }
-            rows << summary.processed_frames << ',' << frame->sequence << ',' << session << ',' <<
-                summary.tracking_epochs << ',' << frame->arrival_ms << ',' << track.track_id << ",\"" << label << "\"," <<
+            rows << index << ',' << frame.sequence << ',' << frame.session << ',' <<
+                epoch << ',' << frame.arrival_ms << ',' << track.track_id << ",\"" << label << "\"," <<
                 track.score << ',' << track.bbox.x1 << ',' << track.bbox.y1 << ',' << track.bbox.x2 << ',' << track.bbox.y2 << '\n';
         }
-        frames << summary.processed_frames << ',' << frame->sequence << ',' << session << ',' << summary.tracking_epochs << ',' <<
-            frame->arrival_ms << ',' << age << ',' << analysis_ms << '\n';
-        auto drawn = annotate(frame->image, display);
-        if (summary.processed_frames == 0) save_image(output / "preview.jpg", drawn);
+        frames << index << ',' << frame.sequence << ',' << frame.session << ',' << epoch << ',' <<
+            frame.arrival_ms << ',' << age << ',' << analysis_ms << '\n';
+        auto drawn = annotate(frame.image, display);
+        if (index == 0) save_image(output / "preview.jpg", drawn);
         save_image(output / "latest.jpg", drawn);
         writer.write(drawn);
-        ++summary.processed_frames;
-        if (summary.processed_frames % 10 == 0) {
-            const auto stats = source.stats();
-            std::cout << "live frames=" << summary.processed_frames << " decoded=" << stats.decoded_frames <<
+        if (current.processed_frames % 10 == 0) {
+            const auto& stats = current.source;
+            std::cout << "live frames=" << current.processed_frames << " decoded=" << stats.decoded_frames <<
                 " dropped=" << stats.dropped_overflow + stats.dropped_stale + stats.dropped_disconnect << std::endl;
         }
         if (!rows || !frames) throw std::runtime_error("Cannot write live reports");
-    }
-    source.stop(); summary.source = source.stats();
+      }, {}, std::move(factory));
     writer.release(); rows.flush(); frames.flush();
     if (!rows || !frames) throw std::runtime_error("Cannot finalize live reports");
-    summary.mean_analysis_ms = summary.processed_frames ? total_analysis / summary.processed_frames : 0;
     cv::FileStorage report("summary.json", cv::FileStorage::WRITE | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_JSON);
     report << "processed_frames" << summary.processed_frames << "tracking_epochs" << summary.tracking_epochs;
     report << "stop_reason" << summary.stop_reason << "timestamp_basis" << "steady-clock decode arrival; not camera PTS";

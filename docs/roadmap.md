@@ -23,6 +23,8 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
   tek süreç sahipliği, bağlam doğrulaması ve disk yazım hatasında durma.
 - RTSP/FFmpeg kaynağı, open/read timeout, sınırlı kare/byte kuyruğu, drop-oldest,
   reconnect/backoff, oturum ayrımı ve süre sınırlı YOLO/takip kaydı; [canlı video](live-video.md).
+- Aynı analiz motoruyla tarayıcıdan canlı oturum başlatma/durdurma, kutulu JPEG önizleme,
+  kesintide görüntüyü temizleme ve ayrı model instance'ıyla eşzamanlı dosya/metin araması.
 
 ## Kalan işler — önerilen sıra
 
@@ -47,8 +49,9 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 
 4. **Canlı video ve kalıcı servis katmanı.** Yerel C++ HTTP API, bounded queue ve
    cancellation ve SQLite job recovery tamamlandı. RTSP/FFmpeg kayıt CLI'ı,
-   reconnect/backpressure tamamlandı. Canlı web ekranı, GStreamer adaptörü,
-   kamera/stream PTS ve çoklu worker/Redis lease desteği geliştir.
+   reconnect/backpressure ve süre sınırlı canlı web ekranı tamamlandı. GStreamer adaptörü,
+   kamera/stream PTS, canlı nesnelerin kalıcı indekslenmesi ve çoklu worker/Redis lease
+   desteği geliştir. Canlı önizleme şu an dosyaya veya Qdrant'a yazmaz.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.

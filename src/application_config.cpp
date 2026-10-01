@@ -190,7 +190,7 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
             "reconnect_max_ms", "max_outage_ms", "max_frame_age_ms", "tracking_gap_ms", "queue_capacity", "output_fps"});
         auto& c = settings.live;
         c.duration_seconds = static_cast<int>(integer(stream, "stream", "duration_seconds", 30, 1, 86400));
-        c.open_timeout_ms = static_cast<int>(integer(stream, "stream", "open_timeout_ms", 3000, 1, 5000));
+        c.open_timeout_ms = static_cast<int>(integer(stream, "stream", "open_timeout_ms", 8000, 1, 15000));
         c.read_timeout_ms = static_cast<int>(integer(stream, "stream", "read_timeout_ms", 2000, 1, 5000));
         c.reconnect_initial_ms = static_cast<int>(integer(stream, "stream", "reconnect_initial_ms", 250, 1, 5000));
         c.reconnect_max_ms = static_cast<int>(integer(stream, "stream", "reconnect_max_ms", 2000, 1, 5000));

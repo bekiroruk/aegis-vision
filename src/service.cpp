@@ -46,11 +46,13 @@ int integer(const Json& value, const char* key, int fallback, int minimum, int m
     return static_cast<int>(n);
 }
 }
-LocalService::LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config)
+LocalService::LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config,
+    LiveDetectorFactory live_detector, vision::LiveCaptureFactory live_capture)
     : detector_(detector), embedder_(embedder), store_(store), config_(prepare(std::move(config))),
       jobs_([this](const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
           return execute(request, progress, cancel);
-      }, config_.max_pending, config_.max_retained, config_.persistence) {
+      }, config_.max_pending, config_.max_retained, config_.persistence),
+      live_(config_.live, std::move(live_detector), std::move(live_capture)) {
     routes();
 }
 LocalService::~LocalService() { stop(); }
@@ -63,7 +65,7 @@ int LocalService::bind(int port) {
     return port_;
 }
 bool LocalService::listen() { return http_.listen_after_bind(); }
-void LocalService::stop() { http_.stop(); }
+void LocalService::stop() { http_.stop(); live_.shutdown(); }
 fs::path LocalService::media_path(const std::string& relative) const {
     const auto requested = fs::u8path(relative);
     if (relative.empty() || requested.is_absolute() || requested.has_root_name())
@@ -156,7 +158,7 @@ void LocalService::routes() {
     http_.set_payload_max_length(8192);
     http_.set_read_timeout(5); http_.set_write_timeout(15);
     http_.set_default_headers({{"X-Content-Type-Options", "nosniff"}, {"Cache-Control", "no-store"},
-        {"Content-Security-Policy", "default-src 'self'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'"}});
+        {"Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; frame-ancestors 'none'"}});
     http_.set_pre_routing_handler([this](const auto& request, auto& response) {
         // Reject POST inside its route after the bounded body has been consumed.
         // Early rejection leaves unread TCP data and can reset responses on Windows.
@@ -172,6 +174,38 @@ void LocalService::routes() {
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
             {"storage_error", error}}, error.empty() ? 200 : 503);
+    });
+    http_.Get("/api/live/sources", [this](const auto&, auto& response) { reply(response, live_.sources()); });
+    http_.Get("/api/live", [this](const auto&, auto& response) { reply(response, {{"session", live_.current()}}); });
+    http_.Post("/api/live/start", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!accept(request, response)) return;
+        try {
+            const auto body = Json::parse(request.body);
+            if (!body.is_object() || body.size() != 1 || !body.contains("source_id") || !body.at("source_id").is_string())
+                throw std::invalid_argument("Expected only a configured source_id; arbitrary URLs are not accepted");
+            reply(response, live_.start(body.at("source_id").get<std::string>()), 202);
+        } catch (const LiveSessionBusy& e) { reply(response, {{"error", e.what()}}, 409);
+        } catch (const std::exception& e) { reply(response, {{"error", e.what()}}, 400); }
+    });
+    http_.Post(R"(/api/live/(live-[0-9]+-[0-9]+)/stop)", [this](const httplib::Request& request, httplib::Response& response) {
+        if (!accept(request, response)) return;
+        try {
+            const auto body = Json::parse(request.body);
+            if (!body.is_object() || !body.empty()) throw std::invalid_argument("Expected empty JSON object");
+            if (!live_.request_stop(request.matches[1])) reply(response, {{"error", "Live session not found"}}, 404);
+            else reply(response, live_.current(), 202);
+        } catch (const std::exception& e) { reply(response, {{"error", e.what()}}, 400); }
+    });
+    http_.Get(R"(/api/live/(live-[0-9]+-[0-9]+)/preview.jpg)", [this](const httplib::Request& request, httplib::Response& response) {
+        const std::string id = request.matches[1];
+        if (!live_.contains(id)) { reply(response, {{"error", "Live session not found"}}, 404); return; }
+        const auto preview = live_.preview(id);
+        if (!preview.jpeg) { response.status = 204; return; }
+        response.set_header("X-Live-Sequence", std::to_string(preview.sequence));
+        response.set_header("X-Live-Source-Session", std::to_string(preview.source_session));
+        response.set_header("X-Live-Epoch", std::to_string(preview.tracking_epoch));
+        response.set_header("X-Decode-Age-Ms", std::to_string(preview.decode_age_ms));
+        response.set_content(reinterpret_cast<const char*>(preview.jpeg->data()), preview.jpeg->size(), "image/jpeg");
     });
     http_.Get("/api/media", [this](const auto&, auto& response) {
         auto files = Json::array();

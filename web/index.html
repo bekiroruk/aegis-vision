@@ -1,12 +1,18 @@
 <!doctype html>
 <html lang="tr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AegisVision · Video arama</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<title>AegisVision · Video arama</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/live.css"><script src="/app.js" defer></script></head>
 <body>
 <header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
 <main>
 <section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videonun içinde arayın.</h1><p>Kaydı seçin, nesneleri indeksleyin ve aradığınız ana metinle ulaşın.</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
+<section class="panel live-panel" aria-labelledby="live-heading">
+<div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
+<div class="live-workspace"><div class="live-view"><img id="live-image" alt="Canlı yayındaki nesne tespitleri ve takip kimlikleri" hidden><div id="live-placeholder" class="live-placeholder">Yapılandırılmış kaynağı başlatın.</div></div>
+<div class="live-controls"><label for="live-source">Sunucuda tanımlanan kaynak</label><select id="live-source"></select><div class="live-buttons"><button id="live-start" type="button" disabled>Canlı analizi başlat</button><button id="live-stop" type="button" class="secondary" disabled>Durdur</button></div>
+<div id="live-metrics" class="live-metrics" aria-live="polite"></div><p id="live-help" class="hint">Yaklaşık 2 kez/sn yenilenen analiz önizlemesi; sesli/tam hızlı video yayını değildir.</p><p class="hint">Eski kareler biriktirilmez. Kopma sonrası takip kimlikleri yeni oturuma aittir. Görüntü yaşı decode'dan ölçülür; kamera gecikmesi değildir.</p></div></div>
+</section>
 <div class="workspace">
 <section class="panel player-panel"><div class="panel-title"><h2>Video kaynağı</h2><span id="duration" class="muted"></span></div>
 <label for="media">Yerel video</label><select id="media" aria-label="Yerel video"></select>

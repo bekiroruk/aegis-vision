@@ -2,6 +2,7 @@
 
 #include "aegisvision/video.hpp"
 #include <chrono>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -11,7 +12,7 @@ namespace aegisvision::vision {
 
 struct LiveConfig {
     int duration_seconds{30}; // A bounded recording, not a durable service job.
-    int open_timeout_ms{3000};
+    int open_timeout_ms{8000}; // Leave room for FFmpeg's initial stream probing.
     int read_timeout_ms{2000};
     int reconnect_initial_ms{250};
     int reconnect_max_ms{2000};
@@ -45,6 +46,7 @@ struct LiveStats {
     std::uint64_t delivered_frames{}, dropped_overflow{}, dropped_stale{}, dropped_disconnect{};
     std::size_t queue_high_watermark{};
     std::string stop_reason;
+    std::string connection_state{"connecting"};
 };
 
 // Exactly one capture thread; bounded drop-oldest queue. All methods except destruction
@@ -70,6 +72,13 @@ struct LiveSummary {
     double mean_analysis_ms{}, max_decode_age_at_analysis_ms{};
     std::string stop_reason;
 };
+// Synchronous worker engine shared by CLI recording and HTTP preview. Callbacks run
+// on this worker, must not retain references, and must keep their own queues bounded.
+using LiveFrameSink = std::function<void(const LiveFrame&, const AnalysisResult&, const LiveSummary&, double, double)>;
+using LiveProgress = std::function<void(const LiveSummary&)>;
+LiveSummary analyze_stream(const std::string& url, IDetector& detector,
+    const VideoConfig& tracking, const LiveConfig& config, const std::atomic_bool& cancel,
+    LiveFrameSink sink, LiveProgress progress = {}, LiveCaptureFactory factory = {});
 LiveSummary process_stream(const std::string& url, const std::filesystem::path& output,
     IDetector& detector, const VideoConfig& tracking, const LiveConfig& config = {},
     LiveCaptureFactory factory = {});

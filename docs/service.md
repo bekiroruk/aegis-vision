@@ -46,6 +46,23 @@ CLIP ve YOLO başlangıçta bir kez yüklenir. `service-search.toml` ayrı
 `aegis_service` koleksiyonunu kullanır; yoksa oluşturur, mevcut verileri sıfırlamaz.
 İngilizce sorgularla başlayın: `a person walking on the street`.
 
+## Süre sınırlı canlı önizleme
+
+`./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians` canlı paneli
+etkinleştirir. Varsayılan profil `configs/live-preview.toml` ile 180 saniyedir;
+`-LiveConfig` ile değiştirilebilir. Önce RTSP yayınını hazırlayın: üç terminalle
+relay/publisher/servis kurulumu ve kesinti testi [canlı video kılavuzunda](live-video.md).
+Canlı URL tarayıcıdan alınmaz, yalnızca sunucuda tanımlı kaynak ID'si seçilir.
+
+Dosya/arama worker'ından ayrı tek canlı worker ve ayrı YOLO instance'ı kullanılır;
+canlı analiz SQLite iş kuyruğuna girmez. Canlı görüntü arşivlenmez/indekslenmez.
+HTTP istemcileri aynı son JPEG'i paylaşır; uzun ömürlü MJPEG bağlantısı veya istemci
+başına decoder yoktur. Ekran yaklaşık 2 FPS önizlemedir, tam video/ses değildir.
+Disconnect/stop ve 2 saniyeden eski decode-arrival görüntüsünde önizleme temizlenir.
+Bu yaş kamera-ağ gecikmesini ölçmez. En fazla bir aktif oturum, süre sınırı ve
+tek son terminal özeti tutulur; yeni oturum eski ID'yi geçersiz kılar. Servis
+yeniden açılınca canlı oturum/geçmiş kurtarılmaz ve otomatik kamera bağlantısı yapılmaz.
+
 ## Gerçek kamera kaydı
 
 Bu bilgisayarda OpenCV ile gelen
@@ -87,6 +104,11 @@ Tüm POST istekleri `Content-Type: application/json` gerektirir.
 | `POST /api/jobs/{id}/cancel` | Bekleyen işi kaldırır veya çalışan işten iptal ister |
 | `GET /api/preview/{search_job_id}/{result_index}.jpg` | Kutusu çizilmiş gerçek sonuç karesi |
 | `GET /media/{relative_path}` | Byte-range destekli video; tarayıcı codec desteği gerekir |
+| `GET /api/live/sources` | Sunucudaki kaynak ID/etiketleri; URL döndürmez |
+| `GET /api/live` | `session: null` veya anlık/son oturum özeti |
+| `POST /api/live/start` | `{"source_id":"local-pedestrians"}`; `202`, başka aktif oturumda `409` |
+| `POST /api/live/{id}/stop` | `{}`; durdurma isteği `202`, bilinmeyen eski ID `404` |
+| `GET /api/live/{id}/preview.jpg` | Taze JPEG `200`, görüntü yok/eski `204`, bilinmeyen ID `404` |
 
 İndeksleme ve arama gövdeleri:
 
@@ -102,6 +124,14 @@ Durumlar: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
 `stride`: 1–10000; `max_frames`: 0–1000000 (0 = tüm kayıt); `limit`: 1–20.
 Yollar medya köküne göre verilmelidir. Mutlak yollar, kökten kaçış ve dışarıya
 işaret eden symlink'ler reddedilir. UI yalnızca kökün doğrudan altındaki videoları listeler.
+
+Canlı oturum durumları ayrı sözleşmedir: `starting`, `running`, `stopping`,
+`stopped`, `completed`, `failed`; bağlantı `connecting`, `live`, `reconnecting`,
+`stopped` olabilir. `decoded_frames`, `processed_frames`, `dropped_frames`,
+`sessions`, `tracking_epochs`, `queue_high_watermark`, `mean_analysis_ms` ve
+`has_preview` izlenir. JPEG başlıkları sequence/session/epoch ve decode yaşı verir.
+Stop işbirlikçidir; in-flight model yüklemesi/inference ve backend deadline beklenir.
+Detaylı model/decoder hata metni ve kaynak URL'si API yanıtlarına eklenmez.
 
 ## Kuyruk, tutarlılık ve sınırlar
 
@@ -154,6 +184,9 @@ ve aynı işin kurtarılmasını doğrular. Ayrı süreç testi `std::_Exit` ile
 HTTP testi servis yeniden açıldıktan sonra eski arama/önizlemeyi kontrol eder.
 Servis testi sahte modellerle deterministiktir;
 gerçek YOLO/CLIP/Qdrant kamera denemesi ayrı entegrasyon doğrulamasıdır.
+`aegisvision_live_service` testi ayrı canlı modeli, tek aktif oturumu, stale/kopmuş
+JPEG'i, yeni source session/epoch'u, stop ve cleanup'ı doğrular. Gerçek RTSP/web
+kesinti testi için `scripts/test_live_dashboard.ps1` kullanılır.
 
 Teknik referanslar: [SQLite WAL](https://sqlite.org/wal.html),
 [SQLite locking mode](https://sqlite.org/pragma.html#pragma_locking_mode),

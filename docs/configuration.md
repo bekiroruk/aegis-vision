@@ -4,12 +4,14 @@ OpenCV'li C++ derlemesi [toml++ 3.4.0](https://github.com/marzer/tomlplusplus)
 ile `version = 1` şemasını okur. İlk derlemede kütüphane sabit arşiv/SHA256 ile
 indirilir; bağımlılıksız çekirdek derlemesi etkilenmez.
 
-Dört hazır uygulama örneği:
+Hazır uygulama örnekleri:
 
 - `configs/image.toml`: YOLO ile tek fotoğraf tespiti.
 - `configs/pipeline.toml`: YOLO ve iki aşamalı video takibi.
 - `configs/search.toml`: CLIP ile yerel Qdrant araması.
 - `configs/stream.toml`: süre sınırı, timeout/reconnect ve sınırlı RTSP kare kuyruğu.
+- `configs/live-preview.toml`: aynı stream şemasıyla web önizlemesi için 180 saniyelik profil;
+  CLI kayıt profili 45 saniyede kalır. Her iki profilde open deadline 8000 ms'dir.
 
 Model yolları TOML dosyasının bulunduğu klasöre göre çözülür; çalıştırdığınız
 terminalin dizinine göre değişmez. Örneklerdeki `artifacts/models` dosyaları
@@ -21,6 +23,7 @@ cmake --build build/search --config Release
 ./build/search/Release/aegisvision_config.exe validate configs/image.toml
 ./build/search/Release/aegisvision_config.exe validate configs/pipeline.toml
 ./build/search/Release/aegisvision_config.exe validate configs/search.toml
+./build/search/Release/aegisvision_config.exe validate configs/live-preview.toml
 ```
 
 `validate`, şema/alan türü/değer aralığı, desteklenen backend ve yerel model

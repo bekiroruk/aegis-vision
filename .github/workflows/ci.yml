@@ -24,7 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install OpenCV development libraries
-        run: sudo apt-get update && sudo apt-get install -y libopencv-dev ffmpeg
+        timeout-minutes: 15
+        run: bash scripts/ci_install_opencv.sh
       - name: Configure image tools
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_OPENCV=ON
       - name: Build
@@ -51,8 +52,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install search dependencies
+        timeout-minutes: 15
         run: |
-          sudo apt-get update && sudo apt-get install -y libopencv-dev libicu-dev
+          bash scripts/ci_install_opencv.sh libicu-dev
           curl -fL https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz -o /tmp/ort.tgz
           echo '1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b  /tmp/ort.tgz' | sha256sum --check
           tar -xzf /tmp/ort.tgz -C /tmp

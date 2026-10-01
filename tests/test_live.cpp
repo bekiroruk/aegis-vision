@@ -146,6 +146,8 @@ int main(int argc, char* argv[]) {
             }
             source.stop();
             const auto s = source.stats();
+            std::cout << "RTSP stats: attempts=" << s.connection_attempts << " sessions=" << s.sessions <<
+                " decoded=" << s.decoded_frames << " received=" << received << " reason=" << s.stop_reason << std::endl;
             require(received >= 20 && previous_session >= 2 && s.read_failures >= 1 && s.queue_high_watermark <= 1,
                 "Real RTSP decode/disconnect/reconnect integration failed");
             std::cout << "RTSP recovery passed; decoded=" << s.decoded_frames << " received=" << received << '\n';
