@@ -29,6 +29,13 @@ Terminal açık kalmalıdır; kapatmak için Ctrl+C. Özel klasör/port:
 ./scripts/start_service.ps1 -MediaDirectory C:/videos -Port 8091
 ```
 
+İşler varsayılan olarak `artifacts/service/jobs.sqlite` içinde tutulur. Model,
+Qdrant koleksiyonu veya medya kökü değiştirildiğinde farklı veritabanı seçin:
+`./scripts/start_service.ps1 -JobDatabase artifacts/service/other-jobs.sqlite`.
+Aynı iş veritabanını iki servis aynı anda açamaz; ikinci süreç hata verir.
+SQLite 3.53.4 kaynakları CMake ile sabit SHA3-256 kontrolünden geçirilerek derlenir;
+ayrı SQLite kurulumu gerekmez.
+
 Doğrudan Windows komutu (Linux'ta exe uzantısını ve Release dizinini kaldırın):
 
 ```powershell
@@ -98,10 +105,30 @@ işaret eden symlink'ler reddedilir. UI yalnızca kökün doğrudan altındaki v
 
 ## Kuyruk, tutarlılık ve sınırlar
 
-- Bir inference worker; en fazla 8 bekleyen iş ve 128 işlik bellek içi geçmiş.
-  Eski tamamlanmış işler kapasitede atılır. Arama da indekslemenin arkasında bekler.
-- İş geçmişi yeniden başlatmada kaybolur; Qdrant verileri diskte kalır. Kalıcı
-  iş kuyruğu, Redis, otomatik retry ve crash sonrası job recovery henüz yoktur.
+- Bir inference worker; en fazla 8 bekleyen iş ve 128 işlik kalıcı geçmiş.
+  Eski tamamlanmış işler kapasitede diskte/bellekte birlikte atılır. Arama da
+  indekslemenin arkasında bekler. Kurtarma sırasında 8 bekleyen işe eski aktif iş
+  eklenebilir; bu geçici 9 işlik backlog boşalana kadar yeni iş kabul edilmez.
+- HTTP 202 yalnızca SQLite commit sonrası döner. Durum, sonuç ve iptal isteği
+  kalıcıdır; ilerleme yaklaşık saniyede bir diske kaydedilir. Ani kapanmada son
+  checkpoint bir saniye kadar geriden gelebilir; tamamlanan vektör yazımları korunur.
+- Yeniden başlatmada bekleyen işler aynı ID ile çalışır; `running` işler baştan
+  tekrar indekslenir. Kare konumundan devam edilmez. Sabit Qdrant ID'leri aynı
+  kaydı günceller. Dağıtık exactly-once garantisi yoktur; teslimat at-least-once'dur.
+- `attempts` çalıştırma sayısını, `recoveries` ani kesintiden kurtarma sayısını
+  bildirir. Bir iş en fazla üç ani kesinti sonrası tekrar denenir; sonraki
+  kesintide `failed` olur. Kullanıcı iptali yeniden başlatmada da korunur.
+  Normal model/Qdrant hataları otomatik tekrar edilmez; yeni iş gönderilir.
+- DB bağlamı medya kökü, detector imzası, CLIP alanı ve Qdrant koleksiyonunu içerir.
+  Başka model/koleksiyonla aynı DB açılması reddedilir. Kabul edilen videonun
+  boyutu veya değişiklik zamanı değişirse iş hata verir; yeni iş göndermek gerekir.
+- SQLite WAL/FULL ve tek süreç sahipliği kullanılır. Varsayılan ana DB limiti
+  65536 sayfadır (yeni DB'de 256 MiB). Disk/kota yazım hatasında kuyruk durur,
+  sağlık endpoint'i ve yeni iş/iptal istekleri 503 verir. Yazılamayan sonuç başarılı
+  gösterilmez; alan sorunu giderilip yeniden başlatıldığında kabul edilmiş iş kurtarılır.
+- DB yerel diskte tutulmalıdır. Çalışırken SQLite dosyalarını silmeyin veya
+  kopyalamayın; servis durduktan sonra yedekleyin. Redis, çoklu worker ve dağıtık
+  lease/sahiplik desteği henüz yoktur.
 - İptal işbirlikçidir: sürmekte olan model veya Qdrant çağrısı bitince kontrol edilir.
   Tamamlanan yazımlar korunur; rollback yoktur. Aynı dosya/model/ayarlarla tekrar
   çalıştırma sabit ID'leri günceller, kayıtları çoğaltmaz. Ayar/dosya değişikliği yeni
@@ -120,5 +147,14 @@ işaret eden symlink'ler reddedilir. UI yalnızca kökün doğrudan altındaki v
 `ctest --test-dir build/search -C Release --output-on-failure` kuyruğun taşmasını,
 bekleyen/çalışan iş iptalini, kısmi ilerlemeyi, hata sonrası devam etmeyi, geçmiş
 budamayı, HTTP doğrulamasını, yol sınırlamasını, tekrar indekslemeyi, JPEG önizlemeyi
-ve video byte-range isteklerini test eder. Servis testi sahte modellerle deterministiktir;
+ve video byte-range isteklerini test eder. Kalıcılık testleri ayrıca tek sahipliği,
+ID/geçmiş korunmasını, üç tekrar sınırını, yanlış bağlamı, kota hatasında durmayı
+ve aynı işin kurtarılmasını doğrular. Ayrı süreç testi `std::_Exit` ile destructor
+çalıştırmadan kapanır; sonraki test WAL üzerinden aktif/bekleyen işleri tamamlar.
+HTTP testi servis yeniden açıldıktan sonra eski arama/önizlemeyi kontrol eder.
+Servis testi sahte modellerle deterministiktir;
 gerçek YOLO/CLIP/Qdrant kamera denemesi ayrı entegrasyon doğrulamasıdır.
+
+Teknik referanslar: [SQLite WAL](https://sqlite.org/wal.html),
+[SQLite locking mode](https://sqlite.org/pragma.html#pragma_locking_mode),
+[kaynak dağıtımı](https://sqlite.org/download.html).

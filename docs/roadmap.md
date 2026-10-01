@@ -19,6 +19,8 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
 - Yerel C++ HTTP servisi, sınırlı asenkron iş kuyruğu, ilerleme/iptal ve tarayıcıda
   gerçek videoda metin arama, kutulu önizleme ve zamanına atlama; [servis kılavuzu](service.md).
+- SQLite ile kalıcı iş geçmişi/kuyruk, ani kapanma sonrası sınırlı yeniden deneme,
+  tek süreç sahipliği, bağlam doğrulaması ve disk yazım hatasında durma.
 
 ## Kalan işler — önerilen sıra
 
@@ -42,8 +44,8 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 
 4. **Canlı video ve kalıcı servis katmanı.** Yerel C++ HTTP API, bounded queue ve
-   cancellation tamamlandı. RTSP/GStreamer kaynağı, reconnect, gerçek PTS,
-   kalıcı iş kuyruğu/Redis worker ve yeniden başlatmada job recovery geliştir.
+   cancellation ve SQLite job recovery tamamlandı. RTSP/GStreamer kaynağı,
+   reconnect, gerçek PTS ve çoklu worker/Redis lease desteği geliştir.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.

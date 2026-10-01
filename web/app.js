@@ -53,6 +53,7 @@ function showJobs(jobs) {
     title.append(element('strong',job.request.type === 'search' ? 'Metin araması' : 'Video indeksleme'),
       element('span',job.cancel_requested && !terminal(job.state) ? 'İptal bekleniyor' : stateText[job.state],'state'));
     row.append(title,element('p',job.request.path || job.request.query));
+    if (job.recoveries > 0) row.append(element('p',`Yeniden başlatma sonrası kurtarıldı · Deneme ${job.attempts}`));
     if (job.request.type === 'index_video') row.append(element('p',`${job.progress.decoded_frames || 0} kare okundu · ${job.progress.indexed_items || 0} nesne kaydı`));
     if (job.error) row.append(element('p',job.error));
     if (!terminal(job.state)) {
@@ -70,6 +71,7 @@ async function refresh() {
   polling = true;
   try {
     const data = await api('/api/jobs'); showJobs(data.jobs);
+    await api('/api/health');
     $('health').textContent = '● Servis hazır';
   } catch(error) { $('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }

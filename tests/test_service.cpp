@@ -53,10 +53,12 @@ public:
 };
 class Embedder : public IEmbedder {
 public:
+    std::atomic_bool released{true}, started{false};
     std::vector<float> embed_image(const Frame& frame, const Detection&) override {
         require(frame.image && !frame.image->pixels.empty(), "Pixels missing"); return {1, 0};
     }
     std::vector<float> embed_text(std::string_view text) override {
+        if (text == "hold") { started = true; until([&] { return released.load(); }); }
         if (text == "fail") throw std::runtime_error("fixture model error"); return {1, 0};
     }
 };
@@ -73,8 +75,13 @@ public:
     }
 };
 Json response(const httplib::Result& result, int status = 200) {
-    require(result && result->status == status, "Unexpected HTTP status");
+    if (!result) throw std::runtime_error("HTTP request failed: " + httplib::to_string(result.error()));
+    if (result->status != status) throw std::runtime_error("Unexpected HTTP status: " + std::to_string(result->status));
     return Json::parse(result->body);
+}
+void status(const httplib::Result& result, int expected) {
+    if (!result) throw std::runtime_error("HTTP request failed: " + httplib::to_string(result.error()));
+    require(result->status == expected, "Unexpected HTTP status");
 }
 Json completed(httplib::Client& client, const Json& request) {
     const auto id = response(client.Post("/api/jobs", request.dump(), "application/json"), 202).at("id").get<std::string>();
@@ -85,7 +92,7 @@ Json completed(httplib::Client& client, const Json& request) {
     });
     return job;
 }
-void http_checks(const fs::path& root) {
+std::string http_checks(const fs::path& root) {
     fs::create_directories(root / "media");
     const auto path = root / "media/test.avi";
     cv::VideoWriter writer(path.string(), cv::CAP_OPENCV_MJPEG, cv::VideoWriter::fourcc('M','J','P','G'), 10, {160,120});
@@ -94,18 +101,21 @@ void http_checks(const fs::path& root) {
     writer.release();
     Detector detector; Embedder embedder; Store store;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
+    config.persistence = {root / "jobs.sqlite", "http-fixture"};
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
     struct Guard { LocalService& service; std::thread& server; ~Guard() { service.stop(); server.join(); } } guard{service,server};
-    httplib::Client client("127.0.0.1", port); client.set_connection_timeout(1); client.set_read_timeout(2);
+    httplib::Client client("127.0.0.1", port); client.set_connection_timeout(2); client.set_read_timeout(10);
     until([&] { const auto result = client.Get("/api/health"); return result && result->status == 200; });
+    require(response(client.Get("/api/health")).at("history_persistent") == true, "HTTP persistence disabled");
     require(response(client.Get("/api/media")).at("videos").size() == 1, "Media listing failed");
-    require(client.Get("/")->body.find("AegisVision") != std::string::npos, "Dashboard missing");
-    require(client.Get("/api/health", {{"Host", "evil.example"}})->status == 403, "Foreign host accepted");
-    require(client.Post("/api/jobs", {{"Origin", "https://evil.example"}}, "{}", "application/json")->status == 403,
-        "Cross-origin write accepted");
-    require(client.Post("/api/jobs", "{}", "text/plain")->status == 415, "Simple form write accepted");
+    const auto dashboard = client.Get("/");
+    status(dashboard, 200);
+    require(dashboard->body.find("AegisVision") != std::string::npos, "Dashboard missing");
+    status(client.Get("/api/health", {{"Host", "evil.example"}}), 403);
+    status(client.Post("/api/jobs", {{"Origin", "https://evil.example"}}, "{}", "application/json"), 403);
+    status(client.Post("/api/jobs", "{}", "text/plain"), 415);
     (void)response(client.Post("/api/jobs", "{", "application/json"), 400);
     (void)response(client.Post("/api/jobs", R"({"type":"search","query":"x","limit":1.5})", "application/json"), 400);
     (void)response(client.Post("/api/jobs", R"({"type":"index_video","path":"../outside.avi"})", "application/json"), 400);
@@ -124,7 +134,7 @@ void http_checks(const fs::path& root) {
     const auto found = completed(client, {{"type", "search"}, {"query", "a person"}, {"limit", 8}});
     require(found.at("result").at("results").size() == 4, "Video retry duplicated records");
     const auto preview = client.Get("/api/preview/" + found.at("id").get<std::string>() + "/0.jpg");
-    require(preview && preview->status == 200 && preview->get_header_value("Content-Type") == "image/jpeg" &&
+    require(preview && preview->status == 200 && !preview->body.empty() && preview->get_header_value("Content-Type") == "image/jpeg" &&
         static_cast<unsigned char>(preview->body[0]) == 0xff, "Result preview missing");
     const auto range = client.Get("/media/test.avi", {{"Range", "bytes=0-99"}});
     require(range && range->status == 206 && range->body.size() == 100 &&
@@ -132,13 +142,39 @@ void http_checks(const fs::path& root) {
     const auto invalid_range = client.Get("/media/test.avi", {{"Range", "bytes=999999999-"}});
     require(invalid_range && invalid_range->status == 416, "Invalid video range accepted");
     require(completed(client, {{"type", "search"}, {"query", "fail"}}).at("state") == "failed", "Model error not reported");
+    embedder.released = false;
+    struct Release { Embedder& embedder; ~Release() { embedder.released = true; } } release{embedder};
+    (void)response(client.Post("/api/jobs", R"({"type":"search","query":"hold"})", "application/json"), 202);
+    until([&] { return embedder.started.load(); });
+    const auto changed = response(client.Post("/api/jobs", video.dump(), "application/json"), 202).at("id").get<std::string>();
+    fs::last_write_time(path, fs::last_write_time(path) + std::chrono::seconds(1));
+    embedder.released = true;
+    Json changed_job;
+    until([&] { changed_job = response(client.Get("/api/jobs/" + changed)); return changed_job.at("state") == "failed"; });
+    require(changed_job.at("error").get<std::string>().find("Video changed") != std::string::npos, "Changed queued input silently replayed");
+    return found.at("id").get<std::string>();
+}
+void http_restart(const fs::path& root, const std::string& search_id) {
+    Detector detector; Embedder embedder; Store store;
+    ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
+    config.persistence = {root / "jobs.sqlite", "http-fixture"};
+    LocalService service(detector, embedder, store, config);
+    const int port = service.bind(0);
+    std::thread server([&] { service.listen(); });
+    struct Guard { LocalService& service; std::thread& server; ~Guard() { service.stop(); server.join(); } } guard{service,server};
+    httplib::Client client("127.0.0.1", port);
+    until([&] { const auto result = client.Get("/api/health"); return result && result->status == 200; });
+    const auto restored = response(client.Get("/api/jobs/" + search_id));
+    require(restored.at("state") == "succeeded" && restored.at("result").at("results").size() == 4 &&
+        restored.at("attempts") == 1, "HTTP completed search lost or rerun after restart");
+    status(client.Get("/api/preview/" + search_id + "/0.jpg"), 200);
 }
 }
 int main() {
     const auto root = fs::temp_directory_path() / ("aegis-service-test-" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
-        queue_checks(); http_checks(root);
+        queue_checks(); const auto search_id = http_checks(root); http_restart(root, search_id);
         fs::remove_all(root); // This test's unique fixture directory only.
         std::cout << "Async jobs, cancellation, backpressure, history, path confinement, HTTP and video previews passed\n";
         return 0;

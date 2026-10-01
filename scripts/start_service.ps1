@@ -1,6 +1,7 @@
 param(
     [string]$MediaDirectory = "artifacts/media",
-    [ValidateRange(1, 65535)][int]$Port = 8090
+    [ValidateRange(1, 65535)][int]$Port = 8090,
+    [string]$JobDatabase = "artifacts/service/jobs.sqlite"
 )
 $ErrorActionPreference = "Stop"
 $repoDirectory = Split-Path $PSScriptRoot -Parent
@@ -16,7 +17,7 @@ try {
     }
     try { Invoke-RestMethod -Uri http://127.0.0.1:6333/healthz -TimeoutSec 3 | Out-Null }
     catch { throw "Qdrant calismiyor. Ayri terminalde artifacts/deps/qdrant/qdrant.exe --config-path configs/qdrant-local.yaml komutunu baslatin." }
-    & ./build/search/Release/aegisvision_server.exe configs/service-search.toml configs/image.toml $MediaDirectory web $Port
+    & ./build/search/Release/aegisvision_server.exe configs/service-search.toml configs/image.toml $MediaDirectory web $Port $JobDatabase
     if ($LASTEXITCODE -ne 0) { throw "Video servisi hata koduyla kapandi: $LASTEXITCODE" }
 }
 finally { Pop-Location }

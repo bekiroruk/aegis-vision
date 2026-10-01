@@ -11,6 +11,7 @@ struct ServiceConfig {
     std::string detector_signature;
     std::size_t max_pending{8};
     std::size_t max_retained{128};
+    JobPersistence persistence;
 };
 // Loopback-only HTTP API. Model/store references must outlive the service.
 // All model operations execute on one queue worker, never HTTP worker threads.
@@ -28,6 +29,7 @@ private:
     Json execute(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json summary(const IndexSummary&) const;
     void routes();
+    bool accept(const httplib::Request&, httplib::Response&) const;
     IDetector& detector_;
     IEmbedder& embedder_;
     IVectorStore& store_;

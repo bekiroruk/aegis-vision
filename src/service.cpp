@@ -16,6 +16,18 @@ using Json = nlohmann::json;
 std::string utf8(const fs::path& path) {
     const auto text = path.generic_u8string(); return {text.begin(), text.end()};
 }
+ServiceConfig prepare(ServiceConfig config) {
+    if (!fs::is_directory(config.media_root) || !fs::is_directory(config.web_root) || config.detector_signature.empty())
+        throw std::invalid_argument("Service requires media/web directories and a detector signature");
+    config.media_root = fs::canonical(config.media_root);
+    config.web_root = fs::canonical(config.web_root);
+    if (!config.persistence.database.empty()) {
+        if (config.persistence.context.empty()) throw std::invalid_argument("Persistent service requires a model/store context");
+        config.persistence.context = Json::array({"local-service-v1", utf8(config.media_root),
+            config.detector_signature, config.persistence.context}).dump();
+    }
+    return config;
+}
 void reply(httplib::Response& response, const Json& value, int status = 200) {
     response.status = status; response.set_content(value.dump(), "application/json; charset=utf-8");
 }
@@ -35,14 +47,10 @@ int integer(const Json& value, const char* key, int fallback, int minimum, int m
 }
 }
 LocalService::LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config)
-    : detector_(detector), embedder_(embedder), store_(store), config_(std::move(config)),
+    : detector_(detector), embedder_(embedder), store_(store), config_(prepare(std::move(config))),
       jobs_([this](const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
           return execute(request, progress, cancel);
-      }, config_.max_pending, config_.max_retained) {
-    if (!fs::is_directory(config_.media_root) || !fs::is_directory(config_.web_root) || config_.detector_signature.empty())
-        throw std::invalid_argument("Service requires media/web directories and a detector signature");
-    config_.media_root = fs::canonical(config_.media_root);
-    config_.web_root = fs::canonical(config_.web_root);
+      }, config_.max_pending, config_.max_retained, config_.persistence) {
     routes();
 }
 LocalService::~LocalService() { stop(); }
@@ -77,7 +85,9 @@ LocalService::Json LocalService::validate(Json request) const {
         (void)value; if (!allowed.contains(key)) throw std::invalid_argument("Unknown field: " + key);
     }
     if (type == "index_video") {
-        (void)media_path(request.at("path").get<std::string>());
+        const auto path = media_path(request.at("path").get<std::string>());
+        request["source_bytes"] = fs::file_size(path);
+        request["source_modified"] = std::to_string(fs::last_write_time(path).time_since_epoch().count());
         request["stride"] = integer(request, "stride", 15, 1, 10000);
         request["max_frames"] = integer(request, "max_frames", 0, 0, 1000000);
     } else if (type == "search") {
@@ -96,11 +106,15 @@ LocalService::Json LocalService::summary(const IndexSummary& value) const {
 LocalService::Json LocalService::execute(const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
     if (cancel) throw IndexCancelled();
     if (request.at("type") == "index_video") {
+        const auto path = media_path(request.at("path").get<std::string>());
+        if (request.at("source_bytes") != fs::file_size(path) || request.at("source_modified") !=
+            std::to_string(fs::last_write_time(path).time_since_epoch().count()))
+            throw std::runtime_error("Video changed after job acceptance; submit a new job");
         VideoIndexConfig options;
         options.detector_signature = config_.detector_signature;
         options.frame_stride = request.at("stride").get<int>();
         options.max_frames = request.at("max_frames").get<int>();
-        const auto result = index_video(media_path(request.at("path").get<std::string>()), detector_, embedder_, store_, options,
+        const auto result = index_video(path, detector_, embedder_, store_, options,
             [&](const IndexSummary& value) { progress(summary(value)); }, [&] { return cancel.load(); });
         progress(summary(result));
         return summary(result);
@@ -122,6 +136,21 @@ LocalService::Json LocalService::execute(const Json& request, const JobQueue::Pr
     }
     return {{"query", request.at("query")}, {"results", results}};
 }
+bool LocalService::accept(const httplib::Request& request, httplib::Response& response) const {
+        const auto host = request.get_header_value("Host");
+        const auto local = "127.0.0.1:" + std::to_string(port_);
+        const auto localhost = "localhost:" + std::to_string(port_);
+        const auto origin = request.get_header_value("Origin");
+        if ((host != local && host != localhost) || (!origin.empty() && origin != "http://" + host)) {
+            reply(response, {{"error", "Local same-origin requests only"}}, 403);
+            return false;
+        }
+        if (request.method == "POST" && request.get_header_value("Content-Type").find("application/json") != 0) {
+            reply(response, {{"error", "Content-Type must be application/json"}}, 415);
+            return false;
+        }
+        return true;
+}
 void LocalService::routes() {
     http_.new_task_queue = [] { return new httplib::ThreadPool(4, 16); };
     http_.set_payload_max_length(8192);
@@ -129,18 +158,9 @@ void LocalService::routes() {
     http_.set_default_headers({{"X-Content-Type-Options", "nosniff"}, {"Cache-Control", "no-store"},
         {"Content-Security-Policy", "default-src 'self'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'"}});
     http_.set_pre_routing_handler([this](const auto& request, auto& response) {
-        const auto host = request.get_header_value("Host");
-        const auto local = "127.0.0.1:" + std::to_string(port_);
-        const auto localhost = "localhost:" + std::to_string(port_);
-        const auto origin = request.get_header_value("Origin");
-        if ((host != local && host != localhost) || (!origin.empty() && origin != "http://" + host)) {
-            reply(response, {{"error", "Local same-origin requests only"}}, 403);
-            return httplib::Server::HandlerResponse::Handled;
-        }
-        if (request.method == "POST" && request.get_header_value("Content-Type").find("application/json") != 0) {
-            reply(response, {{"error", "Content-Type must be application/json"}}, 415);
-            return httplib::Server::HandlerResponse::Handled;
-        }
+        // Reject POST inside its route after the bounded body has been consumed.
+        // Early rejection leaves unread TCP data and can reset responses on Windows.
+        if (request.method != "POST" && !accept(request, response)) return httplib::Server::HandlerResponse::Handled;
         return httplib::Server::HandlerResponse::Unhandled;
     });
     http_.set_exception_handler([](const auto&, auto& response, std::exception_ptr error) {
@@ -148,8 +168,10 @@ void LocalService::routes() {
         catch (const std::exception& problem) { reply(response, {{"error", problem.what()}}, 500); }
     });
     http_.Get("/api/health", [this](const auto&, auto& response) {
-        reply(response, {{"status", "ready"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
-            {"history_capacity", config_.max_retained}, {"history_persistent", false}});
+        const auto error = jobs_.storage_error();
+        reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
+            {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
+            {"storage_error", error}}, error.empty() ? 200 : 503);
     });
     http_.Get("/api/media", [this](const auto&, auto& response) {
         auto files = Json::array();
@@ -161,11 +183,13 @@ void LocalService::routes() {
         reply(response, {{"videos", files}});
     });
     http_.Post("/api/jobs", [this](const auto& request, auto& response) {
+        if (!accept(request, response)) return;
         try {
             const auto id = jobs_.submit(validate(Json::parse(request.body)));
             response.set_header("Location", "/api/jobs/" + id);
             reply(response, jobs_.get(id), 202);
         } catch (const JobQueueFull& error) { response.set_header("Retry-After", "2"); reply(response, {{"error", error.what()}}, 429);
+        } catch (const JobStorageError& error) { reply(response, {{"error", error.what()}}, 503);
         } catch (const std::exception& error) { reply(response, {{"error", error.what()}}, 400); }
     });
     http_.Get("/api/jobs", [this](const auto&, auto& response) { reply(response, {{"jobs", jobs_.list()}}); });
@@ -174,9 +198,12 @@ void LocalService::routes() {
         reply(response, job.is_null() ? Json{{"error", "Job not found or expired"}} : job, job.is_null() ? 404 : 200);
     });
     http_.Post(R"(/api/jobs/([0-9]+-[0-9]+)/cancel)", [this](const auto& request, auto& response) {
+        if (!accept(request, response)) return;
         const std::string id = request.matches[1];
-        if (!jobs_.cancel(id)) reply(response, {{"error", "Job not found"}}, 404);
-        else reply(response, jobs_.get(id));
+        try {
+            if (!jobs_.cancel(id)) reply(response, {{"error", "Job not found"}}, 404);
+            else reply(response, jobs_.get(id));
+        } catch (const JobStorageError& error) { reply(response, {{"error", error.what()}}, 503); }
     });
     http_.Get(R"(/media/(.+))", [this](const auto& request, auto& response) {
         try {

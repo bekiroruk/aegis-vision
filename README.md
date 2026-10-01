@@ -83,7 +83,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
 6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
-7. [Yerel servis tamamlandı] C++ HTTP API, sınırlı asenkron kuyruk ve video arama ekranı; RTSP/Redis bekliyor
+7. [Yerel servis tamamlandı] C++ HTTP API, kalıcı SQLite kuyruğu/kurtarma ve video arama ekranı; RTSP/Redis bekliyor
 8. TensorRT FP16/INT8, GPU Docker ve Triton/Jetson deployment
 
 Öncelikler, eksikler ve her adımın kabul ölçütleri: [ayrıntılı yol haritası](docs/roadmap.md).

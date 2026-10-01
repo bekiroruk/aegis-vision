@@ -1,7 +1,9 @@
 #pragma once
+#include "aegisvision/job_store.hpp"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <condition_variable>
+#include <chrono>
 #include <deque>
 #include <functional>
 #include <map>
@@ -16,27 +18,33 @@ public:
     JobQueueFull() : std::runtime_error("Job queue is full; retry later") {}
 };
 // One worker owns model access. Pending work and retained history are bounded.
-// History is process-local; indexed Qdrant records persist separately.
+// Optional durable, single-owner storage; interrupted work replays with the same ID.
 class JobQueue {
 public:
     using Json = nlohmann::json;
     using Progress = std::function<void(Json)>;
     using Handler = std::function<Json(const Json&, const Progress&, const std::atomic_bool&)>;
-    JobQueue(Handler handler, std::size_t max_pending = 8, std::size_t max_retained = 128);
+    JobQueue(Handler handler, std::size_t max_pending = 8, std::size_t max_retained = 128,
+        const JobPersistence& persistence = {});
     ~JobQueue();
     JobQueue(const JobQueue&) = delete;
     JobQueue& operator=(const JobQueue&) = delete;
     [[nodiscard]] std::string submit(Json request);
     [[nodiscard]] Json get(const std::string& id) const;
     [[nodiscard]] Json list() const;
+    [[nodiscard]] std::string storage_error() const;
     // Returns false for unknown IDs. A running job acknowledges cancellation at a checkpoint.
     bool cancel(const std::string& id);
 private:
     struct Job {
         Json value;
         std::atomic_bool cancelled{false};
+        std::chrono::steady_clock::time_point checkpoint{};
     };
     void work();
+    void save_locked(const Json&, const std::vector<std::string>& evicted = {});
+    void restore();
+    void finish_locked(Job&, const char* state, Json result, Json error);
     Handler handler_;
     std::size_t max_pending_, max_retained_;
     std::string prefix_;
@@ -46,6 +54,8 @@ private:
     std::map<std::string, std::shared_ptr<Job>> jobs_;
     std::deque<std::string> pending_, order_;
     bool stopping_{false};
+    std::string storage_error_;
+    std::unique_ptr<JobStore> store_;
     std::thread worker_;
 };
 }
