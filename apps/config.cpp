@@ -17,7 +17,8 @@ int run(const std::vector<std::filesystem::path>& args) {
     try {
         const auto settings = aegisvision::vision::load_application_settings(args[2]);
         const char* mode = settings.mode == aegisvision::vision::ApplicationMode::Image ? "image" :
-            settings.mode == aegisvision::vision::ApplicationMode::Video ? "video" : "search";
+            settings.mode == aegisvision::vision::ApplicationMode::Video ? "video" :
+            settings.mode == aegisvision::vision::ApplicationMode::Stream ? "stream" : "search";
         std::cout << "Valid configuration: mode=" << mode << '\n';
         return 0;
     } catch (const std::exception& error) {

@@ -100,7 +100,7 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
     std::ifstream input(file, std::ios::binary);
     if (!input) throw std::runtime_error("Cannot read TOML config: " + file.string());
     const auto root = toml::parse(input);
-    keys(root, "root", {"version", "pipeline", "detector", "tracking", "video", "embedding", "vector_store", "runtime"});
+    keys(root, "root", {"version", "pipeline", "detector", "tracking", "video", "stream", "embedding", "vector_store", "runtime"});
     (void)integer(root, "root", "version", 0, 1, 1, true);
     const auto& pipeline = section(root, "pipeline");
     keys(pipeline, "pipeline", {"mode"});
@@ -109,8 +109,13 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
     if (mode == "image") settings.mode = ApplicationMode::Image;
     else if (mode == "video") settings.mode = ApplicationMode::Video;
     else if (mode == "search") settings.mode = ApplicationMode::Search;
-    else throw std::invalid_argument("pipeline.mode must be image, video or search");
+    else if (mode == "stream") settings.mode = ApplicationMode::Stream;
+    else throw std::invalid_argument("pipeline.mode must be image, video, stream or search");
     runtime(root, settings.mode);
+    if (settings.mode != ApplicationMode::Stream && root.contains("stream"))
+        throw std::invalid_argument("[stream] requires stream mode");
+    if (settings.mode == ApplicationMode::Stream && root.contains("video"))
+        throw std::invalid_argument("[video] is incompatible with stream mode");
 
     const auto directory = std::filesystem::absolute(file).parent_path();
     if (settings.mode == ApplicationMode::Search) {
@@ -178,6 +183,24 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
         settings.detector.confidence_threshold = settings.video.low_confidence;
     } else if (tracking.contains("low_confidence") || tracking.contains("new_track_confidence")) {
         throw std::invalid_argument("Low/new track confidence fields require tracking.backend=two-stage");
+    }
+    if (settings.mode == ApplicationMode::Stream) {
+        const auto& stream = section(root, "stream");
+        keys(stream, "stream", {"duration_seconds", "open_timeout_ms", "read_timeout_ms", "reconnect_initial_ms",
+            "reconnect_max_ms", "max_outage_ms", "max_frame_age_ms", "tracking_gap_ms", "queue_capacity", "output_fps"});
+        auto& c = settings.live;
+        c.duration_seconds = static_cast<int>(integer(stream, "stream", "duration_seconds", 30, 1, 86400));
+        c.open_timeout_ms = static_cast<int>(integer(stream, "stream", "open_timeout_ms", 3000, 1, 5000));
+        c.read_timeout_ms = static_cast<int>(integer(stream, "stream", "read_timeout_ms", 2000, 1, 5000));
+        c.reconnect_initial_ms = static_cast<int>(integer(stream, "stream", "reconnect_initial_ms", 250, 1, 5000));
+        c.reconnect_max_ms = static_cast<int>(integer(stream, "stream", "reconnect_max_ms", 2000, 1, 5000));
+        c.max_outage_ms = static_cast<int>(integer(stream, "stream", "max_outage_ms", 15000, 1, 600000));
+        c.max_frame_age_ms = static_cast<int>(integer(stream, "stream", "max_frame_age_ms", 1000, 1, 10000));
+        c.tracking_gap_ms = static_cast<int>(integer(stream, "stream", "tracking_gap_ms", 1000, 1, 10000));
+        c.queue_capacity = static_cast<int>(integer(stream, "stream", "queue_capacity", 1, 1, 16));
+        c.output_fps = real(stream, "stream", "output_fps", 10, 1, 120);
+        validate_live_config(c);
+        return settings;
     }
     const auto& video = section(root, "video", false);
     keys(video, "video", {"max_frames", "fallback_fps"});

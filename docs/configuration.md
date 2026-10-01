@@ -4,11 +4,12 @@ OpenCV'li C++ derlemesi [toml++ 3.4.0](https://github.com/marzer/tomlplusplus)
 ile `version = 1` şemasını okur. İlk derlemede kütüphane sabit arşiv/SHA256 ile
 indirilir; bağımlılıksız çekirdek derlemesi etkilenmez.
 
-Üç hazır örnek:
+Dört hazır uygulama örneği:
 
 - `configs/image.toml`: YOLO ile tek fotoğraf tespiti.
 - `configs/pipeline.toml`: YOLO ve iki aşamalı video takibi.
 - `configs/search.toml`: CLIP ile yerel Qdrant araması.
+- `configs/stream.toml`: süre sınırı, timeout/reconnect ve sınırlı RTSP kare kuyruğu.
 
 Model yolları TOML dosyasının bulunduğu klasöre göre çözülür; çalıştırdığınız
 terminalin dizinine göre değişmez. Örneklerdeki `artifacts/models` dosyaları
@@ -70,7 +71,9 @@ kare sayısı komut argümanlarıdır. [İndeksleme ayrıntıları](indexing.md)
 
 Şema belirtilmeyen anahtarları ve moda uymayan bölümleri reddeder. `runtime`
 yalnızca `cpu`, `fp32` ve moda göre `opencv-dnn`/`onnxruntime` değerlerini kabul
-eder. TensorRT, OCR, segmentation ve RTSP bu şemanın desteklenen seçenekleri
+eder. `stream` modu `[tracking]` ve `[stream]` kullanır; `[video]` kabul etmez.
+Diğer modlar `[stream]` kabul etmez. Ayar aralıkları ve komut için [RTSP kılavuzu](live-video.md).
+TensorRT, OCR ve segmentation bu şemanın desteklenen seçenekleri
 değildir; gelecek bir şema sürümünde eklenecekler.
 
 Bu bilgisayarda üç örnek dosya uygulamalarla çalıştırıldı: 5 fotoğraf tespiti,

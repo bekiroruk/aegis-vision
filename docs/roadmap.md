@@ -21,6 +21,8 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
   gerçek videoda metin arama, kutulu önizleme ve zamanına atlama; [servis kılavuzu](service.md).
 - SQLite ile kalıcı iş geçmişi/kuyruk, ani kapanma sonrası sınırlı yeniden deneme,
   tek süreç sahipliği, bağlam doğrulaması ve disk yazım hatasında durma.
+- RTSP/FFmpeg kaynağı, open/read timeout, sınırlı kare/byte kuyruğu, drop-oldest,
+  reconnect/backoff, oturum ayrımı ve süre sınırlı YOLO/takip kaydı; [canlı video](live-video.md).
 
 ## Kalan işler — önerilen sıra
 
@@ -44,8 +46,9 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 
 4. **Canlı video ve kalıcı servis katmanı.** Yerel C++ HTTP API, bounded queue ve
-   cancellation ve SQLite job recovery tamamlandı. RTSP/GStreamer kaynağı,
-   reconnect, gerçek PTS ve çoklu worker/Redis lease desteği geliştir.
+   cancellation ve SQLite job recovery tamamlandı. RTSP/FFmpeg kayıt CLI'ı,
+   reconnect/backpressure tamamlandı. Canlı web ekranı, GStreamer adaptörü,
+   kamera/stream PTS ve çoklu worker/Redis lease desteği geliştir.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.

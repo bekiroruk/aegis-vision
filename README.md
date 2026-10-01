@@ -24,6 +24,7 @@ içinde birleştirmektir.
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
 - Videoda YOLO + IoU veya iki aşamalı takip, ID etiketli AVI ve kare bazlı CSV raporu
+- RTSP/FFmpeg canlı kaynak: timeout, reconnect, sınırlı drop-oldest kuyruğu ve oturum bazlı takip
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
 - Detection → tracking → embedding → indexing pipeline'ı
@@ -60,7 +61,7 @@ ctest --test-dir build --output-on-failure
 Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden inference yapar;
 eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
 ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. C++ uygulamaları
-`configs/*.toml` dosyalarını okuyabilir; OCR, RTSP ve Redis entegrasyonları planlanmıştır.
+`configs/*.toml` dosyalarını okuyabilir; RTSP kayıt/analiz CLI'ı hazırdır, OCR ve Redis entegrasyonları planlanmıştır.
 
 ```text
 RTSP / Image
@@ -83,7 +84,8 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
 6. Etiketli değerlendirme, tam ByteTrack / görünüş tabanlı Re-ID ve çoklu kamera
-7. [Yerel servis tamamlandı] C++ HTTP API, kalıcı SQLite kuyruğu/kurtarma ve video arama ekranı; RTSP/Redis bekliyor
+7. [Yerel servis ve RTSP CLI tamamlandı] C++ HTTP API, SQLite kurtarma ve video arama ekranı;
+   RTSP reconnect/backpressure; canlı web ekranı, kamera PTS ve Redis bekliyor
 8. TensorRT FP16/INT8, GPU Docker ve Triton/Jetson deployment
 
 Öncelikler, eksikler ve her adımın kabul ölçütleri: [ayrıntılı yol haritası](docs/roadmap.md).
@@ -113,6 +115,9 @@ için [indeksleme kılavuzu](docs/indexing.md).
 
 **Video takibi:** Yerel videoda tespit, ID atama ve sonuç kaydetme için
 [video kılavuzu](docs/video.md). Varsayılan IoU; `--tracker two-stage` ile hareket tahminli iki aşamalı takip seçilir. Tam ByteTrack/Re-ID henüz yoktur.
+
+**Canlı RTSP:** Bağlantı kesilince yeniden bağlanan, eski kareleri biriktirmeyen kayıt/analiz
+komutu ve gerçek yaya videosuyla otomatik kesinti testi için [canlı video kılavuzu](docs/live-video.md).
 
 OpenCV araçları isteğe bağlıdır; varsayılan çekirdek derlemesi harici bağımlılık istemez.
 OpenCV 4 geliştirme paketi (C++ başlıkları, kütüphaneler ve Windows DLL'leri) gerekir.

@@ -56,6 +56,17 @@ int main() {
             rejects([&] { (void)aegisvision::vision::load_application_settings(root / "bad.toml"); },
                 "Invalid configuration accepted");
         };
+        const std::string live = "version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
+            "[tracking]\nbackend = \"iou\"\n[stream]\nduration_seconds = 12\nqueue_capacity = 2\n";
+        save(root / "stream.toml", live);
+        config = aegisvision::vision::load_application_settings(root / "stream.toml");
+        require(config.mode == aegisvision::vision::ApplicationMode::Stream && config.live.duration_seconds == 12 &&
+            config.live.queue_capacity == 2, "Live settings lost");
+        bad(live + "unknown = 1\n");
+        bad(live + "output_fps = false\n");
+        bad(live + "reconnect_initial_ms = 4000\nreconnect_max_ms = 2\n");
+        bad(live + "[video]\nmax_frames = 1\n");
+        bad(video + "[stream]\nduration_seconds = 12\n");
         bad(video + "[unexpected]\nvalue = 1\n");
         bad("version = 1.0\n[pipeline]\nmode = \"image\"\n" + detector);
         bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + "unknown = 1\n");

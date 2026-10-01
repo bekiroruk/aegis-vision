@@ -1,12 +1,13 @@
 #pragma once
 #include "aegisvision/qdrant.hpp"
 #include "aegisvision/video.hpp"
+#include "aegisvision/live.hpp"
 #include "aegisvision/yolo.hpp"
 #include <filesystem>
 #include <memory>
 
 namespace aegisvision::vision {
-enum class ApplicationMode { Image, Video, Search };
+enum class ApplicationMode { Image, Video, Search, Stream };
 
 // Resolved, validated settings. Model paths are absolute and relative to the TOML file.
 struct ApplicationSettings {
@@ -14,6 +15,7 @@ struct ApplicationSettings {
     std::filesystem::path detector_model;
     YoloConfig detector;
     VideoConfig video;
+    LiveConfig live;
     std::filesystem::path clip_bundle;
     QdrantConfig qdrant;
 };

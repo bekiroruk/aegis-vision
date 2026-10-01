@@ -24,13 +24,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install OpenCV development libraries
-        run: sudo apt-get update && sudo apt-get install -y libopencv-dev
+        run: sudo apt-get update && sudo apt-get install -y libopencv-dev ffmpeg
       - name: Configure image tools
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_OPENCV=ON
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Real RTSP transport recovery (no model required)
+        timeout-minutes: 2
+        run: |
+          curl -fL https://github.com/bluenviron/mediamtx/releases/download/v1.21.1/mediamtx_v1.21.1_linux_amd64.tar.gz -o /tmp/mediamtx.tgz
+          echo '653abc672a3e693f8d3b2717752492fdcfb8072291ec108d03d3dd857411b0ee  /tmp/mediamtx.tgz' | sha256sum --check
+          mkdir -p /tmp/aegis-mediamtx
+          tar -xzf /tmp/mediamtx.tgz -C /tmp/aegis-mediamtx
+          bash scripts/test_rtsp_transport.sh build /tmp/aegis-mediamtx/mediamtx
 
   search-linux:
     runs-on: ubuntu-latest
