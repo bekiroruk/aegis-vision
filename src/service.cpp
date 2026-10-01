@@ -207,7 +207,7 @@ void LocalService::routes() {
         }
         catch (const std::exception& error) { reply(response, {{"error", error.what()}}, 404); }
     });
-    http_.Get(R"(/api/preview/([0-9]+-[0-9]+)/([0-9]+)\.jpg)", [this](const auto& request, auto& response) {
+    http_.Get(R"(/api/preview/([0-9]+-[0-9]+)/([0-9]+)\.jpg)", [this](const httplib::Request& request, httplib::Response& response) {
         try {
             const auto job = jobs_.get(request.matches[1]);
             if (job.is_null() || job.at("state") != "succeeded") throw std::runtime_error("Completed search job required");
