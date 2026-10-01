@@ -220,6 +220,11 @@ ek olarak `pending` olabilir. Arrival monotonic uygulama zamanıdır; MP4 içind
 
 ## Test
 
+Arayüzün medya seçimi regresyonu `node tests/test_web_state.cjs` ile kontrol
+edilir: dosya/arşiv yanıt sırası, geç yanıtın kullanıcı seçimini bozmaması,
+klipteki ana atlama ve yönetilen arşivde generic indekslemenin kapatılması.
+Node yalnızca bu geliştirme testi içindir; C++ servisini çalıştırmak için gerekmez.
+
 `ctest --test-dir build/search -C Release --output-on-failure` kuyruğun taşmasını,
 bekleyen/çalışan iş iptalini, kısmi ilerlemeyi, hata sonrası devam etmeyi, geçmiş
 budamayı, HTTP doğrulamasını, yol sınırlamasını, tekrar indekslemeyi, JPEG önizlemeyi

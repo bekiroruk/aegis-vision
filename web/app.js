@@ -4,6 +4,7 @@ const stateText = {queued:'Sırada',running:'Çalışıyor',succeeded:'Tamamland
 let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
 let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
+let selectedMedia = '', mediaReady = false, mediaChoiceMade = false;
 const archiveActions = new Set();
 const mediaUrl = path => '/media/' + path.split('/').map(encodeURIComponent).join('/');
 function notice(text) { $('notice').textContent = text; }
@@ -100,17 +101,35 @@ window.addEventListener('pagehide',() => { if (liveObjectUrl) URL.revokeObjectUR
 function playAt(path, seconds) {
   const player = $('player');
   const target = new URL(mediaUrl(path), location.href).href;
-  const seek = () => { player.currentTime = seconds; player.play().catch(() => {}); };
-  if (player.src !== target) { player.src = target; player.addEventListener('loadedmetadata', seek, {once:true}); }
-  else seek();
-  addMedia(path); $('media').value = path;
+  const seek = () => { if (selectedMedia !== path || player.src !== target) return; player.currentTime = seconds; player.play().catch(() => {}); };
+  const changing = player.src !== target;
+  if (changing) player.addEventListener('loadedmetadata',seek,{once:true});
+  chooseMedia(path,true);
+  if (!changing) seek();
   player.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function syncMediaControls() {
+  const managed = selectedMedia.startsWith('live-archive/');
+  $('index-button').disabled = !selectedMedia || managed;
+  $('stride').disabled = !selectedMedia || managed;
+  $('max-frames').disabled = !selectedMedia || managed;
 }
 function addMedia(path) {
   if (!Array.from($('media').options).some(option => option.value === path)) {
     const option = element('option',path); option.value = path; $('media').append(option);
   }
-  $('index-button').disabled = false;
+  // Adding the first option implicitly selects it in browsers. Only chooseMedia
+  // may change the selected source; background archive refresh must not do so.
+  $('media').value = selectedMedia;
+  syncMediaControls();
+}
+function chooseMedia(path, userChoice = false) {
+  if (!path) return;
+  addMedia(path); selectedMedia = path; $('media').value = path;
+  if (userChoice) mediaChoiceMade = true;
+  const target = new URL(mediaUrl(path),location.href).href;
+  if ($('player').src !== target) { $('duration').textContent = 'Yükleniyor…'; $('player').src = target; }
+  syncMediaControls();
 }
 async function retryArchive(segment) {
   const key = `${segment.session_id}:${segment.segment_index}`;
@@ -151,6 +170,10 @@ function showArchive(data) {
     }
     card.append(actions); container.append(card);
   });
+  if (mediaReady && !selectedMedia) {
+    const first = segments.find(segment => segment.media_path);
+    if (first) chooseMedia(first.media_path);
+  }
 }
 async function refreshArchive() {
   if (archivePolling || document.hidden) return;
@@ -226,8 +249,11 @@ $('search-form').addEventListener('submit',async event => {
   try { await api('/api/jobs',{type:'search',query:$('query').value,limit:8,scope:$('search-scope').value}); await refresh(); }
   catch(error) { notice(error.message); }
 });
-$('media').addEventListener('change',() => { $('player').src = mediaUrl($('media').value); });
-$('player').addEventListener('loadedmetadata',() => { $('duration').textContent = `${$('player').duration.toFixed(1)} saniye`; });
+$('media').addEventListener('change',() => chooseMedia($('media').value,true));
+$('player').addEventListener('loadedmetadata',() => {
+  if (selectedMedia && $('player').src === new URL(mediaUrl(selectedMedia),location.href).href)
+    $('duration').textContent = `${$('player').duration.toFixed(1)} saniye`;
+});
 async function start() {
   try {
     await api('/api/health');
@@ -240,13 +266,20 @@ async function start() {
     if (!liveEnabled) { hideLive('Canlı kaynak bu sunucuda etkin değil.'); $('live-help').textContent = 'Sunucuyu -LiveUrl seçeneğiyle başlatın; tarayıcıdan keyfî URL kabul edilmez.'; }
     else $('live-help').textContent = `${live.duration_seconds} saniyelik oturum · yaklaşık 2 önizleme/sn · kayıt ve indeksleme yalnızca seçeneği açarsanız yapılır.`;
     await refreshLive(); setInterval(refreshLive,500);
-    await refreshArchive(); setInterval(refreshArchive,2000);
     setInterval(() => { if (liveObjectUrl && performance.now() >= liveExpiresAt) hideLive('Güncel analiz karesi bekleniyor…'); },250);
     const data = await api('/api/media');
     data.videos.forEach(video => addMedia(video.path));
-    if (data.videos.length) $('player').src = mediaUrl(data.videos[0].path);
+    mediaReady = true;
+    if (!mediaChoiceMade) {
+      const initial = data.videos[0]?.path || $('media').options[0]?.value;
+      if (initial) chooseMedia(initial);
+    }
+    syncMediaControls();
+    await refreshArchive(); setInterval(refreshArchive,2000);
+    if (selectedMedia && !data.videos.length) notice('Yerel dosya yok; canlı arşiv kayıtlarını oynatabilirsiniz.');
     else if (!$('media').options.length) { $('index-button').disabled = true; notice('Medya klasöründe video yok. Bir MP4 ekleyin veya canlı arşiv oluşturun.'); }
     await refresh(); setInterval(refresh,1000);
   } catch(error) { notice(error.message); $('health').textContent = 'Servise ulaşılamıyor'; }
 }
+syncMediaControls();
 start();

@@ -214,7 +214,7 @@ void LocalService::routes() {
         } catch (const std::exception& e) { reply(response, {{"error", e.what()}}, 400); }
     });
     http_.Get("/api/live/archive", [this](const auto&, auto& response) { reply(response,archive_list()); });
-    http_.Post("/api/live/archive/index", [this](const auto& request, auto& response) {
+    http_.Post("/api/live/archive/index", [this](const httplib::Request& request, httplib::Response& response) {
         if (!accept(request,response)) return;
         try {
             const auto body = Json::parse(request.body);

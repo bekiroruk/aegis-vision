@@ -61,6 +61,8 @@ jobs:
           curl -fL https://huggingface.co/openai/clip-vit-base-patch32/resolve/3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268/tokenizer.json -o /tmp/clip-tokenizer.json
       - name: Configure search tools
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_OPENCV=ON -DAEGISVISION_WITH_SEARCH=ON -DONNXRUNTIME_ROOT=/tmp/onnxruntime-linux-x64-1.23.2
+      - name: Web media selection regression
+        run: node tests/test_web_state.cjs
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract
