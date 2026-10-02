@@ -51,7 +51,8 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
     } else if (config.tracker_mode == TrackerMode::Kalman) {
         auto instance = std::make_unique<KalmanTracker>(KalmanTrackerConfig{
             config.low_confidence, config.high_confidence, config.new_track_confidence,
-            config.tracking_iou, config.max_missed_frames, config.kalman_gating_threshold});
+            config.tracking_iou, config.max_missed_frames, config.kalman_gating_threshold,
+            config.kalman_gate_mode});
         kalman = instance.get();
         tracker = std::move(instance);
     } else {
@@ -176,6 +177,10 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
     if (kalman) {
         report << "kalman_gate" << config.kalman_gating_threshold << "motion_dt"
                << "one decoded frame";
+        report << "kalman_gating_mode"
+               << (config.kalman_gate_mode == KalmanGateMode::CenterOnly ? "center" : "full-box");
+        report << "kalman_gating_dimensions"
+               << (config.kalman_gate_mode == KalmanGateMode::CenterOnly ? 2 : 4);
         report << "gate_rejections" << static_cast<double>(summary.kalman_stats.gate_rejections);
         report << "numerical_resets" << static_cast<double>(summary.kalman_stats.numerical_resets);
         report << "capacity_rejections" << static_cast<double>(summary.kalman_stats.capacity_rejections);

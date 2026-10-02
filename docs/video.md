@@ -85,6 +85,23 @@ değildir. RTSP'de bu backend kullanılamaz; hareket adımı bir decoded frame'd
 iki aşamalı %68.36), Campus %43.44 (IoU %59.92, iki aşamalı %68.90).
 Bu nedenle genel kalite iyileştirmesi sayılmaz ve varsayılan yapılmaz.
 
+### Merkez kapılı alternatif
+
+```powershell
+./build/search/Release/aegisvision_video.exe --config configs/video-kalman-center.toml artifacts/datasets/mot15-campus/TUD-Campus-raw.mp4 outputs/video-center
+```
+
+Konumsal karşılığı `--tracker kalman-center`'dır. Merkezin iki boyutlu marjinal
+belirsizliğiyle eşleşme kapılanır; genişlik/yükseklik titreşimi Mahalanobis kararına
+girmez. Tam dört ölçümlü Kalman correction, predicted-box IoU, sınıf ve yaşam
+döngüsü korunur. Merkez kayması, örtüşme ve yakın kişilerde hatalar hâlâ mümkündür.
+Eski Kalman seçeneği korunur; yeni seçenek deneysel ve yalnız yerel videodadır.
+[Tasarım](adr/0014-center-only-motion-gating.md), [dört yöntemli ölçüm](model-quality.md).
+
+Geliştirme koşusunda Campus IDF1 %43.44 → %67.39, ID switch 22 → 5 oldu.
+Stadtmitte'de IDF1 %76.77 → %76.68, FP 46 → 71: daha geniş kabul bazı kısmi
+kutuları da sürdürür. Bu iki sahne tasarımda kullanıldığı için bağımsız test değildir.
+
 Varsayılan greedy IoU referans takipçisinde hareket kestirimi yoktur. İki aşamalı
 seçenekte basit hareket kestirimi vardır. Her iki modda hızlı hareket, örtüşme,
 yön değişimi ve sınıf değişiminde kimlik parçalanması veya yanlış eşleşme olabilir.

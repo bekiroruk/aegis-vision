@@ -26,7 +26,7 @@ from typing import Any
 TOLERANCE = 1e-6
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REFERENCE_ROOT = PROJECT_ROOT / "artifacts/deps/quality-reference"
-TRACKERS = ("iou", "two_stage", "kalman")
+TRACKERS = ("iou", "two_stage", "kalman", "kalman_center")
 REQUIRED_TRACKERS = frozenset(("iou", "two_stage"))
 TRACKING_METADATA = frozenset(("parameters", "protocol"))
 FRAME_METADATA = frozenset(("frame_index", "ground_truth", "raw_detections"))
@@ -247,7 +247,7 @@ def tracking_frame_inputs(manifest: dict, report: dict, frames: Any) -> tuple[st
 
     The report may contain protocol/parameter metadata, but never an unknown
     tracker. Legacy two-tracker reports remain valid. Every frame and report
-    must agree on whether the new motion tracker is present. Detector rows are
+    must agree exactly on which optional motion trackers are present. Detector rows are
     bounded, optional provenance only; they never feed reference metric inputs.
     """
     count = integer(manifest["frames"], "manifest frames", 1)

@@ -23,6 +23,13 @@ Detection box(float x, float score = 0.9F, std::string label = "person") {
     return {{x, 0.0F, x + 20.0F, 40.0F}, std::move(label), score, {}, {}};
 }
 
+KalmanTrackerConfig gate_config(KalmanGateMode mode) {
+    KalmanTrackerConfig config;
+    config.gate_mode = mode;
+    config.gating_threshold = mode == KalmanGateMode::CenterOnly ? kalman_center_gate99 : kalman_box_gate99;
+    return config;
+}
+
 const Track& at_x(const std::vector<Track>& tracks, float x) {
     const auto found = std::find_if(tracks.begin(), tracks.end(), [&](const auto& track) {
         return track.bbox.x1 == x;
@@ -31,8 +38,9 @@ const Track& at_x(const std::vector<Track>& tracks, float x) {
     return *found;
 }
 
-void lifecycle_and_motion() {
-    KalmanTracker tracker;
+void lifecycle_and_motion(KalmanGateMode mode) {
+    const auto configuration = gate_config(mode);
+    KalmanTracker tracker(configuration);
     require(tracker.update({box(0.0F, 0.09F)}).empty(), "Sub-low box started a track");
     require(tracker.update({box(0.0F, 0.20F)}).empty(), "Low box started a track");
     require(tracker.update({box(0.0F, 0.40F)}).empty(), "Sub-birth high box started a track");
@@ -48,7 +56,7 @@ void lifecycle_and_motion() {
     require(recovered.size() == 1 && recovered.front().track_id == id, "High observation failed lost recovery");
     require(tracker.stats().reactivations == 1, "Lost recovery counter wrong");
 
-    KalmanTracker motion;
+    KalmanTracker motion(configuration);
     std::uint64_t moving_id = 0;
     for (int frame = 0; frame < 20; ++frame) {
         const float x = static_cast<float>(frame * 3) + (frame % 2 == 0 ? 0.25F : -0.25F);
@@ -62,7 +70,7 @@ void lifecycle_and_motion() {
     require(motion.update({box(66.0F)}).front().track_id == moving_id, "Kalman prediction failed to bridge a gap");
     require(motion.stats().numerical_resets == 0, "Normal motion unexpectedly reset the covariance");
 
-    KalmanTrackerConfig short_life;
+    auto short_life = configuration;
     short_life.max_missed_frames = 1;
     KalmanTracker expiry(short_life);
     const auto old_id = expiry.update({box(0.0F)}).front().track_id;
@@ -74,7 +82,7 @@ void lifecycle_and_motion() {
     (void)immediate.update({box(0.0F)}); (void)immediate.update({});
     require(immediate.stats().expired_tracks == 1, "Zero lifetime did not expire on the first missed frame");
 
-    KalmanTracker shrinking;
+    KalmanTracker shrinking(configuration);
     for (float width : {20.0F, 18.0F, 16.0F, 14.0F, 12.0F}) {
         const Detection observed{{0.0F, 0.0F, width, width * 2.0F}, "person", 0.9F, {}, {}};
         const auto track = shrinking.update({observed});
@@ -87,11 +95,12 @@ void lifecycle_and_motion() {
             "Contracting Kalman size failed safe long-gap expiry");
 }
 
-void association_order_and_gating() {
+void association_order_and_gating(KalmanGateMode mode) {
+    const auto configuration = gate_config(mode);
     // If active and lost identities are assigned jointly, the optimum swaps
     // the active ID: .538 + .428 > .600. Stage order must protect active ID 1.
     // This fixture is synthetic and does not use labelled benchmark boxes.
-    KalmanTracker priority;
+    KalmanTracker priority(configuration);
     const auto first = priority.update({box(0.0F), box(13.0F)});
     const auto active_id = at_x(first, 0.0F).track_id;
     const auto lost_id = at_x(first, 13.0F).track_id;
@@ -100,18 +109,18 @@ void association_order_and_gating() {
     require(at_x(result, 5.0F).track_id == active_id, "Lost identity stole the active high-confidence match");
     require(at_x(result, -6.0F).track_id != lost_id, "Lost identity ignored the IoU gate");
 
-    KalmanTracker high_first;
+    KalmanTracker high_first(configuration);
     const auto id = high_first.update({box(0.0F)}).front().track_id;
     const auto matched = high_first.update({box(0.0F, 0.20F), box(1.0F, 0.80F)});
     require(matched.size() == 1 && matched.front().track_id == id && matched.front().score == 0.80F,
             "Low-confidence box stole an active high-confidence match");
 
-    KalmanTracker classes;
+    KalmanTracker classes(configuration);
     const auto person_id = classes.update({box(0.0F)}).front().track_id;
     require(classes.update({box(0.0F, 0.9F, "car")}).front().track_id != person_id,
             "Different object classes shared an identity");
 
-    KalmanTrackerConfig strict;
+    auto strict = configuration;
     strict.gating_threshold = 0.01;
     KalmanTracker gate(strict);
     const auto original = gate.update({box(0.0F)}).front().track_id;
@@ -119,15 +128,16 @@ void association_order_and_gating() {
             "Squared Mahalanobis gate did not reject an otherwise overlapping box");
     require(gate.stats().gate_rejections == 1, "Gate rejection counter wrong");
 
-    KalmanTracker ties;
+    KalmanTracker ties(configuration);
     const auto tied = ties.update({box(0.0F), box(0.0F)});
     require(tied.size() == 2 && tied[0].track_id != tied[1].track_id, "Duplicate observation identities");
     require(ties.update({box(0.0F)}).front().track_id == tied.front().track_id, "Association tie is not deterministic");
 }
 
-void bounds_and_validation() {
-    for (int field = 0; field < 8; ++field) {
-        KalmanTrackerConfig config;
+void bounds_and_validation(KalmanGateMode mode) {
+    const auto configuration = gate_config(mode);
+    for (int field = 0; field < 9; ++field) {
+        auto config = configuration;
         switch (field) {
         case 0: config.low_threshold = config.high_threshold; break;
         case 1: config.new_track_threshold = 0.20F; break;
@@ -136,12 +146,13 @@ void bounds_and_validation() {
         case 4: config.gating_threshold = std::numeric_limits<double>::infinity(); break;
         case 5: config.gating_threshold = 0.0; break;
         case 6: config.high_threshold = -0.1F; break;
-        default: config.gating_threshold = 1'000'001.0; break;
+        case 7: config.gating_threshold = 1'000'001.0; break;
+        default: config.gate_mode = static_cast<KalmanGateMode>(99); break;
         }
         rejects([&] { KalmanTracker invalid(config); }, "Invalid tracker configuration was accepted");
     }
 
-    KalmanTracker tracker;
+    KalmanTracker tracker(configuration);
     const auto before = tracker.update({box(0.0F)}).front();
     for (int field = 0; field < 8; ++field) {
         auto invalid = box(1.0F);
@@ -168,7 +179,7 @@ void bounds_and_validation() {
     require(tracker.update({box(0.0F, 0.9F, "car")}).front().track_id == 2,
             "Rejected observations consumed the next identity");
 
-    KalmanTrackerConfig immediate_config;
+    auto immediate_config = configuration;
     immediate_config.max_missed_frames = 0;
     KalmanTracker capacity(immediate_config);
     std::vector<Detection> births(KalmanTracker::max_tracks + 1, box(0.0F));
@@ -182,17 +193,113 @@ void bounds_and_validation() {
     require(new_track.track_id == KalmanTracker::max_tracks + 1, "Suppressed birth consumed an identity");
 
     // Valid negative image coordinates and tiny boxes remain well-defined.
-    KalmanTracker coordinates;
+    KalmanTracker coordinates(configuration);
     const Detection tiny{{-0.001F, -0.001F, 0.001F, 0.001F}, "person", 0.9F, {}, {}};
     const auto tiny_id = coordinates.update({tiny}).front().track_id;
     require(coordinates.update({tiny}).front().track_id == tiny_id, "Small negative-coordinate box was not stable");
+}
+
+void center_gate_size_jitter() {
+    KalmanTrackerConfig legacy;
+    require(legacy.gate_mode == KalmanGateMode::FullBox && legacy.gating_threshold == kalman_box_gate99,
+            "Legacy full-box defaults changed");
+    require(kalman_box_gate99 == 13.2767 && kalman_center_gate99 == 9.2103,
+            "Documented chi-square gate constants changed");
+    auto center_config = gate_config(KalmanGateMode::CenterOnly);
+    KalmanTracker full_box(legacy), center_only(center_config);
+    const auto centered = [](float width, float height) -> Detection {
+        return {{50.0F - width / 2.0F, 100.0F - height / 2.0F,
+                 50.0F + width / 2.0F, 100.0F + height / 2.0F}, "person", 0.9F, {}, {}};
+    };
+    const auto initial = centered(20.0F, 80.0F);
+    const auto full_id = full_box.update({initial}).front().track_id;
+    const auto center_id = center_only.update({initial}).front().track_id;
+    const auto enlarged = centered(40.0F, 100.0F);
+    require(initial.bbox.iou(enlarged.bbox) >= legacy.match_iou,
+            "Size-jitter fixture did not pass the common IoU gate");
+    const auto rejected = full_box.update({enlarged});
+    require(rejected.size() == 1 && rejected.front().track_id != full_id && full_box.stats().gate_rejections == 1,
+            "Legacy full-box gate did not reject the fixed-center size jump");
+    for (int frame = 0; frame < 24; ++frame) {
+        const auto observation = frame % 2 == 0 ? enlarged : initial;
+        const auto result = center_only.update({observation});
+        require(result.size() == 1 && result.front().track_id == center_id,
+                "Center-only gate fragmented a fixed-center size-jitter identity");
+        const auto& actual = result.front().bbox;
+        require(actual.x1 == observation.bbox.x1 && actual.y1 == observation.bbox.y1 &&
+                actual.x2 == observation.bbox.x2 && actual.y2 == observation.bbox.y2,
+                "Center-only output altered the observed box dimensions");
+    }
+    require(center_only.stats().gate_rejections == 0 && center_only.stats().numerical_resets == 0 &&
+            center_only.stats().created_tracks == 1,
+            "Center-only size-jitter handling changed lifecycle or numerical counters");
+
+    // Same-size motion at IoU .379 passes the full-box 4D nominal gate but
+    // exceeds the center 2D nominal gate: d^2 = 81/7.5625, about 10.71.
+    KalmanTracker full_motion;
+    KalmanTracker center_motion(gate_config(KalmanGateMode::CenterOnly));
+    const auto full_motion_id = full_motion.update({box(0.0F)}).front().track_id;
+    const auto center_motion_id = center_motion.update({box(0.0F)}).front().track_id;
+    require(full_motion.update({box(9.0F)}).front().track_id == full_motion_id,
+            "Legacy full-box nominal gate changed");
+    require(center_motion.update({box(9.0F)}).front().track_id != center_motion_id &&
+                center_motion.stats().gate_rejections == 1,
+            "Center-only mode did not apply its two-dimensional nominal gate");
+
+    // Removing size from the uncertainty gate must not remove the IoU gate.
+    const auto oversized = centered(200.0F, 400.0F);
+    const auto unrelated = center_only.update({oversized});
+    require(unrelated.size() == 1 && unrelated.front().track_id != center_id,
+            "Center-only gate bypassed the common IoU condition");
+}
+
+void center_gate_nearby_crossing() {
+    KalmanTracker tracker(gate_config(KalmanGateMode::CenterOnly));
+    const auto shifted = [](float x, float y, std::string label = "person") -> Detection {
+        return {{x, y, x + 20.0F, y + 40.0F}, std::move(label), 0.9F, {}, {}};
+    };
+    std::uint64_t right_id = 0, left_id = 0;
+    for (int frame = 0; frame < 11; ++frame) {
+        const auto rightward = shifted(static_cast<float>(frame * 6), 0.0F);
+        const auto leftward = shifted(60.0F - static_cast<float>(frame * 6), 8.0F);
+        // Alternate detector order; Hungarian association must remain one-to-one.
+        const std::vector<Detection> observations = frame % 2 == 0
+            ? std::vector<Detection>{rightward, leftward} : std::vector<Detection>{leftward, rightward};
+        const auto result = tracker.update(observations);
+        require(result.size() == 2 && result[0].track_id != result[1].track_id,
+                "Nearby crossing produced duplicate or missing visible identities");
+        const auto right = std::find_if(result.begin(), result.end(), [](const auto& track) { return track.bbox.y1 == 0.0F; });
+        const auto left = std::find_if(result.begin(), result.end(), [](const auto& track) { return track.bbox.y1 == 8.0F; });
+        require(right != result.end() && left != result.end(), "Crossing output lost an observed vertical offset");
+        if (frame == 0) { right_id = right->track_id; left_id = left->track_id; }
+        require(right->track_id == right_id && left->track_id == left_id,
+                "Center gate swapped the deterministic synthetic crossing identities");
+    }
+    require(tracker.stats().created_tracks == 2 && tracker.stats().numerical_resets == 0,
+            "Synthetic crossing unexpectedly spawned identities or reset covariance");
+    // This controlled fixture has distinct offsets and motion. It establishes
+    // association invariants, not recovery of indistinguishable people or Re-ID.
+    KalmanTracker classes(gate_config(KalmanGateMode::CenterOnly));
+    const auto first = classes.update({shifted(0.0F, 0.0F), shifted(0.0F, 0.0F, "car")});
+    const auto second = classes.update({shifted(1.0F, 0.0F, "car"), shifted(1.0F, 0.0F)});
+    require(second.size() == 2, "Center gate merged coincident objects of different classes");
+    for (const auto& previous : first) {
+        const auto same_class = std::find_if(second.begin(), second.end(), [&](const auto& track) {
+            return track.label == previous.label;
+        });
+        require(same_class != second.end() && same_class->track_id == previous.track_id,
+                "Center gate reassigned a coincident different-class identity");
+    }
 }
 }  // namespace
 
 int main() {
     try {
-        lifecycle_and_motion(); association_order_and_gating(); bounds_and_validation();
-        std::cout << "Kalman motion, active priority, uncertainty gating, recovery and bounded-state tests passed\n";
+        for (const auto mode : {KalmanGateMode::FullBox, KalmanGateMode::CenterOnly}) {
+            lifecycle_and_motion(mode); association_order_and_gating(mode); bounds_and_validation(mode);
+        }
+        center_gate_size_jitter(); center_gate_nearby_crossing();
+        std::cout << "Kalman motion, active priority, full-box/center gating, size jitter, recovery and bounded-state tests passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

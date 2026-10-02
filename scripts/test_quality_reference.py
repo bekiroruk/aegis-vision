@@ -23,11 +23,12 @@ class QualityReferenceTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
 
-    def fixture(self, motion=False):
+    def fixture(self, motion=False, center=False):
         source_box = [-1.0, 2.0, 10.123456789, 22.123456789]
         manifest = {"frames": 2, "classes": ["person"], "ground_truth": [
             {"frame_index": 1, "id": 5, "bbox": source_box}]}
-        names = ["iou", "two_stage"] + (["kalman"] if motion else [])
+        names = (["iou", "two_stage"] + (["kalman"] if motion else [])
+                 + (["kalman_center"] if center else []))
         report = {"tracking": {name: {"idf1": None} for name in names}}
         report["tracking"].update({"parameters": {"match_iou": .3}, "protocol": "fixture"})
         frames = []
@@ -50,6 +51,69 @@ class QualityReferenceTests(unittest.TestCase):
         self.assertEqual(tracking_frame_inputs(*inputs), ("iou", "two_stage", "kalman"))
         # Raw detections do not become reference predictions or mutate them.
         self.assertEqual(inputs[2][0]["kalman"], [])
+
+    def test_center_tracker_is_optional_independently_of_legacy_kalman(self):
+        for motion in (False, True):
+            with self.subTest(legacy_kalman=motion):
+                inputs = self.fixture(motion=motion, center=True)
+                inputs[1]["tracking"]["parameters"]["kalman_center"] = {
+                    "association": "active-high, active-low, lost-high"}
+                before = deepcopy(inputs)
+                expected = (("iou", "two_stage", "kalman", "kalman_center")
+                            if motion else ("iou", "two_stage", "kalman_center"))
+                self.assertEqual(tracking_frame_inputs(*inputs), expected)
+                self.assertEqual(inputs, before)
+
+    def test_center_tracker_report_and_every_frame_must_agree(self):
+        for motion in (False, True):
+            for change in ("missing_report", "missing_first_frame", "missing_last_frame",
+                           "extra_frame", "extra_report"):
+                with self.subTest(legacy_kalman=motion, change=change):
+                    inputs = self.fixture(motion=motion, center=True)
+                    if change == "missing_report":
+                        del inputs[1]["tracking"]["kalman_center"]
+                    elif change == "missing_first_frame":
+                        del inputs[2][0]["kalman_center"]
+                    elif change == "missing_last_frame":
+                        del inputs[2][1]["kalman_center"]
+                    elif change == "extra_frame":
+                        inputs = self.fixture(motion=motion)
+                        inputs[2][1]["kalman_center"] = []
+                    else:
+                        inputs = self.fixture(motion=motion)
+                        inputs[1]["tracking"]["kalman_center"] = {}
+                    with self.assertRaisesRegex(ValueError, "Tracker set differs"):
+                        tracking_frame_inputs(*inputs)
+
+    def test_center_tracker_misnaming_is_not_silently_ignored(self):
+        for key in ("kalman_centers", "center_kalman", "kalman-center"):
+            for side in ("report", "frame"):
+                with self.subTest(key=key, side=side):
+                    inputs = self.fixture(motion=True, center=True)
+                    if side == "report":
+                        inputs[1]["tracking"][key] = inputs[1]["tracking"].pop("kalman_center")
+                        error = "Unknown tracking report keys"
+                    else:
+                        inputs[2][0][key] = inputs[2][0].pop("kalman_center")
+                        error = "Unknown frame 1 keys"
+                    with self.assertRaisesRegex(ValueError, error):
+                        tracking_frame_inputs(*inputs)
+
+    def test_center_tracker_cannot_hide_in_metadata_or_bypass_object_validation(self):
+        inputs = self.fixture(center=True)
+        del inputs[1]["tracking"]["kalman_center"]
+        inputs[1]["tracking"]["parameters"]["kalman_center"] = {}
+        with self.assertRaisesRegex(ValueError, "Tracker set differs"):
+            tracking_frame_inputs(*inputs)
+        inputs = self.fixture(center=True)
+        inputs[1]["tracking"]["kalman_center"] = []
+        with self.assertRaisesRegex(ValueError, "metric report objects"):
+            tracking_frame_inputs(*inputs)
+        inputs = self.fixture(center=True)
+        entry = {"id": 9, "bbox": [1, 2, 3, 4]}
+        inputs[2][1]["kalman_center"] = [entry, entry]
+        with self.assertRaisesRegex(ValueError, "Duplicate per-frame"):
+            tracking_frame_inputs(*inputs)
 
     def test_report_and_frame_tracker_presence_must_agree(self):
         inputs = self.fixture()

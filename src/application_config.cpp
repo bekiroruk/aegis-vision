@@ -166,7 +166,7 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
         return settings;
     }
     const auto& tracking = section(root, "tracking");
-    keys(tracking, "tracking", {"backend", "iou_threshold", "max_missed_frames", "low_confidence", "new_track_confidence", "mahalanobis_gate"});
+    keys(tracking, "tracking", {"backend", "iou_threshold", "max_missed_frames", "low_confidence", "new_track_confidence", "mahalanobis_gate", "gating_mode"});
     const auto tracker = string(tracking, "tracking", "backend");
     if (tracker == "iou") settings.video.tracker_mode = TrackerMode::IoU;
     else if (tracker == "two-stage") settings.video.tracker_mode = TrackerMode::TwoStage;
@@ -177,9 +177,17 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
             throw std::invalid_argument("Kalman requires consecutive decoded frames; timestamp-aware stream tracking is not implemented");
         if (settings.detector.max_detections > KalmanTracker::max_detections)
             throw std::invalid_argument("Kalman detector.max_detections exceeds bounded input capacity");
-        settings.video.kalman_gating_threshold=real(tracking,"tracking","mahalanobis_gate",13.2767,0.000001,100);
-    } else if (tracking.contains("mahalanobis_gate")) {
-        throw std::invalid_argument("mahalanobis_gate requires tracking.backend=kalman");
+        if (tracking.contains("gating_mode")) {
+            const auto mode = string(tracking, "tracking", "gating_mode");
+            if (mode == "center") settings.video.kalman_gate_mode = KalmanGateMode::CenterOnly;
+            else if (mode != "full-box")
+                throw std::invalid_argument("tracking.gating_mode must be full-box or center");
+        }
+        const double default_gate = settings.video.kalman_gate_mode == KalmanGateMode::CenterOnly
+            ? kalman_center_gate99 : kalman_box_gate99;
+        settings.video.kalman_gating_threshold = real(tracking, "tracking", "mahalanobis_gate", default_gate, 0.000001, 100);
+    } else if (tracking.contains("mahalanobis_gate") || tracking.contains("gating_mode")) {
+        throw std::invalid_argument("mahalanobis_gate/gating_mode require tracking.backend=kalman");
     }
     settings.video.tracking_iou = static_cast<float>(real(tracking, "tracking", "iou_threshold", 0.30, 0.000001, 1));
     settings.video.max_missed_frames = static_cast<std::uint32_t>(integer(tracking, "tracking", "max_missed_frames", 20, 0, 10000));

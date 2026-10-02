@@ -9,14 +9,14 @@ int run(const std::vector<std::filesystem::path> &args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
             std::cout << "Usage: aegisvision_quality CONFIG.toml MANIFEST.json NEW_OUTPUT_DIR "
-                         "[WARMUP_ITERATIONS] [--kalman]\n"
+                         "[WARMUP_ITERATIONS] [--kalman] [--kalman-center]\n"
                       << "CPU/FP32 YOLO quality baseline; images=COCO-style AP, "
                          "video=IoU/two-stage CLEAR+IDF1.\n"
                       << "One OpenCV thread. Default five unmeasured warmup calls; same detector "
-                         "outputs for selected trackers. --kalman adds a third comparison panel.\n";
+                         "outputs for selected trackers. Each Kalman flag adds one comparison panel.\n";
             return 0;
         }
-        if (args.size() < 4 || args.size() > 6)
+        if (args.size() < 4 || args.size() > 7)
             throw std::invalid_argument("Use --help for quality benchmark arguments");
         const auto settings = aegisvision::vision::load_application_settings(args[1]);
         if (settings.mode != aegisvision::vision::ApplicationMode::Image)
@@ -28,6 +28,12 @@ int run(const std::vector<std::filesystem::path> &args) {
                 if (config.compare_kalman)
                     throw std::invalid_argument("Duplicate --kalman");
                 config.compare_kalman = true;
+                continue;
+            }
+            if (args[i] == "--kalman-center") {
+                if (config.compare_kalman_center)
+                    throw std::invalid_argument("Duplicate --kalman-center");
+                config.compare_kalman_center = true;
                 continue;
             }
             if (saw_warmup)

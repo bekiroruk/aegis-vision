@@ -139,7 +139,17 @@ Measurement solve(const Matrix4& lower, Measurement right) {
     return right;
 }
 
-double squared_distance(const Mean& mean, const Matrix4& lower, const Measurement& observed) {
+double squared_distance(const Mean& mean, const Matrix4& lower, const Measurement& observed,
+                        KalmanGateMode mode) {
+    if (mode == KalmanGateMode::CenterOnly) {
+        // The leading Cholesky block factors the marginal (cx,cy) innovation
+        // covariance. Whiten only its two residuals: a full four-dimensional
+        // solve with zero size residuals would instead use conditional center
+        // uncertainty and is not this gate.
+        const double x = (observed[0] - mean[0]) / lower[0];
+        const double y = (observed[1] - mean[1] - lower[4] * x) / lower[5];
+        return x * x + y * y;
+    }
     Measurement residual{};
     for (std::size_t i = 0; i < 4; ++i) residual[i] = observed[i] - mean[i];
     const auto solution = solve(lower, residual);
@@ -226,6 +236,9 @@ KalmanTracker::KalmanTracker(KalmanTrackerConfig config) : config_(config) {
         config.gating_threshold <= 0.0 || config.gating_threshold > 1e6) {
         throw std::invalid_argument("Invalid Kalman tracker threshold order, lifetime or gating threshold");
     }
+    if (config.gate_mode != KalmanGateMode::FullBox && config.gate_mode != KalmanGateMode::CenterOnly) {
+        throw std::invalid_argument("Invalid Kalman tracker gate mode");
+    }
 }
 
 std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detections) {
@@ -284,7 +297,8 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
                 if (state.track.label != detection.label) continue;
                 const auto overlap = predicted.at(ids[i]).iou(detection.bbox);
                 if (!std::isfinite(overlap) || overlap < config_.match_iou) continue;
-                const double distance = squared_distance(state.mean, factors.at(ids[i]), measurement(detection.bbox));
+                const double distance = squared_distance(state.mean, factors.at(ids[i]),
+                                                         measurement(detection.bbox), config_.gate_mode);
                 if (!std::isfinite(distance) || distance < 0.0 || distance > config_.gating_threshold) {
                     ++statistics.gate_rejections;
                     continue;

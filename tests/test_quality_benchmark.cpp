@@ -245,6 +245,38 @@ int main() {
         }
         three_video.release();
         require(three_count == 3, "Kalman comparison lost frames");
+        Detector four_detector;
+        const auto four = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "four", four_detector, {0, Json::object(), true, true});
+        require(four_detector.calls == 3 && four["tracking"]["kalman_center"]["idf1"] == 1.0 &&
+                    four["performance"]["kalman_center_tracker"]["samples"] == 3,
+                "Fourth tracker duplicated inference or omitted metrics/timings");
+        const auto four_frames = load(root / "four/tracking-frames.json");
+        require(four_frames[0]["kalman_center"] == four_frames[0]["kalman"] &&
+                    four_frames[0]["kalman"] == four_frames[0]["iou"] &&
+                    fs::exists(root / "four/kalman-center-mot.txt") &&
+                    four["tracking"]["parameters"]["kalman_center"]["gating_dimensions"] == 2 &&
+                    four["tracking"]["parameters"]["kalman_center"]["mahalanobis_gate"] == 9.2103,
+                "Center comparison did not preserve shared inputs/parameters/export");
+        cv::VideoCapture four_video((root / "four/comparison.avi").string());
+        int four_count = 0;
+        while (four_video.read(frame)) {
+            ++four_count;
+            require(frame.cols == 128 && frame.rows == 32, "Four-panel layout wrong");
+        }
+        four_video.release();
+        require(four_count == 3, "Four-panel comparison lost frames");
+        Detector center_detector;
+        const auto center_only = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "center-only", center_detector, {0, Json::object(), false, true});
+        require(!center_only["tracking"].contains("kalman") &&
+                    center_only["tracking"]["kalman_center"]["idf1"] == 1.0 &&
+                    center_detector.calls == 3,
+                "Center flag must be independent of legacy Kalman flag");
+        rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
+            root / "manifest.json", root / "center-images", detector, {0, Json::object(), false, true}); },
+            "Images accepted center-only tracking comparison");
+        require(!fs::exists(root / "center-images"), "Image flag validation created output side effects");
         movie["frames"] = 4;
         save(root / "movie-bad.json", movie);
         rejects(

@@ -15,7 +15,7 @@ içinde birleştirmektir.
 - Değiştirilebilir model ve altyapı portları
 - Sınıf duyarlı IoU tracker
 - İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
-- Deneysel yerel-video Kalman tracker: aktif-önce eşleştirme, kovaryans/Mahalanobis kapısı, sınırlı state ve hata sayaçları; iki sahnede karışık kalite sonuçları
+- Deneysel yerel-video Kalman tracker: aktif-önce eşleştirme, tam kutu veya merkez odaklı Mahalanobis kapısı, sınırlı state ve hata sayaçları; gerçek etiketli karşılaştırmalar
 - Cosine similarity tabanlı yerel vektör indeksi
 - ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
 - COCO validation nesne kırpmalarını toplu indeksleme ve Recall@K/Hit@K raporu
@@ -117,7 +117,7 @@ ve Recall@K ölçümü için [benchmark kılavuzu](docs/search-benchmark.md).
 
 **Model ve takip kalitesi:** 64 tam COCO sahnesinde detection AP ve 179 karelik
 etiketli MOT15 videosunda başlangıç ölçümü; ek 71 karelik Campus ile IoU / iki aşamalı /
-deneysel Kalman karşılaştırması, gerçek video
+deneysel FullBox / Center Kalman karşılaştırması, gerçek video
 çıktısı, CPU gecikmesi ve resmi araçlarla kontrol için [kalite kılavuzu](docs/model-quality.md).
 Küçük/yanlı başlangıç verisi resmi COCO/MOT leaderboard sonucu değildir.
 

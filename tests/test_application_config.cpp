@@ -68,6 +68,19 @@ int main() {
                     config.video.high_confidence == .4F &&
                     std::abs(config.video.kalman_gating_threshold - 13.2767) < 1e-9,
                 "Kalman config did not reach adapters");
+        save(root / "kalman-default.toml", kalman_base);
+        config = aegisvision::vision::load_application_settings(root / "kalman-default.toml");
+        require(config.video.kalman_gate_mode == aegisvision::KalmanGateMode::FullBox &&
+                    config.video.kalman_gating_threshold == aegisvision::kalman_box_gate99,
+                "Legacy Kalman default gate changed");
+        save(root / "center.toml", kalman_base + "gating_mode = \"center\"\n");
+        config = aegisvision::vision::load_application_settings(root / "center.toml");
+        require(config.video.kalman_gate_mode == aegisvision::KalmanGateMode::CenterOnly &&
+                    config.video.kalman_gating_threshold == aegisvision::kalman_center_gate99,
+                "Center gate mode/dimension default did not reach adapters");
+        save(root / "center-custom.toml", kalman_base + "gating_mode = \"center\"\nmahalanobis_gate = 7\n");
+        config = aegisvision::vision::load_application_settings(root / "center-custom.toml");
+        require(config.video.kalman_gating_threshold == 7.0, "Explicit center gate override lost");
         const std::string search =
             "version = 1\n[pipeline]\nmode = \"search\"\n"
             "[embedding]\nbackend = \"clip_onnx\"\nbundle = \"models\"\ndimension = 512\n"
@@ -105,6 +118,13 @@ int main() {
         bad(kalman_base + "mahalanobis_gate = -1\n");
         bad(kalman_base + "mahalanobis_gate = 101\n");
         bad(kalman_base + "mahalanobis_gate = nan\n");
+        bad(kalman_base + "gating_mode = \"unknown\"\n");
+        bad(kalman_base + "gating_mode = true\n");
+        bad(video + "[tracking-extra]\ngating_mode = \"center\"\n");
+        bad("version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
+            "[tracking]\nbackend = \"two-stage\"\ngating_mode = \"center\"\n");
+        bad("version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
+            "[tracking]\nbackend = \"kalman\"\ngating_mode = \"center\"\n[stream]\nduration_seconds = 1\n");
         bad("version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
             "[tracking]\nbackend = \"iou\"\nmahalanobis_gate = 13.2767\n");
         bad(video + "[unexpected]\nvalue = 1\n");

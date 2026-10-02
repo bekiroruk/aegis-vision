@@ -35,6 +35,9 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
   önceki iki backend korunur. İki etiketli sahnede resmi kontrol tamamlandı;
   sonuçlar karışık olduğu için varsayılan yapılmadı. Ardışık yerel kareler içindir;
   canlı timestamp-aware dt/Re-ID yoktur.
+- Ayrı merkez odaklı Kalman gate, dört yöntemli gerçek video karşılaştırması ve
+  resmi referans doğrulaması. Campus boyut titreşimi azalırken Stadtmitte FP artışı
+  raporlandı; geliştirme sahnelerinde gözlemdir, bağımsız hold-out sonucu değildir.
 
 ## Kalan işler — önerilen sıra
 

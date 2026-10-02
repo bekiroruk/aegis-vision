@@ -302,6 +302,88 @@ Campus video:    95590324a7fcd27c6a5babf7e69f763be5709f788ac1a32c986a4431aee14ea
 Campus GT:       6ea5c56dffa72db2d286bf3c4593465583bfe43e9ecaa110001ccce2c4d10e39
 ```
 
+## Merkez kapılı Kalman geliştirme ölçümü — 2026-10-02
+
+Campus'teki kutu boyutu titreşiminden hareketle ayrı `CenterOnly` seçeneği eklendi.
+Merkezin marjinal `(cx,cy)` innovation'ı iki boyutlu kapılanır: nominal chi-square(2)
+%99 eşiği **9.2103**. Eski FullBox kapısı dört boyutta 13.2767 kalır. Tam dört
+ölçümlü correction, predicted-box IoU .30, sınıf, low/high/new ve lifetime
+değişmez. İki eşik farklı serbestlik derecelerine aittir; yalnız sayısal eşiği
+büyütüp küçültme deneyi değildir. [ADR-0014](adr/0014-center-only-motion-gating.md).
+
+**Bu bir geliştirme koşusudur:** tasarım aynı Campus verisindeki önceki hata
+analizinden seçildi. İki MOT15 training sekansını yeniden kullanmak bağımsız
+validation veya hold-out kanıtı değildir. Alternatif/eşik ilk çalıştırmadan önce
+sabitlendi; grid search, eşik taraması, fine-tuning veya GT'nin tracker'a verilmesi
+yoktur. Genel başarı iddiası için farklı ve sızıntısız veri gerekir.
+
+`--kalman --kalman-center` ile aynı karelerde tek inference ve dört ayrı tracker
+durumu kullanıldı. Her sekans bütün kareleriyle değerlendirildi.
+
+| Sahne / metrik | IoU | İki aşamalı | Kalman FullBox | Kalman Center |
+|---|---:|---:|---:|---:|
+| Stadtmitte IDF1 | %77.20 | %68.36 | %76.77 | %76.68 |
+| Stadtmitte MOTA | %79.67 | %77.25 | %79.41 | %77.42 |
+| Stadtmitte ID switch | 13 | 12 | 12 | 11 |
+| Stadtmitte TP / FP / FN | 981 / 47 / 175 | 979 / 74 / 177 | 976 / 46 / 180 | 977 / 71 / 179 |
+| Stadtmitte IDTP / IDFP / IDFN | 843 / 185 / 313 | 755 / 298 / 401 | 836 / 186 / 320 | 845 / 203 / 311 |
+| Campus IDF1 | %59.92 | %68.90 | %43.44 | %67.39 |
+| Campus MOTA | %58.50 | %60.45 | %57.66 | %61.84 |
+| Campus ID switch | 8 | 4 | 22 | 5 |
+| Campus TP / FP / FN | 300 / 82 / 59 | 304 / 83 / 55 | 301 / 72 / 58 | 302 / 75 / 57 |
+| Campus IDTP / IDFP / IDFN | 222 / 160 / 137 | 257 / 130 / 102 | 159 / 214 / 200 | 248 / 129 / 111 |
+
+Campus FullBox'a göre IDF1 **+23.95 yüzde puan**, ID switch **22 → 5**;
+GT3 artık 1–63. karelerde kesintisiz kimlik 3'tedir. Yine de iki aşamalı yöntemin
+IDF1'i %68.90 ile daha yüksektir. Stadtmitte'de Center IDF1 FullBox'a göre **-0.09
+yüzde puan**, MOTA **-1.99 yüzde puan**; daha az ID switch her zaman daha yüksek
+kalite demek değildir. Varsayılan IoU ve eski Kalman config'i değiştirilmedi.
+
+Stadtmitte ek 25 FP'nin 21'i .10–.35 güven aralığındadır; bunlar detector'ın
+gerçek gözlemleridir, çizilen hayali filtre prediction'ları değildir. On iki kutu
+track 4'ün sağ kenar devamı (kare 63–74), yedisi track 2'nin kenar devamıdır
+(90–96). Örneğin kare 64 skor .218 kutusunun GT IoU'su 0; daha önce ilişkili
+kişinin annotation'ı kare 62'de biter. Kare 51 skor .197 kısmi kutunun maksimum
+GT IoU'su .254'tür. Bu protokolde GT ile IoU .5'e ulaşmadıkları için FP sayılırlar;
+görüntüde gerçekten kişi bulunmadığı iddia edilmez. Merkez kapısı boyut filtresinin
+elediği bazı düşük güvenli kısmi/kenar kutularını da sürdürür. Appearance/Re-ID,
+merkez/boyut gürültüsü ve yeni bağımsız veri sonraki çalışmalardır.
+
+İki `reference-validation.json` **resmi TrackEval ile passed**: dört takipçinin
+CLEAR/Identity sayımları tam eşit, oranlarda tolerans 1e-6. Eski IoU / iki aşamalı /
+FullBox yöntemlerinin 18 metrik alanı ve FullBox diagnostic sayımları önceki
+üçlü koşularla bire bir aynı. Center gate rejection Stadtmitte 28 / Campus 58;
+iki koşuda numerical reset ve capacity rejection 0.
+
+Aynı CPU/FP32 YOLO/config/data hash'leri ve beş warmup kullanıldı. Campus başlangıcı
+yerel derlemenin son işleriyle kısmen örtüştü; güç modu ve arka plan yükü
+sabitlenmedi. Süreler gözlemdir, eski koşulara karşı hız iyileşmesi kanıtı değildir.
+Detector p50/p95 Stadtmitte **536.47 / 616.23 ms**, Campus **391.62 / 597.88 ms**;
+Center tracker **0.0466 / 0.0635 ms**, **0.0395 / 0.0632 ms**. Dört tracker,
+çizim/yazım dahil loop hızları **1.77 / 2.10 FPS**. 25 FPS MP4 oynatma inference
+hızı değildir.
+
+Yerel `outputs/quality-tud-center/` ve `outputs/quality-campus-center/` altında
+rapor, ham tespit/kare JSON'u, dört MOT tahmin dosyası, CSV, resmi doğrulama ve
+AVI/MP4 bulunur. MP4 **2560×480 H.264**, soldan sağa IoU / iki aşamalı / FullBox /
+Center; sarı GT, yeşil takip kutuları. Stadtmitte **179 kare / 7.16 saniye**,
+Campus **71 kare / 2.84 saniye**, 25 FPS; decode sayıları ayrıca doğrulandı.
+
+Tekrar üretim (var olan sonuçları değiştirmemek için yeni çıktı dizini seçin):
+
+```powershell
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-center --kalman --kalman-center
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-center --kalman --kalman-center
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-center
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-center
+ffmpeg -nostdin -n -i outputs/quality-tud-center/comparison.avi -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -movflags +faststart outputs/quality-tud-center/comparison.mp4
+ffmpeg -nostdin -n -i outputs/quality-campus-center/comparison.avi -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -movflags +faststart outputs/quality-campus-center/comparison.mp4
+```
+
+Yalnız `--kalman-center` üç panel üretir; eski `--kalman` zorunlu değildir.
+Yerel video CLI için `configs/video-kalman-center.toml` veya `--tracker kalman-center`.
+İki Kalman modu da RTSP'de desteklenmez; timestamp-aware zaman adımı henüz yoktur.
+
 ## Protokol kaynakları
 
 - [Resmi COCO veri ve değerlendirme](https://cocodataset.org/#detection-eval).

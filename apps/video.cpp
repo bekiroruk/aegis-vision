@@ -10,13 +10,14 @@ int run(const std::vector<std::filesystem::path> &args) {
     try {
         if ((args.size() == 2 && args[1] == "--help") || args.size() < 4) {
             std::cout << "Usage: aegisvision_video MODEL.onnx INPUT_VIDEO NEW_OUTPUT_DIR "
-                         "[MAX_FRAMES] [--tracker iou|two-stage|kalman]\n"
+                         "[MAX_FRAMES] [--tracker iou|two-stage|kalman|kalman-center]\n"
                          "   or: aegisvision_video --config CONFIG.toml INPUT_VIDEO NEW_OUTPUT_DIR "
                          "[MAX_FRAMES]\n"
                          "CPU YOLOv8; default: IoU tracker. Two-stage adds low-score recovery and "
                          "motion prediction.\n"
                          "Kalman adds covariance gating and active-first matching; consecutive "
                          "local frames only.\n"
+                         "kalman-center gates center motion only; box overlap and 4D correction remain.\n"
                          "Writes tracked.avi (MJPEG), preview.jpg, tracks.csv and summary.json.\n"
                          "MAX_FRAMES: positive integer, omitted = entire file. Output directory "
                          "must be empty.\n";
@@ -53,15 +54,20 @@ int run(const std::vector<std::filesystem::path> &args) {
         for (std::size_t i = 4; i < args.size(); ++i) {
             if (args[i] == "--tracker") {
                 if (saw_tracker || i + 1 >= args.size())
-                    throw std::invalid_argument("Expected one --tracker iou|two-stage|kalman");
+                    throw std::invalid_argument("Expected one --tracker iou|two-stage|kalman|kalman-center");
                 saw_tracker = true;
                 const auto &mode = args[++i];
                 if (mode == "two-stage")
                     config.tracker_mode = aegisvision::vision::TrackerMode::TwoStage;
                 else if (mode == "kalman")
                     config.tracker_mode = aegisvision::vision::TrackerMode::Kalman;
+                else if (mode == "kalman-center") {
+                    config.tracker_mode = aegisvision::vision::TrackerMode::Kalman;
+                    config.kalman_gate_mode = aegisvision::KalmanGateMode::CenterOnly;
+                    config.kalman_gating_threshold = aegisvision::kalman_center_gate99;
+                }
                 else if (mode != "iou")
-                    throw std::invalid_argument("Unknown tracker; use iou, two-stage or kalman");
+                    throw std::invalid_argument("Unknown tracker; use iou, two-stage, kalman or kalman-center");
                 continue;
             }
             if (saw_limit)

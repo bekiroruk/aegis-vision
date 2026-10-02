@@ -9,6 +9,7 @@ Hazır uygulama örnekleri:
 - `configs/image.toml`: YOLO ile tek fotoğraf tespiti.
 - `configs/pipeline.toml`: YOLO ve iki aşamalı video takibi.
 - `configs/video-kalman.toml`: ardışık yerel karelerde deneysel aktif-önce Kalman takibi.
+- `configs/video-kalman-center.toml`: aynı takipçiyle boyut titreşimine duyarsız merkez hareket kapısı.
 - `configs/search.toml`: CLIP ile yerel Qdrant araması.
 - `configs/stream.toml`: süre sınırı, timeout/reconnect ve sınırlı RTSP kare kuyruğu.
 - `configs/live-preview.toml`: aynı stream şemasıyla web önizlemesi için 180 saniyelik profil;
@@ -51,7 +52,10 @@ Yeni track açma eşiği `[tracking].new_track_confidence` değeridir. Şema
 `[tracking].backend` değeri `iou`, `two-stage` veya `kalman` olabilir; `iou` seçildiğinde
 düşük/yeni güven alanları kullanılmaz ve verilirse hata oluşur.
 Kalman aynı low/high/new eşiklerini kullanır; yalnız `kalman` için opsiyonel
-`mahalanobis_gate` vardır (varsayılan 13.2767, aralık (0,100]). Detector kapasitesi
+`gating_mode` vardır: `full-box` varsayılan, `center` yalnız konumu kapılar.
+`mahalanobis_gate` varsayılanı moda göre 13.2767 (4B) veya 9.2103 (2B), aralığı
+(0,100]; açık verilirse moda bağlı varsayılanı değiştirir. Boyut correction'ı
+ve IoU kapısı iki modda da korunur. Detector kapasitesi
 en fazla 512 olmalıdır. Kalman `stream` modunda reddedilir: drop-oldest ve
 değişken zaman adımı için timestamp-aware motion modeli henüz yoktur.
 

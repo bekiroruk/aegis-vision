@@ -17,6 +17,7 @@ struct VideoConfig {
     float high_confidence{0.35F};
     float new_track_confidence{0.50F};
     double kalman_gating_threshold{13.2767};
+    KalmanGateMode kalman_gate_mode{KalmanGateMode::FullBox};
 };
 struct VideoSummary {
     int processed_frames{};

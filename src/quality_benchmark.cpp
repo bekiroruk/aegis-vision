@@ -12,11 +12,13 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 #include <picosha2.h>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace aegisvision::evaluation {
 namespace {
@@ -298,8 +300,20 @@ cv::Mat display(const cv::Mat &image, const std::vector<Track> &tracks,
                 0.43, {255, 255, 255}, 1);
     return result;
 }
+struct KalmanComparison {
+    std::string name, title;
+    KalmanTrackerConfig config;
+    KalmanTracker tracker;
+    std::vector<TrackingFrame> frames;
+    std::vector<double> times;
+    std::vector<Track> observed;
+    std::ofstream rows;
+    double last_ms{};
+    KalmanComparison(std::string key, std::string label, KalmanTrackerConfig settings)
+        : name(std::move(key)), title(std::move(label)), config(settings), tracker(settings) {}
+};
 Json video_run(const Json &manifest, const fs::path &base, const fs::path &output,
-               IDetector &detector, int iterations, bool compare_kalman) {
+               IDetector &detector, int iterations, bool compare_kalman, bool compare_center) {
     if (manifest.at("classes") != Json::array({"person"}))
         throw std::invalid_argument("Tracking baseline evaluates person only");
     const auto input = local_file(base, text(manifest, "video"));
@@ -335,26 +349,35 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     const auto warm_ms = elapsed(warm_start);
     IoUTracker iou(.30F, 20);
     TwoStageTracker two_stage;
-    std::unique_ptr<KalmanTracker> kalman;
+    std::vector<std::unique_ptr<KalmanComparison>> comparisons;
     if (compare_kalman)
-        kalman = std::make_unique<KalmanTracker>();
-    std::vector<TrackingFrame> iou_frames, two_frames, kalman_frames;
-    std::vector<double> inference, read_times, iou_times, two_times, kalman_times;
+        comparisons.push_back(std::make_unique<KalmanComparison>(
+            "kalman", "Kalman active-first", KalmanTrackerConfig{}));
+    if (compare_center) {
+        KalmanTrackerConfig center;
+        center.gate_mode = KalmanGateMode::CenterOnly;
+        center.gating_threshold = kalman_center_gate99;
+        comparisons.push_back(std::make_unique<KalmanComparison>(
+            "kalman_center", "Kalman center-only", center));
+    }
+    std::vector<TrackingFrame> iou_frames, two_frames;
+    std::vector<double> inference, read_times, iou_times, two_times;
     auto exported = Json::array();
     std::ofstream timings(output / "timings.csv"), iou_rows(output / "iou-mot.txt"),
         two_rows(output / "two-stage-mot.txt");
-    std::ofstream kalman_rows;
-    if (kalman)
-        kalman_rows.open(output / "kalman-mot.txt");
-    timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms"
-            << (kalman ? ",kalman_ms\n" : "\n") << std::setprecision(12);
+    timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms";
+    for (auto &entry : comparisons) {
+        timings << ',' << entry->name << "_ms";
+        entry->rows.open(output / (entry->name == "kalman" ? "kalman-mot.txt" : "kalman-center-mot.txt"));
+        entry->rows << std::setprecision(9);
+        if (!entry->rows) throw std::runtime_error("Cannot open Kalman MOT export");
+    }
+    timings << '\n' << std::setprecision(12);
     iou_rows << std::setprecision(9);
     two_rows << std::setprecision(9);
-    if (kalman)
-        kalman_rows << std::setprecision(9);
     cv::VideoWriter writer(utf8(output / "comparison.avi"), cv::CAP_OPENCV_MJPEG,
                            cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), fps,
-                           {width * (kalman ? 3 : 2), height});
+                           {width * static_cast<int>(2 + comparisons.size()), height});
     if (!writer.isOpened())
         throw std::runtime_error("Cannot open comparison AVI");
     const auto run_start = Clock::now();
@@ -388,13 +411,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         const auto two_start = Clock::now();
         auto b = two_stage.update(low);
         const auto b_ms = elapsed(two_start);
-        std::vector<Track> c;
-        double c_ms = 0;
-        if (kalman) {
+        for (auto &entry : comparisons) {
             const auto start = Clock::now();
-            c = kalman->update(low);
-            c_ms = elapsed(start);
-            kalman_times.push_back(c_ms);
+            entry->observed = entry->tracker.update(low);
+            entry->last_ms = elapsed(start);
+            entry->times.push_back(entry->last_ms);
         }
         TrackingFrame fa{i + 1, gt.at(i), {}}, fb{i + 1, gt.at(i), {}};
         const auto append = [&](const auto &tracks, auto &frame, std::ofstream &rows) {
@@ -408,10 +429,10 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         };
         append(a, fa, iou_rows);
         append(b, fb, two_rows);
-        TrackingFrame fc{i + 1, gt.at(i), {}};
-        if (kalman) {
-            append(c, fc, kalman_rows);
-            kalman_frames.push_back(fc);
+        for (auto &entry : comparisons) {
+            TrackingFrame frame{i + 1, gt.at(i), {}};
+            append(entry->observed, frame, entry->rows);
+            entry->frames.push_back(std::move(frame));
         }
         iou_frames.push_back(fa);
         two_frames.push_back(fb);
@@ -420,16 +441,16 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
                              {"iou", objects(fa.predictions)},
                              {"two_stage", objects(fb.predictions)},
                              {"raw_detections", raw}};
-        if (kalman)
-            frame_export["kalman"] = objects(fc.predictions);
+        for (const auto &entry : comparisons)
+            frame_export[entry->name] = objects(entry->frames.back().predictions);
         exported.push_back(std::move(frame_export));
         cv::Mat combined;
         cv::hconcat(display(image, a, fa.ground_truth, "IoU"),
                     display(image, b, fb.ground_truth, "Two-stage"), combined);
-        if (kalman) {
-            cv::Mat three;
-            cv::hconcat(combined, display(image, c, fc.ground_truth, "Kalman active-first"), three);
-            combined = three;
+        for (const auto &entry : comparisons) {
+            cv::Mat extended;
+            cv::hconcat(combined, display(image, entry->observed, gt.at(i), entry->title), extended);
+            combined = extended;
         }
         writer.write(combined);
         if (!i)
@@ -440,8 +461,8 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         if (i)
             read_times.push_back(read_ms);
         timings << i + 1 << ',' << read_ms << ',' << ms << ',' << a_ms << ',' << b_ms;
-        if (kalman)
-            timings << ',' << c_ms;
+        for (const auto &entry : comparisons)
+            timings << ',' << entry->last_ms;
         timings << '\n';
     }
     const auto run_ms = elapsed(run_start);
@@ -453,9 +474,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     timings.flush();
     iou_rows.flush();
     two_rows.flush();
-    if (kalman)
-        kalman_rows.flush();
-    if (!timings || !iou_rows || !two_rows || (kalman && !kalman_rows))
+    for (auto &entry : comparisons) {
+        entry->rows.flush();
+        if (!entry->rows) throw std::runtime_error("Kalman MOT export failed");
+    }
+    if (!timings || !iou_rows || !two_rows)
         throw std::runtime_error("Benchmark output failed");
     write_json(output / "tracking-frames.json", exported);
     Json report = {
@@ -491,25 +514,27 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
           "No HOTA, multi-camera or Re-ID evaluation; no parameter tuning in this run.",
           "Tracking throughput includes comparison rendering and is not a live RTSP FPS "
           "guarantee."}}};
-    if (kalman) {
-        report["tracking"]["kalman"] = tracking_report(evaluate_tracking(kalman_frames));
-        report["tracking"]["parameters"]["kalman"] = {
+    for (const auto &entry : comparisons) {
+        report["tracking"][entry->name] = tracking_report(evaluate_tracking(entry->frames));
+        report["tracking"]["parameters"][entry->name] = {
             {"low", .10},
             {"high", .35},
             {"new", .50},
             {"match_iou", .30},
             {"max_missed_frames", 20},
-            {"mahalanobis_gate", 13.2767},
+            {"mahalanobis_gate", entry->config.gating_threshold},
+            {"gating_mode", entry->config.gate_mode == KalmanGateMode::CenterOnly ? "center" : "full-box"},
+            {"gating_dimensions", entry->config.gate_mode == KalmanGateMode::CenterOnly ? 2 : 4},
             {"motion_dt", "one decoded frame"},
             {"association", "active-high, active-low, lost-high"}};
-        const auto &s = kalman->stats();
-        report["tracking"]["kalman"]["diagnostics"] = {
+        const auto &s = entry->tracker.stats();
+        report["tracking"][entry->name]["diagnostics"] = {
             {"gate_rejections", s.gate_rejections},
             {"numerical_resets", s.numerical_resets},
             {"reactivations", s.reactivations},
             {"low_confidence_matches", s.low_confidence_matches},
             {"capacity_rejections", s.capacity_rejections}};
-        report["performance"]["kalman_tracker"] = latency(kalman_times);
+        report["performance"][entry->name + "_tracker"] = latency(entry->times);
     }
     return report;
 }
@@ -548,7 +573,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     const auto kind = text(manifest, "kind"), dataset = text(manifest, "dataset");
     if (kind != "images" && kind != "video")
         throw std::invalid_argument("Unknown benchmark kind");
-    if (kind=="images" && config.compare_kalman)
+    if (kind=="images" && (config.compare_kalman || config.compare_kalman_center))
         throw std::invalid_argument("Kalman comparison requires a video manifest");
     const auto digest = quality_file_sha256(manifest_path);
     const auto base = fs::canonical(manifest_path).parent_path();
@@ -556,7 +581,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     auto report = kind == "images"
                       ? image_run(manifest, base, output, detector, config.warmup_iterations)
                       : video_run(manifest, base, output, detector, config.warmup_iterations,
-                                  config.compare_kalman);
+                                  config.compare_kalman, config.compare_kalman_center);
     if (quality_file_sha256(manifest_path) != digest)
         throw std::runtime_error("Manifest changed during evaluation");
     report["version"] = 1;

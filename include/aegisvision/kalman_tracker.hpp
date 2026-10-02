@@ -7,14 +7,23 @@
 
 namespace aegisvision {
 
+enum class KalmanGateMode { FullBox, CenterOnly };
+
+inline constexpr double kalman_box_gate99 = 13.2767;
+inline constexpr double kalman_center_gate99 = 9.2103;
+
 struct KalmanTrackerConfig {
     float low_threshold{0.10F};
     float high_threshold{0.35F};
     float new_track_threshold{0.50F};
     float match_iou{0.30F};
     std::uint32_t max_missed_frames{20};
-    // Squared Mahalanobis gate: chi-square, four measurements, 99% coverage.
-    double gating_threshold{13.2767};
+    // Squared Mahalanobis gate. The legacy default has four measurements and
+    // nominal 99% chi-square coverage under calibrated Gaussian innovations,
+    // not empirical accuracy. CenterOnly callers should explicitly select
+    // kalman_center_gate99 for two measurements at the same nominal coverage.
+    double gating_threshold{kalman_box_gate99};
+    KalmanGateMode gate_mode{KalmanGateMode::FullBox};
 };
 
 struct KalmanTrackingStats {
@@ -30,6 +39,8 @@ struct KalmanTrackingStats {
 // Bounded, class-aware constant-velocity Kalman matching. The eight states are
 // (cx, cy, width, height, vx, vy, vwidth, vheight), with dt = one decoded frame.
 // Association order: active/high, remaining active/low, then lost/remaining high.
+// CenterOnly gates marginal center uncertainty, not box-size residuals. Both
+// modes still require IoU/class agreement and correct all four measurements.
 // Only observed detections are returned; predictions are never visible objects.
 // More than 512 observations reject the whole update; at 256 live identities,
 // valid unmatched births are suppressed and counted without consuming an ID.

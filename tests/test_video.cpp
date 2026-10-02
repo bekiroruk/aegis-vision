@@ -119,6 +119,18 @@ int main() {
         require(motion.unique_track_ids == 1 && motion.kalman_stats.reactivations == 1,
                 "Kalman video adapter did not preserve/recover the track");
         require(decoded_frames(root / "kalman/tracked.avi") == 5, "Kalman output video incomplete");
+        kalman.kalman_gate_mode = KalmanGateMode::CenterOnly;
+        kalman.kalman_gating_threshold = kalman_center_gate99;
+        const auto center = vision::process_video(input, root / "center", detector, kalman);
+        require(center.unique_track_ids == 1 && center.kalman_stats.reactivations == 1 &&
+                    decoded_frames(root / "center/tracked.avi") == 5,
+                "Center-gated video lost frames/identity lifecycle");
+        cv::FileStorage center_report((root / "center/summary.json").string(), cv::FileStorage::READ);
+        require(static_cast<std::string>(center_report["kalman_gating_mode"]) == "center" &&
+                    static_cast<int>(center_report["kalman_gating_dimensions"]) == 2 &&
+                    std::abs(static_cast<double>(center_report["kalman_gate"]) - kalman_center_gate99) < 1e-9,
+                "Video summary omitted center gate provenance");
+        center_report.release();
         detector.empty = true;
         require(vision::process_video(input, root / "empty", detector).unique_track_ids == 0,
                 "Empty detections not handled");
