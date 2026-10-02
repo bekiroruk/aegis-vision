@@ -1,0 +1,18 @@
+version = 1
+
+[pipeline]
+mode = "image"
+
+[detector]
+backend = "yolo_onnx"
+model = "../artifacts/models/yolov8n.onnx"
+# Low cutoff retains the precision/recall curve; not a deployment threshold.
+confidence_threshold = 0.001
+nms_iou_threshold = 0.45
+input_size = 640
+max_detections = 300
+
+[runtime]
+device = "cpu"
+precision = "fp32"
+engine = "opencv-dnn"

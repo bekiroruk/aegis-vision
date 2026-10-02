@@ -1,7 +1,7 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-02. Aktif uygulama C++20'dir; Python yalnızca model hazırlama
-ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
+Güncelleme: 2026-10-02. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
 
@@ -28,6 +28,9 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
 - İsteğe bağlı analiz-kare arşivi: sınırlı segment/disk kotası, doğrulanmış MP4,
   sonlu SQLite encoder/CLIP/Qdrant işleri, canlı kapsamlı arama ve klip anına atlama.
   Kamera PTS/tam yayın FPS arşivi değildir; arrival/kare/epoch eşlemesi manifestte korunur.
+- C++ category-aware bbox AP, CLEAR/IDF1 ve ham süre/p50/p95 raporu; 64 tam COCO
+  sahnesi ve 179 karelik etiketli MOT15 videosunda aynı detection ile tracker
+  karşılaştırması, resmi pycocotools/TrackEval kontrolü; [kalite ölçümü](model-quality.md).
 
 ## Kalan işler — önerilen sıra
 
@@ -38,9 +41,11 @@ ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayır�
    DINO görsel tanıma için ayrı alternatiftir;
    tek başına metin araması sağlamaz.
 
-2. **Ölçülebilir model ve tracking kalitesi.** Küçük, lisansı uygun etiketli veri kümesi;
-   sabit train/validation/test ayrımı ve tekrarlanabilir değerlendirme komutları oluştur.
-   Detection mAP, tracking IDF1/HOTA/ID switch ve arama Recall@K raporla. İhtiyaca göre
+2. **Model ve tracking kalitesini geliştirme.** Küçük etiketli başlangıç ölçümü,
+   AP/CLEAR/IDF1/ID switch ve CPU p50/p95 tamamlandı; [kapsam ve sonuçlar](model-quality.md).
+   Sonraki iş, bağımsız ve daha geniş veriyle sabit train/validation/test ayrımı,
+   HOTA ve hata analizi. Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
+   İhtiyaca göre
    fine-tuning, metric learning ve tam ByteTrack/Kalman + Re-ID ekle. Çoklu kamera için
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
