@@ -166,15 +166,25 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
         return settings;
     }
     const auto& tracking = section(root, "tracking");
-    keys(tracking, "tracking", {"backend", "iou_threshold", "max_missed_frames", "low_confidence", "new_track_confidence"});
+    keys(tracking, "tracking", {"backend", "iou_threshold", "max_missed_frames", "low_confidence", "new_track_confidence", "mahalanobis_gate"});
     const auto tracker = string(tracking, "tracking", "backend");
     if (tracker == "iou") settings.video.tracker_mode = TrackerMode::IoU;
     else if (tracker == "two-stage") settings.video.tracker_mode = TrackerMode::TwoStage;
-    else throw std::invalid_argument("tracking.backend must be iou or two-stage");
+    else if (tracker == "kalman") settings.video.tracker_mode = TrackerMode::Kalman;
+    else throw std::invalid_argument("tracking.backend must be iou, two-stage or kalman");
+    if (settings.video.tracker_mode == TrackerMode::Kalman) {
+        if (settings.mode == ApplicationMode::Stream)
+            throw std::invalid_argument("Kalman requires consecutive decoded frames; timestamp-aware stream tracking is not implemented");
+        if (settings.detector.max_detections > KalmanTracker::max_detections)
+            throw std::invalid_argument("Kalman detector.max_detections exceeds bounded input capacity");
+        settings.video.kalman_gating_threshold=real(tracking,"tracking","mahalanobis_gate",13.2767,0.000001,100);
+    } else if (tracking.contains("mahalanobis_gate")) {
+        throw std::invalid_argument("mahalanobis_gate requires tracking.backend=kalman");
+    }
     settings.video.tracking_iou = static_cast<float>(real(tracking, "tracking", "iou_threshold", 0.30, 0.000001, 1));
     settings.video.max_missed_frames = static_cast<std::uint32_t>(integer(tracking, "tracking", "max_missed_frames", 20, 0, 10000));
     settings.video.high_confidence = settings.detector.confidence_threshold;
-    if (settings.video.tracker_mode == TrackerMode::TwoStage) {
+    if (settings.video.tracker_mode != TrackerMode::IoU) {
         settings.video.low_confidence = static_cast<float>(real(tracking, "tracking", "low_confidence", 0.10, 0.000001, 1));
         settings.video.new_track_confidence = static_cast<float>(real(tracking, "tracking", "new_track_confidence", 0.50, 0.000001, 1));
         if (settings.video.low_confidence >= settings.video.high_confidence ||
@@ -182,7 +192,7 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
             throw std::invalid_argument("Require tracking.low_confidence < detector.confidence_threshold <= tracking.new_track_confidence");
         settings.detector.confidence_threshold = settings.video.low_confidence;
     } else if (tracking.contains("low_confidence") || tracking.contains("new_track_confidence")) {
-        throw std::invalid_argument("Low/new track confidence fields require tracking.backend=two-stage");
+        throw std::invalid_argument("Low/new track confidence fields require tracking.backend=two-stage or kalman");
     }
     if (settings.mode == ApplicationMode::Stream) {
         const auto& stream = section(root, "stream");

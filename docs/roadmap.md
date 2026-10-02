@@ -31,6 +31,10 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 - C++ category-aware bbox AP, CLEAR/IDF1 ve ham süre/p50/p95 raporu; 64 tam COCO
   sahnesi ve 179 karelik etiketli MOT15 videosunda aynı detection ile tracker
   karşılaştırması, resmi pycocotools/TrackEval kontrolü; [kalite ölçümü](model-quality.md).
+- Deneysel C++ Kalman hareket tahmini ve aktif-önce Hungarian eşleştirmesi;
+  önceki iki backend korunur. İki etiketli sahnede resmi kontrol tamamlandı;
+  sonuçlar karışık olduğu için varsayılan yapılmadı. Ardışık yerel kareler içindir;
+  canlı timestamp-aware dt/Re-ID yoktur.
 
 ## Kalan işler — önerilen sıra
 
@@ -46,7 +50,8 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
    Sonraki iş, bağımsız ve daha geniş veriyle sabit train/validation/test ayrımı,
    HOTA ve hata analizi. Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
    İhtiyaca göre
-   fine-tuning, metric learning ve tam ByteTrack/Kalman + Re-ID ekle. Çoklu kamera için
+   fine-tuning, metric learning ve tam ByteTrack / appearance Re-ID ekle. Mevcut
+   Kalman backend resmi ByteTrack değildir; canlıda zaman-adımı desteği de gerekir. Çoklu kamera için
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 

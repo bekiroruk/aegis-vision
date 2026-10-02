@@ -1,5 +1,6 @@
 #include "aegisvision/quality_benchmark.hpp"
 #include "aegisvision/evaluation.hpp"
+#include "aegisvision/kalman_tracker.hpp"
 #include "aegisvision/tracking.hpp"
 #include "aegisvision/tracking_evaluation.hpp"
 #include "aegisvision/two_stage_tracker.hpp"
@@ -298,7 +299,7 @@ cv::Mat display(const cv::Mat &image, const std::vector<Track> &tracks,
     return result;
 }
 Json video_run(const Json &manifest, const fs::path &base, const fs::path &output,
-               IDetector &detector, int iterations) {
+               IDetector &detector, int iterations, bool compare_kalman) {
     if (manifest.at("classes") != Json::array({"person"}))
         throw std::invalid_argument("Tracking baseline evaluates person only");
     const auto input = local_file(base, text(manifest, "video"));
@@ -334,16 +335,26 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     const auto warm_ms = elapsed(warm_start);
     IoUTracker iou(.30F, 20);
     TwoStageTracker two_stage;
-    std::vector<TrackingFrame> iou_frames, two_frames;
-    std::vector<double> inference, read_times, iou_times, two_times;
+    std::unique_ptr<KalmanTracker> kalman;
+    if (compare_kalman)
+        kalman = std::make_unique<KalmanTracker>();
+    std::vector<TrackingFrame> iou_frames, two_frames, kalman_frames;
+    std::vector<double> inference, read_times, iou_times, two_times, kalman_times;
     auto exported = Json::array();
     std::ofstream timings(output / "timings.csv"), iou_rows(output / "iou-mot.txt"),
         two_rows(output / "two-stage-mot.txt");
-    timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms\n" << std::setprecision(12);
+    std::ofstream kalman_rows;
+    if (kalman)
+        kalman_rows.open(output / "kalman-mot.txt");
+    timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms"
+            << (kalman ? ",kalman_ms\n" : "\n") << std::setprecision(12);
     iou_rows << std::setprecision(9);
     two_rows << std::setprecision(9);
+    if (kalman)
+        kalman_rows << std::setprecision(9);
     cv::VideoWriter writer(utf8(output / "comparison.avi"), cv::CAP_OPENCV_MJPEG,
-                           cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), fps, {width * 2, height});
+                           cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), fps,
+                           {width * (kalman ? 3 : 2), height});
     if (!writer.isOpened())
         throw std::runtime_error("Cannot open comparison AVI");
     const auto run_start = Clock::now();
@@ -361,9 +372,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
             detector.detect(vision::image_frame(image, std::to_string(i + 1), "quality-video"));
         const auto ms = elapsed(detect_start);
         std::vector<Detection> high, low;
+        auto raw = Json::array();
         for (const auto &d : detections)
             if (d.label == "person") {
                 validate_prediction(d);
+                raw.push_back({{"bbox", box(d.bbox)}, {"label", d.label}, {"score", d.score}});
                 if (d.score >= .10F)
                     low.push_back(d);
                 if (d.score >= .35F)
@@ -375,6 +388,14 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         const auto two_start = Clock::now();
         auto b = two_stage.update(low);
         const auto b_ms = elapsed(two_start);
+        std::vector<Track> c;
+        double c_ms = 0;
+        if (kalman) {
+            const auto start = Clock::now();
+            c = kalman->update(low);
+            c_ms = elapsed(start);
+            kalman_times.push_back(c_ms);
+        }
         TrackingFrame fa{i + 1, gt.at(i), {}}, fb{i + 1, gt.at(i), {}};
         const auto append = [&](const auto &tracks, auto &frame, std::ofstream &rows) {
             for (const auto &t : tracks) {
@@ -387,15 +408,29 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         };
         append(a, fa, iou_rows);
         append(b, fb, two_rows);
+        TrackingFrame fc{i + 1, gt.at(i), {}};
+        if (kalman) {
+            append(c, fc, kalman_rows);
+            kalman_frames.push_back(fc);
+        }
         iou_frames.push_back(fa);
         two_frames.push_back(fb);
-        exported.push_back({{"frame_index", i + 1},
-                            {"ground_truth", objects(fa.ground_truth)},
-                            {"iou", objects(fa.predictions)},
-                            {"two_stage", objects(fb.predictions)}});
+        Json frame_export = {{"frame_index", i + 1},
+                             {"ground_truth", objects(fa.ground_truth)},
+                             {"iou", objects(fa.predictions)},
+                             {"two_stage", objects(fb.predictions)},
+                             {"raw_detections", raw}};
+        if (kalman)
+            frame_export["kalman"] = objects(fc.predictions);
+        exported.push_back(std::move(frame_export));
         cv::Mat combined;
         cv::hconcat(display(image, a, fa.ground_truth, "IoU"),
                     display(image, b, fb.ground_truth, "Two-stage"), combined);
+        if (kalman) {
+            cv::Mat three;
+            cv::hconcat(combined, display(image, c, fc.ground_truth, "Kalman active-first"), three);
+            combined = three;
+        }
         writer.write(combined);
         if (!i)
             vision::save_image(output / "preview.jpg", combined);
@@ -404,7 +439,10 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         two_times.push_back(b_ms);
         if (i)
             read_times.push_back(read_ms);
-        timings << i + 1 << ',' << read_ms << ',' << ms << ',' << a_ms << ',' << b_ms << '\n';
+        timings << i + 1 << ',' << read_ms << ',' << ms << ',' << a_ms << ',' << b_ms;
+        if (kalman)
+            timings << ',' << c_ms;
+        timings << '\n';
     }
     const auto run_ms = elapsed(run_start);
     if (capture.read(image))
@@ -415,41 +453,65 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     timings.flush();
     iou_rows.flush();
     two_rows.flush();
-    if (!timings || !iou_rows || !two_rows)
+    if (kalman)
+        kalman_rows.flush();
+    if (!timings || !iou_rows || !two_rows || (kalman && !kalman_rows))
         throw std::runtime_error("Benchmark output failed");
     write_json(output / "tracking-frames.json", exported);
-    return {{"tracking",
-             {{"iou", tracking_report(evaluate_tracking(iou_frames))},
-              {"two_stage", tracking_report(evaluate_tracking(two_frames))},
-              {"protocol", "CLEAR and Identity at IoU .5; single person class; same decoded frames "
-                           "and detector outputs; independent tracker states; no GT tracker input"},
-              {"parameters",
-               {{"match_iou", .30},
-                {"max_missed_frames", 20},
-                {"iou_score", .35},
-                {"two_stage_low", .10},
-                {"two_stage_high", .35},
-                {"two_stage_new", .50}}}}},
-            {"performance",
-             {{"detector", latency(inference)},
-              {"decode", latency(read_times)},
-              {"iou_tracker", latency(iou_times)},
-              {"two_stage_tracker", latency(two_times)},
-              {"warmup_iterations", iterations},
-              {"warmup_ms", warm_ms},
-              {"loop_wall_ms", run_ms},
-              {"loop_fps", 1000.0 * count / run_ms},
-              {"scope",
-               "detector includes owned copy/preprocessing/forward/NMS; loop includes decode "
-               "except first frame, both trackers, overlays, MJPEG writes and CSV/MOT formatting; "
-               "excludes model load, warmup, metrics, hashes, output flush/finalization and JSON "
-               "serialization; first decoded frame is excluded from decode samples"}}},
-            {"limitations",
-             {"Single MOT15 training sequence using official reencoded preview video, not "
-              "challenge leaderboard-comparable scores.",
-              "No HOTA, multi-camera or Re-ID evaluation; no parameter tuning in this run.",
-              "Tracking throughput includes comparison rendering and is not a live RTSP FPS "
-              "guarantee."}}};
+    Json report = {
+        {"tracking",
+         {{"iou", tracking_report(evaluate_tracking(iou_frames))},
+          {"two_stage", tracking_report(evaluate_tracking(two_frames))},
+          {"protocol", "CLEAR and Identity at IoU .5; single person class; same decoded frames "
+                       "and detector outputs; independent tracker states; no GT tracker input"},
+          {"parameters",
+           {{"match_iou", .30},
+            {"max_missed_frames", 20},
+            {"iou_score", .35},
+            {"two_stage_low", .10},
+            {"two_stage_high", .35},
+            {"two_stage_new", .50}}}}},
+        {"performance",
+         {{"detector", latency(inference)},
+          {"decode", latency(read_times)},
+          {"iou_tracker", latency(iou_times)},
+          {"two_stage_tracker", latency(two_times)},
+          {"warmup_iterations", iterations},
+          {"warmup_ms", warm_ms},
+          {"loop_wall_ms", run_ms},
+          {"loop_fps", 1000.0 * count / run_ms},
+          {"scope",
+           "detector includes owned copy/preprocessing/forward/NMS; loop includes decode "
+           "except first frame, selected trackers, overlays, MJPEG writes and CSV/MOT formatting; "
+           "excludes model load, warmup, metrics, hashes, output flush/finalization and JSON "
+           "serialization; first decoded frame is excluded from decode samples"}}},
+        {"limitations",
+         {"Single MOT15 training sequence using official reencoded preview video, not "
+          "challenge leaderboard-comparable scores.",
+          "No HOTA, multi-camera or Re-ID evaluation; no parameter tuning in this run.",
+          "Tracking throughput includes comparison rendering and is not a live RTSP FPS "
+          "guarantee."}}};
+    if (kalman) {
+        report["tracking"]["kalman"] = tracking_report(evaluate_tracking(kalman_frames));
+        report["tracking"]["parameters"]["kalman"] = {
+            {"low", .10},
+            {"high", .35},
+            {"new", .50},
+            {"match_iou", .30},
+            {"max_missed_frames", 20},
+            {"mahalanobis_gate", 13.2767},
+            {"motion_dt", "one decoded frame"},
+            {"association", "active-high, active-low, lost-high"}};
+        const auto &s = kalman->stats();
+        report["tracking"]["kalman"]["diagnostics"] = {
+            {"gate_rejections", s.gate_rejections},
+            {"numerical_resets", s.numerical_resets},
+            {"reactivations", s.reactivations},
+            {"low_confidence_matches", s.low_confidence_matches},
+            {"capacity_rejections", s.capacity_rejections}};
+        report["performance"]["kalman_tracker"] = latency(kalman_times);
+    }
+    return report;
 }
 } // namespace
 std::string quality_file_sha256(const fs::path &path) {
@@ -486,12 +548,15 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     const auto kind = text(manifest, "kind"), dataset = text(manifest, "dataset");
     if (kind != "images" && kind != "video")
         throw std::invalid_argument("Unknown benchmark kind");
+    if (kind=="images" && config.compare_kalman)
+        throw std::invalid_argument("Kalman comparison requires a video manifest");
     const auto digest = quality_file_sha256(manifest_path);
     const auto base = fs::canonical(manifest_path).parent_path();
     fs::create_directories(output);
     auto report = kind == "images"
                       ? image_run(manifest, base, output, detector, config.warmup_iterations)
-                      : video_run(manifest, base, output, detector, config.warmup_iterations);
+                      : video_run(manifest, base, output, detector, config.warmup_iterations,
+                                  config.compare_kalman);
     if (quality_file_sha256(manifest_path) != digest)
         throw std::runtime_error("Manifest changed during evaluation");
     report["version"] = 1;

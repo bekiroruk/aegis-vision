@@ -1,90 +1,134 @@
 #include "aegisvision/application_config.hpp"
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 
 namespace {
 namespace fs = std::filesystem;
-void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
-void save(const fs::path& path, const std::string& text) {
+void require(bool ok, const char *why) {
+    if (!ok)
+        throw std::runtime_error(why);
+}
+void save(const fs::path &path, const std::string &text) {
     std::ofstream stream(path, std::ios::binary);
     stream << text;
-    if (!stream) throw std::runtime_error("Fixture write failed");
+    if (!stream)
+        throw std::runtime_error("Fixture write failed");
 }
-template<class F> void rejects(F action, const char* why) {
-    try { action(); } catch (const std::exception&) { return; }
+template <class F> void rejects(F action, const char *why) {
+    try {
+        action();
+    } catch (const std::exception &) {
+        return;
+    }
     throw std::runtime_error(why);
 }
-}
+} // namespace
 
 int main() {
-    const auto root = fs::temp_directory_path() / ("aegis-config-" +
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto root = fs::temp_directory_path() /
+                      ("aegis-config-" +
+                       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         fs::create_directories(root / "models");
         save(root / "models/detector.onnx", "placeholder");
         for (auto name : {"manifest.json", "vision.onnx", "text.onnx", "tokenizer.json"})
             save(root / "models" / name, "placeholder");
-        const std::string detector = "[detector]\nbackend = \"yolo_onnx\"\nmodel = \"models/detector.onnx\"\n"
+        const std::string detector =
+            "[detector]\nbackend = \"yolo_onnx\"\nmodel = \"models/detector.onnx\"\n"
             "confidence_threshold = 0.4\ninput_size = 640\n";
         const std::string video = "version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
-            "[tracking]\nbackend = \"two-stage\"\nlow_confidence = 0.1\nnew_track_confidence = 0.6\n"
-            "max_missed_frames = 2\n[video]\nmax_frames = 5\n";
+                                  "[tracking]\nbackend = \"two-stage\"\nlow_confidence = "
+                                  "0.1\nnew_track_confidence = 0.6\n"
+                                  "max_missed_frames = 2\n[video]\nmax_frames = 5\n";
         save(root / "video.toml", video);
         auto config = aegisvision::vision::load_application_settings(root / "video.toml");
         require(config.mode == aegisvision::vision::ApplicationMode::Video &&
-            config.detector_model == fs::weakly_canonical(root / "models/detector.onnx"), "Model path resolution failed");
+                    config.detector_model == fs::weakly_canonical(root / "models/detector.onnx"),
+                "Model path resolution failed");
         require(config.video.tracker_mode == aegisvision::vision::TrackerMode::TwoStage &&
-            config.video.high_confidence == .4F && config.video.new_track_confidence == .6F &&
-            config.detector.confidence_threshold == .1F && config.video.max_frames == 5,
-            "Video settings did not reach adapters");
+                    config.video.high_confidence == .4F &&
+                    config.video.new_track_confidence == .6F &&
+                    config.detector.confidence_threshold == .1F && config.video.max_frames == 5,
+                "Video settings did not reach adapters");
         save(root / "image.toml", "version = 1\n[pipeline]\nmode = \"image\"\n" + detector);
         config = aegisvision::vision::load_application_settings(root / "image.toml");
         require(config.mode == aegisvision::vision::ApplicationMode::Image &&
-            config.detector.confidence_threshold == .4F, "Image setting lost");
-        const std::string search = "version = 1\n[pipeline]\nmode = \"search\"\n"
+                    config.detector.confidence_threshold == .4F,
+                "Image setting lost");
+        const std::string kalman_base = "version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
+                                       "[tracking]\nbackend = \"kalman\"\n";
+        const std::string kalman = kalman_base + "mahalanobis_gate = 13.2767\n";
+        save(root / "kalman.toml", kalman);
+        config = aegisvision::vision::load_application_settings(root / "kalman.toml");
+        require(config.video.tracker_mode == aegisvision::vision::TrackerMode::Kalman &&
+                    config.detector.confidence_threshold == .1F &&
+                    config.video.high_confidence == .4F &&
+                    std::abs(config.video.kalman_gating_threshold - 13.2767) < 1e-9,
+                "Kalman config did not reach adapters");
+        const std::string search =
+            "version = 1\n[pipeline]\nmode = \"search\"\n"
             "[embedding]\nbackend = \"clip_onnx\"\nbundle = \"models\"\ndimension = 512\n"
             "[vector_store]\nbackend = \"qdrant\"\ncollection = \"test_config\"\ndimension = 512\n";
         save(root / "search.toml", search);
         config = aegisvision::vision::load_application_settings(root / "search.toml");
         require(config.mode == aegisvision::vision::ApplicationMode::Search &&
-            config.qdrant.collection == "test_config", "Search setting lost");
-        rejects([&] { (void)aegisvision::vision::make_configured_detector(config); }, "Search created a detector");
-        const auto bad = [&](const std::string& text) {
+                    config.qdrant.collection == "test_config",
+                "Search setting lost");
+        rejects([&] { (void)aegisvision::vision::make_configured_detector(config); },
+                "Search created a detector");
+        const auto bad = [&](const std::string &text) {
             save(root / "bad.toml", text);
-            rejects([&] { (void)aegisvision::vision::load_application_settings(root / "bad.toml"); },
+            rejects(
+                [&] { (void)aegisvision::vision::load_application_settings(root / "bad.toml"); },
                 "Invalid configuration accepted");
         };
-        const std::string live = "version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
+        const std::string live =
+            "version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
             "[tracking]\nbackend = \"iou\"\n[stream]\nduration_seconds = 12\nqueue_capacity = 2\n";
         save(root / "stream.toml", live);
         config = aegisvision::vision::load_application_settings(root / "stream.toml");
-        require(config.mode == aegisvision::vision::ApplicationMode::Stream && config.live.duration_seconds == 12 &&
-            config.live.queue_capacity == 2, "Live settings lost");
+        require(config.mode == aegisvision::vision::ApplicationMode::Stream &&
+                    config.live.duration_seconds == 12 && config.live.queue_capacity == 2,
+                "Live settings lost");
         bad(live + "unknown = 1\n");
         bad(live + "output_fps = false\n");
         bad(live + "reconnect_initial_ms = 4000\nreconnect_max_ms = 2\n");
         bad(live + "[video]\nmax_frames = 1\n");
         bad(video + "[stream]\nduration_seconds = 12\n");
+        bad("version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
+            "[tracking]\nbackend = \"kalman\"\n[stream]\nduration_seconds = 1\n");
+        bad(kalman + "low_confidence = 0.5\n");
+        bad(kalman_base + "mahalanobis_gate = 0\n");
+        bad(kalman_base + "mahalanobis_gate = -1\n");
+        bad(kalman_base + "mahalanobis_gate = 101\n");
+        bad(kalman_base + "mahalanobis_gate = nan\n");
+        bad("version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
+            "[tracking]\nbackend = \"iou\"\nmahalanobis_gate = 13.2767\n");
         bad(video + "[unexpected]\nvalue = 1\n");
         bad("version = 1.0\n[pipeline]\nmode = \"image\"\n" + detector);
         bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + "unknown = 1\n");
         bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + "input_size = 641\n");
-        bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + "nms_iou_threshold = true\n");
-        bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + "[tracking]\nbackend = \"iou\"\n");
+        bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector +
+            "nms_iou_threshold = true\n");
+        bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector +
+            "[tracking]\nbackend = \"iou\"\n");
         bad("version = 1\n[pipeline]\nmode = \"search\"\n"
             "[embedding]\nbackend = \"clip_onnx\"\nbundle = \"models\"\ndimension = 768\n"
-            "[vector_store]\nbackend = \"qdrant\"\ncollection = \"test_config\"\ndimension = 512\n");
+            "[vector_store]\nbackend = \"qdrant\"\ncollection = \"test_config\"\ndimension = "
+            "512\n");
         bad("version = 1\n[pipeline]\nmode = \"image\"\n[detector]\n"
             "backend = \"yolo_onnx\"\nmodel = \"missing.onnx\"\n");
         bad(video + "[runtime]\ndevice = \"cuda\"\n");
         bad("version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
-            "[tracking]\nbackend = \"two-stage\"\nlow_confidence = 0.5\nnew_track_confidence = 0.6\n");
+            "[tracking]\nbackend = \"two-stage\"\nlow_confidence = 0.5\nnew_track_confidence = "
+            "0.6\n");
         fs::remove_all(root); // Unique scratch directory created above.
         std::cout << "TOML modes, relative paths, thresholds, invalid schemas passed\n";
         return 0;
-    } catch (const std::exception& error) {
+    } catch (const std::exception &error) {
         std::cerr << "FAIL: " << error.what() << " (fixtures: " << root << ")\n";
         return 1;
     }

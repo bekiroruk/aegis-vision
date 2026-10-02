@@ -1,7 +1,7 @@
 # Detection ve tracking kalite başlangıç ölçümü
 
 Bu aşama modelin **kaç ID ürettiğini** değil, etiketli nesneleri ne kadar doğru
-bulup takip ettiğini ölçer. Değerlendirme, model çalıştırma ve iki takipçi C++20
+bulup takip ettiğini ölçer. Değerlendirme, model çalıştırma ve takipçiler C++20
 içindedir. Python yalnızca yerel veri hazırlama ve bağımsız referans kontrolünde
 kullanılır; servis için Python inference gerektirmez.
 
@@ -201,6 +201,105 @@ COCO labels:    e8c7f7908f1d7278341fae127d0da654f102f11bd7b21d8aeefa635b8c810b6f
 MOT manifest:   adc32ea13e1338d083968d2278a87487136f764beb13b1374a24ab533c009187
 MOT video:      057efff329eb73f3434649f9b21b37d0d3ca7de8f194524140161e2d13a6ae33
 MOT labels GT:  009b3ef8df68c963fd8104350083fd6bc9798b6b435858b99dbd1385cfbde873
+```
+
+## Deneysel Kalman karşılaştırması — 2026-10-02
+
+Kalite CLI'ya isteğe bağlı `--kalman` eklendi. Bayrak yoksa önceki iki takipçi ve
+iki panel korunur. Bayrak varsa aktif-önce Kalman üçüncü takipçi/panel olarak
+çalışır; her karede **tek YOLO sonucu**, ayrı takipçi durumları ve aynı GT kullanılır.
+`tracking-frames.json` ham person tespitlerini de içerir; GT takipçilere verilmez.
+Bu yeni backend **deneyseldir**, varsayılan IoU değiştirilmedi.
+
+Hareket durumu `(cx,cy,w,h,vx,vy,vw,vh)`, zaman adımı bir ardışık decoded frame'dir.
+Sınıf/IoU eşleştirmesine squared Mahalanobis kapısı `13.2767` eklenir. Aktif/high,
+aktif/low, kayıp/high sırası kullanılır. Önceki low .10, high .35, new .50, IoU .30
+ve 20 missed-frame eşikleri değiştirilmedi; veriye göre eşik araması yapılmadı.
+Kalman ve eşleştirme politikası birlikte değiştiğinden fark yalnız filtreye
+bağlanamaz. Resmi ByteTrack veya Re-ID değildir; canlı RTSP/drop-oldest için
+timestamp-aware zaman adımı henüz yoktur. Ayrıntı: [ADR-0013](adr/0013-active-first-kalman-tracking.md).
+
+İkinci sahne **TUD-Campus**, 71 kare / 640×480 / 25 FPS / 8 kimlik / 359 GT kutusu.
+Bu da MOT15 **training** sekansının resmi yeniden kodlanmış MP4 önizlemesidir;
+bağımsız hold-out veya challenge leaderboard verisi değildir. Veri kullanımının
+ve lisansın yukarıdaki sınırları iki sekans için de geçerlidir.
+
+| Sahne / metrik | IoU | İki aşamalı | Kalman aktif-önce |
+|---|---:|---:|---:|
+| Stadtmitte IDF1 | %77.20 | %68.36 | %76.77 |
+| Stadtmitte MOTA | %79.67 | %77.25 | %79.41 |
+| Stadtmitte ID switch | 13 | 12 | 12 |
+| Stadtmitte TP / FP / FN | 981 / 47 / 175 | 979 / 74 / 177 | 976 / 46 / 180 |
+| Stadtmitte IDTP / IDFP / IDFN | 843 / 185 / 313 | 755 / 298 / 401 | 836 / 186 / 320 |
+| Campus IDF1 | %59.92 | %68.90 | %43.44 |
+| Campus MOTA | %58.50 | %60.45 | %57.66 |
+| Campus ID switch | 8 | 4 | 22 |
+| Campus TP / FP / FN | 300 / 82 / 59 | 304 / 83 / 55 | 301 / 72 / 58 |
+| Campus IDTP / IDFP / IDFN | 222 / 160 / 137 | 257 / 130 / 102 | 159 / 214 / 200 |
+
+Stadtmitte'de iki aşamalı yönteme göre IDF1 **+8.41 yüzde puan**, fakat basit IoU
+hâlâ daha yüksektir. Önceki aktif/kayıp kimlik karışması kare 97'de yeni backend'de
+görülmez: GT2 kimlik 3'ü 120 kare korur. Campus'te ciddi regresyon vardır:
+GT3 sürekli doğru tespit edilmişken kimlik 3 → 11 → 3 → 11 değişir; iki aşamalı
+yöntem aynı GT için 63 kare kimlik 3'ü korur. Yeni backend tüm sahneler için
+iyileştirme olarak sunulmaz ve varsayılan yapılmaz. Sonraki çalışma kutu şekli/
+hareket gürültüsü, kayıp-aktif geçişleri ve appearance/Re-ID'yi ayrı validation
+verisiyle incelemektir; bu iki sahnenin skorunu yükseltmek için eşik ayarlanmadı.
+
+Campus kare 18'de GT3 için predicted width 95.07 px, observed width 133.73 px;
+IoU .699 olmasına rağmen squared Mahalanobis 22.13, 13.2767 kapısını aşar.
+Gait/örtüşmeyle geniş-dar kutu oynaması sabit genişlik gürültüsü modeline uymadığı
+için yeni veya eski kimlikler arasında parçalanma oluşur. Üretilen gözlemlerle
+bağımsız NumPy filtre rekonstrüksiyonu 82 gate rejection'ın tamamını yeniden
+hesapladı. Bu, matriste bulunan bir uygulama hatası veya %99 gerçek eşleşme
+garantisi değildir; nominal chi-square oranı kalibre Gaussian innovation gerektirir.
+
+Her iki yeni raporda üç takipçinin CLEAR/Identity sonuçları resmi, değiştirilmemiş
+TrackEval `12c8791b303e0a0b50f753af204249e622d0281a` ile geçti: oranlarda 1e-6,
+sayımlarda tam eşitlik. Stadtmitte IoU ve iki aşamalı raporlarının 18 metrik alanı
+eski başlangıç koşusuyla bire bir aynıdır. Gate rejection sayısı Stadtmitte 35,
+Campus 82; numerical reset ve capacity rejection ikisinde de 0. Gate sayısı
+reddedilen aday çiftleri sayar, kaçırılan gerçek kişi sayısı değildir.
+
+Aynı CPU/model/config ve beş warmup kullanıldı. İki inference koşusu sırayla
+çalıştı; referans kontrolü ve derleme inference bittikten sonra yapıldı. Güç
+modu/arka plan yükü sabitlenmedi; bu kontrollü performans laboratuvarı sonucu değildir.
+
+| Süre / hız | Stadtmitte | Campus |
+|---|---:|---:|
+| Detector p50 / p95 | 449.01 / 491.03 ms | 439.39 / 474.65 ms |
+| IoU p50 / p95 | 0.0113 / 0.0170 ms | 0.0120 / 0.0293 ms |
+| İki aşamalı p50 / p95 | 0.0251 / 0.0382 ms | 0.0272 / 0.0459 ms |
+| Kalman p50 / p95 | 0.0458 / 0.0669 ms | 0.0574 / 0.0822 ms |
+| Üç takipçi, çizim/yazım dahil loop FPS | 2.13 | 2.24 |
+
+MP4'ler **1920×480 H.264**, soldan sağa IoU / iki aşamalı / Kalman; sarı GT,
+yeşil takip kutuları. Stadtmitte **179 kare / 7.16 saniye**, Campus **71 kare /
+2.84 saniye**, 25 FPS oynatma. Her ikisinde bütün kareler çözüldü; oynatma hızı
+inference hızı değildir. Yerel çıktılar `outputs/quality-tud-kalman/` ve
+`outputs/quality-campus-kalman/`: `report.json`, `tracking-frames.json`, üç
+`*-mot.txt`, `timings.csv`, `reference-validation.json`, `comparison.avi/mp4`.
+
+Yeni çıktı dizinleri seçerek tekrar üretim:
+
+```powershell
+python scripts/test_quality_data.py
+python scripts/test_quality_reference.py
+python scripts/prepare_quality_data.py mot artifacts/datasets/mot15-campus --sequence TUD-Campus --download
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-kalman --kalman
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-kalman --kalman
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-kalman
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-kalman
+ffmpeg -nostdin -n -i outputs/quality-tud-kalman/comparison.avi -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -movflags +faststart outputs/quality-tud-kalman/comparison.mp4
+ffmpeg -nostdin -n -i outputs/quality-campus-kalman/comparison.avi -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -movflags +faststart outputs/quality-campus-kalman/comparison.mp4
+```
+
+Model, evaluation config ve Stadtmitte hash'leri yukarıdakiyle aynı. Ek SHA256:
+
+```text
+Campus manifest: d880b78c006938ddcbf13cabd00cba61b6dda3f6d6c9efe6c7e5e6eccbb0ff25
+Campus video:    95590324a7fcd27c6a5babf7e69f763be5709f788ac1a32c986a4431aee14eae
+Campus GT:       6ea5c56dffa72db2d286bf3c4593465583bfe43e9ecaa110001ccce2c4d10e39
 ```
 
 ## Protokol kaynakları

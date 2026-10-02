@@ -11,6 +11,7 @@ add_library(aegisvision
     src/domain.cpp
     src/evaluation.cpp
     src/geometry.cpp
+    src/kalman_tracker.cpp
     src/pipeline.cpp
     src/tracking.cpp
     src/tracking_evaluation.cpp
@@ -41,6 +42,9 @@ if(AEGISVISION_BUILD_TESTS)
     add_executable(aegisvision_tracking_tests tests/test_two_stage.cpp)
     target_link_libraries(aegisvision_tracking_tests PRIVATE aegisvision)
     add_test(NAME aegisvision_tracking_tests COMMAND aegisvision_tracking_tests)
+    add_executable(aegisvision_kalman_tests tests/test_kalman_tracker.cpp)
+    target_link_libraries(aegisvision_kalman_tests PRIVATE aegisvision)
+    add_test(NAME aegisvision_kalman COMMAND aegisvision_kalman_tests)
     add_executable(aegisvision_evaluation_tests tests/test_evaluation.cpp)
     target_link_libraries(aegisvision_evaluation_tests PRIVATE aegisvision)
     add_test(NAME aegisvision_evaluation COMMAND aegisvision_evaluation_tests)

@@ -1,7 +1,7 @@
 # Video üzerinde YOLO ve nesne takibi
 
 `aegisvision_video`, yerel bir video dosyasının her karesini YOLOv8 ile analiz eder,
-sınıf duyarlı IoU veya iki aşamalı takipçiyle kimlik atar ve sonucu videoya çizer. Tek kaynak için
+sınıf duyarlı IoU, iki aşamalı veya aktif-önce Kalman takipçisiyle kimlik atar ve sonucu videoya çizer. Tek kaynak için
 tek tracker kullanılır; videolar arasında takip durumu paylaşılmaz.
 
 ## Kullanım
@@ -64,6 +64,27 @@ Kalman filtresi/kovaryansı, tentative track yaşam döngüsü, görünüş embe
 
 ## Sınırlar ve ölçümler
 
+### Deneysel, isteğe bağlı Kalman backend
+
+```powershell
+./build/search/Release/aegisvision_video.exe --config configs/video-kalman.toml artifacts/datasets/mot15-campus/TUD-Campus-raw.mp4 outputs/video-kalman
+```
+
+Konumsal komutta `--tracker kalman` de kullanılabilir. Aktif/yüksek güven,
+aktif/düşük güven ve son olarak kayıp/kalan yüksek güven sırası, eski bir kayıp
+kimliğin sürekli gözlenen track'e karışmasını azaltmayı amaçlar. Sekiz durumlu
+kovaryanslı hareket tahmini, sınıf/IoU ve Mahalanobis kapısı kullanır. Yalnız
+gözlenen kutular çizilir, kayıp track'in tahmin edilen kutusu sonuç yapılmaz.
+256 state / 512 input detection sınırı ve sayısal reset/kapasite sayaçları vardır.
+Varsayılan IoU ve eski iki aşamalı yöntem korunur; Re-ID veya resmi ByteTrack
+değildir. RTSP'de bu backend kullanılamaz; hareket adımı bir decoded frame'dir.
+[Tasarım kararı](adr/0013-active-first-kalman-tracking.md),
+[etiketli karşılaştırma](model-quality.md).
+
+İki gerçek sahnede sonuçlar karışıktır: Stadtmitte IDF1 %76.77 (IoU %77.20,
+iki aşamalı %68.36), Campus %43.44 (IoU %59.92, iki aşamalı %68.90).
+Bu nedenle genel kalite iyileştirmesi sayılmaz ve varsayılan yapılmaz.
+
 Varsayılan greedy IoU referans takipçisinde hareket kestirimi yoktur. İki aşamalı
 seçenekte basit hareket kestirimi vardır. Her iki modda hızlı hareket, örtüşme,
 yön değişimi ve sınıf değişiminde kimlik parçalanması veya yanlış eşleşme olabilir.
@@ -82,8 +103,9 @@ nedeni `end_of_stream_or_decode_stop` olarak yazılır; bu, dosyanın eksiksiz o
 garantisi değildir. Açılmayan veya ilk karesi çözülemeyen dosya hata verir. Hata
 halinde kısmi çıktılar klasörde kalabilir; başarı raporu yazılmaz.
 
-Bu sürüm yerel dosyalar ve sabit, çift sayılı görüntü boyutları içindir. Kamera/RTSP,
-GStreamer, çoklu kamera ve ses aktarımı sonraki aşamalardır. Giriş codec desteği
+Bu araç yerel dosyalar ve sabit, çift sayılı görüntü boyutları içindir. RTSP için
+ayrı [canlı video akışı](live-video.md) vardır; GStreamer, çoklu kamera ve ses
+aktarımı henüz yoktur. Giriş codec desteği
 OpenCV kurulumuna bağlıdır; resmi Windows dağıtımındaki FFmpeg DLL'i video uygulamasının
 yanına kopyalanır. Türkçe dosya yolları video backend'ine bağlıdır; sorun olursa ASCII
 klasör yolu kullanın. Çıktı MJPEG/AVI'dir, MP4/H.264 değildir.

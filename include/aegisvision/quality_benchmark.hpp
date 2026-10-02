@@ -7,6 +7,7 @@ namespace aegisvision::evaluation {
 struct QualityRunConfig {
     int warmup_iterations{5};
     nlohmann::json provenance = nlohmann::json::object();
+    bool compare_kalman{false}; // Preserve the two-panel baseline by default.
 };
 // Local immutable manifest, bounded images/video, new/empty output directory.
 // Model loading is outside this function. Ground truth NEVER enters a tracker.

@@ -80,6 +80,8 @@ int main() {
         save(root / "manifest.json", manifest);
         const auto digest = aegisvision::evaluation::quality_file_sha256(root / "manifest.json");
         Detector detector;
+        rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(root/"manifest.json",root/"image-kalman",detector,{0,Json::object(),true}); },
+            "Image manifest silently accepted video-only Kalman comparison");
         const auto report = aegisvision::evaluation::run_quality_benchmark(
             root / "manifest.json", root / "images", detector, {2, Json::object()});
         require(detector.calls == 3 &&
@@ -225,6 +227,24 @@ int main() {
         }
         comparison.release();
         require(count == 3, "Comparison lost frames");
+        Detector kalman_detector;
+        const auto three = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "kalman", kalman_detector, {0, Json::object(), true});
+        require(three["tracking"]["kalman"]["idf1"] == 1.0 &&
+                    three["performance"]["kalman_tracker"]["samples"] == 3,
+                "Kalman comparison metrics or timing samples wrong");
+        const auto three_frames = load(root / "kalman/tracking-frames.json");
+        require(three_frames[0]["raw_detections"].size() == 1 &&
+                    three_frames[0]["kalman"] == three_frames[0]["iou"],
+                "Kalman/raw detection export changed shared inputs");
+        cv::VideoCapture three_video((root / "kalman/comparison.avi").string());
+        int three_count = 0;
+        while (three_video.read(frame)) {
+            ++three_count;
+            require(frame.cols == 96, "Kalman panel missing");
+        }
+        three_video.release();
+        require(three_count == 3, "Kalman comparison lost frames");
         movie["frames"] = 4;
         save(root / "movie-bad.json", movie);
         rejects(

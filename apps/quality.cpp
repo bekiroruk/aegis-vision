@@ -9,21 +9,31 @@ int run(const std::vector<std::filesystem::path> &args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
             std::cout << "Usage: aegisvision_quality CONFIG.toml MANIFEST.json NEW_OUTPUT_DIR "
-                         "[WARMUP_ITERATIONS]\n"
+                         "[WARMUP_ITERATIONS] [--kalman]\n"
                       << "CPU/FP32 YOLO quality baseline; images=COCO-style AP, "
                          "video=IoU/two-stage CLEAR+IDF1.\n"
                       << "One OpenCV thread. Default five unmeasured warmup calls; same detector "
-                         "outputs for both trackers.\n";
+                         "outputs for selected trackers. --kalman adds a third comparison panel.\n";
             return 0;
         }
-        if (args.size() != 4 && args.size() != 5)
+        if (args.size() < 4 || args.size() > 6)
             throw std::invalid_argument("Use --help for quality benchmark arguments");
         const auto settings = aegisvision::vision::load_application_settings(args[1]);
         if (settings.mode != aegisvision::vision::ApplicationMode::Image)
             throw std::invalid_argument("Quality CLI requires image detector configuration");
         aegisvision::evaluation::QualityRunConfig config;
-        if (args.size() == 5) {
-            const auto s = args[4].string();
+        bool saw_warmup = false;
+        for (std::size_t i = 4; i < args.size(); ++i) {
+            if (args[i] == "--kalman") {
+                if (config.compare_kalman)
+                    throw std::invalid_argument("Duplicate --kalman");
+                config.compare_kalman = true;
+                continue;
+            }
+            if (saw_warmup)
+                throw std::invalid_argument("Duplicate warmup argument");
+            saw_warmup = true;
+            const auto s = args[i].string();
             const auto [end, ec] =
                 std::from_chars(s.data(), s.data() + s.size(), config.warmup_iterations);
             if (ec != std::errc{} || end != s.data() + s.size() || config.warmup_iterations < 0 ||

@@ -26,6 +26,8 @@ MOT_VIDEO_SHA256 = "057efff329eb73f3434649f9b21b37d0d3ca7de8f194524140161e2d13a6
 MOT_LABELS_SHA256 = "b48ee31a720a3dae558df4303b82924bd862067138bc5376e1c86aadb82f782a"
 MOT_GT_ENTRY = "MOT15Labels/train/TUD-Stadtmitte/gt/gt.txt"
 MOT_INFO_ENTRY = "MOT15Labels/train/TUD-Stadtmitte/seqinfo.ini"
+MOT_CAMPUS_VIDEO_SIZE = 936_958
+MOT_CAMPUS_VIDEO_SHA256 = "95590324a7fcd27c6a5babf7e69f763be5709f788ac1a32c986a4431aee14eae"
 JSON_LIMIT = 64 * 1024 * 1024
 
 
@@ -228,24 +230,33 @@ def parse_mot_gt(raw: bytes, frame_count: int) -> tuple[list[dict], int]:
     return sorted(ground_truth, key=lambda g: (g["frame_index"], g["id"])), ignored
 
 
-def prepare_mot(output_dir: Path, download: bool = False) -> dict:
+def prepare_mot(output_dir: Path, download: bool = False, sequence: str = "TUD-Stadtmitte") -> dict:
+    if sequence not in ("TUD-Stadtmitte", "TUD-Campus"):
+        raise ValueError("Only the two pinned MOT15 sequences are supported")
+    campus = sequence == "TUD-Campus"
+    video_url = f"https://motchallenge.net/sequenceVideos/{sequence}-raw.mp4"
+    video_size = MOT_CAMPUS_VIDEO_SIZE if campus else MOT_VIDEO_SIZE
+    video_sha = MOT_CAMPUS_VIDEO_SHA256 if campus else MOT_VIDEO_SHA256
+    frame_count = 71 if campus else 179
+    gt_entry = f"MOT15Labels/train/{sequence}/gt/gt.txt"
+    info_entry = f"MOT15Labels/train/{sequence}/seqinfo.ini"
     output_dir.mkdir(parents=True, exist_ok=True)
-    video = output_dir / "TUD-Stadtmitte-raw.mp4"
+    video = output_dir / f"{sequence}-raw.mp4"
     archive = output_dir / "MOT15Labels.zip"
     if download:
-        download_fixed(MOT_VIDEO_URL, video, MOT_VIDEO_SIZE, MOT_VIDEO_SHA256)
+        download_fixed(video_url, video, video_size, video_sha)
         download_fixed(MOT_LABELS_URL, archive, MOT_LABELS_SIZE, MOT_LABELS_SHA256)
-    video_raw = bounded_bytes(video, MOT_VIDEO_SIZE)
+    video_raw = bounded_bytes(video, video_size)
     archive_raw = bounded_bytes(archive, MOT_LABELS_SIZE)
-    if len(video_raw) != MOT_VIDEO_SIZE or len(archive_raw) != MOT_LABELS_SIZE:
+    if len(video_raw) != video_size or len(archive_raw) != MOT_LABELS_SIZE:
         raise ValueError("MOT assets do not have the pinned official sizes")
-    if sha256(video_raw) != MOT_VIDEO_SHA256 or sha256(archive_raw) != MOT_LABELS_SHA256:
+    if sha256(video_raw) != video_sha or sha256(archive_raw) != MOT_LABELS_SHA256:
         raise ValueError("MOT assets do not match the pinned official SHA256 identities")
     with zipfile.ZipFile(archive) as zipped:
         if len(zipped.namelist()) != len(set(zipped.namelist())):
             raise ValueError("Duplicate ZIP entry names")
-        info = zipped.getinfo(MOT_GT_ENTRY)
-        seq = zipped.getinfo(MOT_INFO_ENTRY)
+        info = zipped.getinfo(gt_entry)
+        seq = zipped.getinfo(info_entry)
         if not 0 < info.file_size <= 100_000 or not 0 < seq.file_size <= 4096:
             raise ValueError("Unexpected MOT15 label entry size")
         gt_raw, seq_raw = zipped.read(info), zipped.read(seq)
@@ -253,20 +264,20 @@ def prepare_mot(output_dir: Path, download: bool = False) -> dict:
     metadata.read_string(seq_raw.decode("utf-8-sig"))
     section = metadata["Sequence"]
     if (section.get("name"), section.getint("seqLength"), section.getint("imWidth"),
-            section.getint("imHeight"), section.getint("frameRate")) != ("TUD-Stadtmitte", 179, 640, 480, 25):
+            section.getint("imHeight"), section.getint("frameRate")) != (sequence, frame_count, 640, 480, 25):
         raise ValueError("MOT15 sequence metadata differs from the pinned sequence")
-    gt, ignored = parse_mot_gt(gt_raw, 179)
+    gt, ignored = parse_mot_gt(gt_raw, frame_count)
     if not gt:
         raise ValueError("MOT15 sequence has no considered GT boxes")
     save_new_or_identical(output_dir / "gt.txt", gt_raw)
     save_new_or_identical(output_dir / "seqinfo.ini", seq_raw)
-    manifest = {"version": 1, "kind": "video", "dataset": "mot15-tud-stadtmitte-reencoded-raw-v1",
-        "source": "https://motchallenge.net/data/MOT15/", "video_source": MOT_VIDEO_URL,
-        "labels_source": MOT_LABELS_URL, "archive_gt_entry": MOT_GT_ENTRY, "archive_seqinfo_entry": MOT_INFO_ENTRY,
+    manifest = {"version": 1, "kind": "video", "dataset": f"mot15-{sequence.lower()}-reencoded-raw-v1",
+        "source": "https://motchallenge.net/data/MOT15/", "video_source": video_url,
+        "labels_source": MOT_LABELS_URL, "archive_gt_entry": gt_entry, "archive_seqinfo_entry": info_entry,
         "video": video.name, "video_sha256": sha256(video_raw), "labels_zip_sha256": sha256(archive_raw),
         "ground_truth_file": "gt.txt", "ground_truth_sha256": sha256(gt_raw), "seqinfo_sha256": sha256(seq_raw),
         "coordinate_basis": "0-based xyxy, converted from MOT15 1-based xywh by subtracting 1 from x/y only; no clipping",
-        "source_fps": 25, "width": 640, "height": 480, "frames": 179, "classes": ["person"],
+        "source_fps": 25, "width": 640, "height": 480, "frames": frame_count, "classes": ["person"],
         "ignored_gt_rows": ignored, "ground_truth": gt,
         "limitations": ["Official reencoded preview MP4, not the original challenge JPEG sequence.",
             "MOT15 training sequence used only for an exploratory baseline; not held-out test evaluation.",
@@ -283,16 +294,17 @@ def main() -> None:
     coco.add_argument("annotations", type=Path)
     coco.add_argument("crop_manifest", type=Path)
     coco.add_argument("output", type=Path)
-    mot = commands.add_parser("mot", help="Prepare the bounded TUD-Stadtmitte MOT15 sequence")
+    mot = commands.add_parser("mot", help="Prepare a bounded, checksum-pinned MOT15 sequence")
     mot.add_argument("output_dir", type=Path)
     mot.add_argument("--download", action="store_true", help="Download the two pinned official HTTPS assets")
+    mot.add_argument("--sequence", choices=("TUD-Stadtmitte", "TUD-Campus"), default="TUD-Stadtmitte")
     args = parser.parse_args()
     if args.command == "coco":
         manifest = prepare_coco(args.annotations, args.crop_manifest, args.output)
         print(f"Prepared {len(manifest['images'])} scenes / {len(manifest['classes'])} classes / "
               f"{sum(len(image['ground_truth']) for image in manifest['images'])} GT boxes: {args.output}")
     else:
-        manifest = prepare_mot(args.output_dir, args.download)
+        manifest = prepare_mot(args.output_dir, args.download, args.sequence)
         identities = {box['id'] for box in manifest['ground_truth']}
         print(f"Prepared {manifest['frames']} frames / {len(identities)} identities / "
               f"{len(manifest['ground_truth'])} GT boxes / {manifest['ignored_gt_rows']} ignored rows: "

@@ -2,13 +2,15 @@
 
 import hashlib
 import json
+import io
+import zipfile
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from prepare_quality_data import (bounded_bytes, download_fixed, local_path,
-    parse_mot_gt, prepare_coco, save_new_or_identical, xywh_box)
+    parse_mot_gt, prepare_coco, prepare_mot, save_new_or_identical, xywh_box)
 
 
 class QualityDataTests(unittest.TestCase):
@@ -83,6 +85,32 @@ class QualityDataTests(unittest.TestCase):
         self.assertEqual(len(gt), 2)
         self.assertEqual(gt[0], {"frame_index": 1, "id": 2, "bbox": [0, 0, 10, 20]})
         self.assertEqual(gt[1]["bbox"], [-4, 1, 6, 21])
+
+    def test_campus_sequence_uses_its_own_metadata_and_pins(self):
+        video = b"campus-video-fixture"
+        (self.base / "TUD-Campus-raw.mp4").write_bytes(video)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("MOT15Labels/train/TUD-Campus/gt/gt.txt", "71,2,1,1,10,20,1,-1,-1,-1\n")
+            archive.writestr("MOT15Labels/train/TUD-Campus/seqinfo.ini",
+                "[Sequence]\nname=TUD-Campus\nseqLength=71\nimWidth=640\nimHeight=480\nframeRate=25\n")
+        labels = buffer.getvalue()
+        (self.base / "MOT15Labels.zip").write_bytes(labels)
+        with patch("prepare_quality_data.MOT_CAMPUS_VIDEO_SIZE",len(video)), \
+             patch("prepare_quality_data.MOT_CAMPUS_VIDEO_SHA256",hashlib.sha256(video).hexdigest()), \
+             patch("prepare_quality_data.MOT_LABELS_SIZE",len(labels)), \
+             patch("prepare_quality_data.MOT_LABELS_SHA256",hashlib.sha256(labels).hexdigest()):
+            result = prepare_mot(self.base,sequence="TUD-Campus")
+        self.assertEqual(result["frames"],71)
+        self.assertEqual(result["ground_truth"][0]["frame_index"],71)
+        self.assertEqual(result["video"],"TUD-Campus-raw.mp4")
+        self.assertEqual(result["dataset"],"mot15-tud-campus-reencoded-raw-v1")
+
+    def test_unknown_mot_sequence_rejected_before_filesystem_writes(self):
+        output = self.base / "uncreated"
+        with self.assertRaisesRegex(ValueError,"pinned"):
+            prepare_mot(output,sequence="../unexpected")
+        self.assertFalse(output.exists())
 
     def test_mot15_invalid_rows_rejected(self):
         for raw in (b"1,2,1,1,10,20,1,-1,-1\n", b"0,2,1,1,10,20,1,-1,-1,-1\n",

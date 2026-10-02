@@ -39,6 +39,8 @@ private:
     cv::VideoCapture capture_;
 };
 std::unique_ptr<ITracker> make_tracker(const VideoConfig& config) {
+    if (config.tracker_mode == TrackerMode::Kalman)
+        throw std::invalid_argument("Kalman requires consecutive frames; live timestamp-aware dt is not supported");
     if (config.tracker_mode == TrackerMode::IoU)
         return std::make_unique<IoUTracker>(config.tracking_iou, config.max_missed_frames);
     if (config.tracker_mode == TrackerMode::TwoStage)

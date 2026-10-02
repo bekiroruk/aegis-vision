@@ -16,6 +16,7 @@ import json
 import math
 import os
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,10 @@ from typing import Any
 TOLERANCE = 1e-6
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REFERENCE_ROOT = PROJECT_ROOT / "artifacts/deps/quality-reference"
+TRACKERS = ("iou", "two_stage", "kalman")
+REQUIRED_TRACKERS = frozenset(("iou", "two_stage"))
+TRACKING_METADATA = frozenset(("parameters", "protocol"))
+FRAME_METADATA = frozenset(("frame_index", "ground_truth", "raw_detections"))
 
 
 def reject_constant(value: str) -> None:
@@ -222,6 +227,8 @@ def checked_objects(rows: Any, context: str) -> list[dict]:
         raise ValueError(f"Invalid object list: {context}")
     ids = set()
     for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError(f"Expected object entry: {context}")
         object_id = integer(row["id"], f"{context} ID")
         if object_id in ids:
             raise ValueError(f"Duplicate per-frame identity: {context}")
@@ -233,6 +240,75 @@ def checked_objects(rows: Any, context: str) -> list[dict]:
         if values[2] <= values[0] or values[3] <= values[1]:
             raise ValueError(f"Degenerate xyxy box: {context}")
     return rows
+
+
+def tracking_frame_inputs(manifest: dict, report: dict, frames: Any) -> tuple[str, ...]:
+    """Validate the complete emitted sequence without reference dependencies.
+
+    The report may contain protocol/parameter metadata, but never an unknown
+    tracker. Legacy two-tracker reports remain valid. Every frame and report
+    must agree on whether the new motion tracker is present. Detector rows are
+    bounded, optional provenance only; they never feed reference metric inputs.
+    """
+    count = integer(manifest["frames"], "manifest frames", 1)
+    if (not isinstance(frames, list) or len(frames) != count or count > 1000
+            or manifest["classes"] != ["person"]):
+        raise ValueError("Expected every frame of the single-class tracking sequence")
+    tracking = report.get("tracking")
+    if not isinstance(tracking, dict):
+        raise ValueError("Expected tracking report object")
+    unknown = tracking.keys() - set(TRACKERS) - TRACKING_METADATA
+    if unknown:
+        raise ValueError(f"Unknown tracking report keys: {sorted(unknown)}")
+    trackers = tuple(name for name in TRACKERS if name in tracking)
+    if not REQUIRED_TRACKERS.issubset(trackers):
+        raise ValueError("Tracking report must contain iou and two_stage")
+    if any(not isinstance(tracking[name], dict) for name in trackers):
+        raise ValueError("Expected per-tracker metric report objects")
+
+    rows = manifest["ground_truth"]
+    if not isinstance(rows, list) or len(rows) > 500000:
+        raise ValueError("Invalid or oversized manifest tracking GT")
+    expected_gt: list[list[dict]] = [[] for _ in range(count)]
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("Expected manifest GT entry")
+        frame_index = integer(row["frame_index"], "GT frame index", 1)
+        if frame_index > count:
+            raise ValueError("GT frame index exceeds sequence")
+        expected_gt[frame_index - 1].append({"id": row["id"], "bbox": row["bbox"]})
+
+    total_pair_cells = 0
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, dict) or integer(frame["frame_index"], "frame index", 1) != index + 1:
+            raise ValueError("Tracking frames must be contiguous and one-based")
+        unknown = frame.keys() - set(TRACKERS) - FRAME_METADATA
+        if unknown:
+            raise ValueError(f"Unknown frame {index + 1} keys: {sorted(unknown)}")
+        emitted = tuple(name for name in TRACKERS if name in frame)
+        if emitted != trackers:
+            raise ValueError(f"Tracker set differs between report and frame {index + 1}")
+        for side in ("ground_truth", *trackers):
+            checked_objects(frame[side], f"frame {index + 1} {side}")
+        if "raw_detections" in frame:
+            # A sealed provenance field, not another tracker or a source of GT.
+            raw = frame["raw_detections"]
+            if not isinstance(raw, list) or len(raw) > 500:
+                raise ValueError(f"Invalid raw detections at frame {index + 1}")
+        expected = {row["id"]: row for row in checked_objects(expected_gt[index], "manifest GT")}
+        actual = {row["id"]: row for row in frame["ground_truth"]}
+        if expected.keys() != actual.keys():
+            raise ValueError(f"Emitted GT identities differ from manifest at frame {index + 1}")
+        for object_id, row in expected.items():
+            # BoundingBox owns IEEE float32; widening it to JSON doubles must
+            # match exactly, not merely overlap the source box geometrically.
+            canonical = [struct.unpack("!f", struct.pack("!f", value))[0] for value in row["bbox"]]
+            if actual[object_id]["bbox"] != canonical:
+                raise ValueError(f"Emitted GT box differs from manifest at frame {index + 1}, ID {object_id}")
+        total_pair_cells += len(actual) * sum(len(frame[name]) for name in trackers)
+    if total_pair_cells > 50000000:
+        raise ValueError("Tracking reference pair-comparison limit exceeded")
+    return trackers
 
 
 def manifest_file(manifest_path: Path, name: str) -> Path:
@@ -331,37 +407,10 @@ def mot_validation(manifest_path: Path, result_dir: Path, reference_root: Path) 
     frames_path = result_dir / "tracking-frames.json"
     frames = read_json(frames_path)
     hashes[str(frames_path.resolve())] = sha256(frames_path)
-    count = integer(manifest["frames"], "manifest frames", 1)
-    if not isinstance(frames, list) or len(frames) != count or count > 1000 or manifest["classes"] != ["person"]:
-        raise ValueError("Expected every frame of the single-class tracking sequence")
+    trackers = tracking_frame_inputs(manifest, report, frames)
     check_original_mot_gt(manifest_path, manifest, hashes)
-    expected_gt: list[list[dict]] = [[] for _ in range(count)]
-    for row in manifest["ground_truth"]:
-        frame_index = integer(row["frame_index"], "GT frame index", 1)
-        if frame_index > count:
-            raise ValueError("GT frame index exceeds sequence")
-        expected_gt[frame_index - 1].append({"id": row["id"], "bbox": row["bbox"]})
-    total_pair_cells = 0
-    for index, frame in enumerate(frames):
-        if frame["frame_index"] != index + 1:
-            raise ValueError("Tracking frames must be contiguous and one-based")
-        for side in ("ground_truth", "iou", "two_stage"):
-            checked_objects(frame[side], f"frame {index + 1} {side}")
-        expected = {row["id"]: row for row in checked_objects(expected_gt[index], "manifest GT")}
-        actual = {row["id"]: row for row in frame["ground_truth"]}
-        if expected.keys() != actual.keys():
-            raise ValueError(f"Emitted GT identities differ from manifest at frame {index + 1}")
-        for object_id, row in expected.items():
-            # The public C++ BoundingBox type owns float32 coordinates. Check
-            # its exact widening to JSON doubles, not a loose geometric match.
-            canonical = np.array(row["bbox"], dtype=np.float32).astype(np.float64).tolist()
-            if actual[object_id]["bbox"] != canonical:
-                raise ValueError(f"Emitted GT box differs from manifest at frame {index + 1}, ID {object_id}")
-        total_pair_cells += len(actual) * (len(frame["iou"]) + len(frame["two_stage"]))
-    if total_pair_cells > 50000000:
-        raise ValueError("Tracking reference pair-comparison limit exceeded")
     checks: dict[str, Any] = {}
-    for tracker in ("iou", "two_stage"):
+    for tracker in trackers:
         cpp = report["tracking"][tracker]
         if cpp["iou_threshold"] != 0.5:
             raise ValueError("Reference protocol requires IoU threshold .5")
