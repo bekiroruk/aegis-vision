@@ -30,6 +30,19 @@ KalmanTrackerConfig gate_config(KalmanGateMode mode) {
     return config;
 }
 
+KalmanTrackerConfig appearance_config() {
+    auto config = gate_config(KalmanGateMode::CenterOnly);
+    config.use_appearance = true;
+    config.appearance_dimension = 2;
+    return config;
+}
+
+Detection described(float x, std::vector<float> appearance, float score = 0.9F, std::string label = "person") {
+    auto result = box(x, score, std::move(label));
+    result.embedding = std::move(appearance);
+    return result;
+}
+
 const Track& at_x(const std::vector<Track>& tracks, float x) {
     const auto found = std::find_if(tracks.begin(), tracks.end(), [&](const auto& track) {
         return track.bbox.x1 == x;
@@ -291,6 +304,222 @@ void center_gate_nearby_crossing() {
                 "Center gate reassigned a coincident different-class identity");
     }
 }
+
+void appearance_ambiguous_assignment() {
+    const auto configuration = appearance_config();
+    require(configuration.max_cosine_distance == 0.20 && configuration.appearance_weight == 0.50 &&
+                configuration.appearance_momentum == 0.90 && KalmanTrackerConfig{}.appearance_dimension == 512 &&
+                !KalmanTrackerConfig{}.use_appearance,
+            "Frozen appearance defaults changed");
+    KalmanTracker geometry(gate_config(KalmanGateMode::CenterOnly)), appearance(configuration);
+    const std::vector<Detection> initial{described(0.0F, {3.0F, 0.0F}), described(4.0F, {0.0F, 7.0F})};
+    const auto old_geometry = geometry.update(initial);
+    const auto old_appearance = appearance.update(initial);
+    require(appearance.stats().appearance_matches == 0 && appearance.stats().appearance_updates == 0,
+            "Appearance births were counted as matches or EMA updates");
+    // Both boxes pass every geometric gate, but overlap prefers the other
+    // person's previous box. Distinct synthetic features reject those swaps.
+    const std::vector<Detection> crossed{described(1.0F, {0.0F, 14.0F}), described(3.0F, {6.0F, 0.0F})};
+    const auto new_geometry = geometry.update(crossed);
+    const auto new_appearance = appearance.update(crossed);
+    require(at_x(new_geometry, 3.0F).track_id == at_x(old_geometry, 4.0F).track_id &&
+                at_x(new_geometry, 1.0F).track_id == at_x(old_geometry, 0.0F).track_id,
+            "Ambiguous fixture did not exercise the original geometric swap");
+    require(at_x(new_appearance, 3.0F).track_id == at_x(old_appearance, 0.0F).track_id &&
+                at_x(new_appearance, 1.0F).track_id == at_x(old_appearance, 4.0F).track_id,
+            "Appearance gate failed to retain distinct synthetic identities");
+    require(appearance.stats().appearance_rejections == 2 && appearance.stats().appearance_matches == 2 &&
+                appearance.stats().appearance_updates == 2 && appearance.stats().created_tracks == 2,
+            "Appearance candidate/assignment/update counters were not distinct");
+    require(initial[0].embedding == std::vector<float>({3.0F, 0.0F}) &&
+                crossed[0].embedding == std::vector<float>({0.0F, 14.0F}),
+            "Appearance normalization mutated caller embeddings");
+
+    // With a permissive appearance gate, the fused reward itself, rather than
+    // a forbidden edge, must resolve the same ambiguous geometry correctly.
+    auto fused_config = configuration;
+    fused_config.max_cosine_distance = 1.0;
+    KalmanTracker fused(fused_config);
+    const auto fused_first = fused.update(initial);
+    const auto fused_second = fused.update(crossed);
+    require(at_x(fused_second, 3.0F).track_id == at_x(fused_first, 0.0F).track_id &&
+                at_x(fused_second, 1.0F).track_id == at_x(fused_first, 4.0F).track_id &&
+                fused.stats().appearance_rejections == 0,
+            "IoU/cosine fused reward did not resolve admitted ambiguous pairs");
+}
+
+void appearance_hard_gates_and_lifecycle() {
+    const auto configuration = appearance_config();
+    for (int condition = 0; condition < 3; ++condition) {
+        auto config = configuration;
+        if (condition == 2) config.gating_threshold = 0.01;
+        KalmanTracker tracker(config);
+        const auto initial_id = tracker.update({described(0.0F, {1.0F, 0.0F})}).front().track_id;
+        auto incompatible = described(condition == 1 ? 200.0F : condition == 2 ? 1.0F : 0.0F,
+                                      {1.0F, 0.0F}, 0.9F, condition == 0 ? "car" : "person");
+        const auto result = tracker.update({incompatible});
+        require(result.size() == 1 && result.front().track_id != initial_id,
+                "Identical appearance bypassed a class, IoU or motion gate");
+        require(tracker.stats().appearance_matches == 0 && tracker.stats().appearance_rejections == 0 &&
+                    tracker.stats().appearance_updates == 0,
+                "Appearance counters included a pair rejected by a preceding hard gate");
+        if (condition == 2) require(tracker.stats().gate_rejections == 1, "Motion gate counter lost appearance-rejected pairs");
+    }
+
+    KalmanTracker rescue(configuration);
+    const auto id = rescue.update({described(0.0F, {1.0F, 0.0F})}).front().track_id;
+    require(rescue.update({described(0.0F, {0.0F, 1.0F}, 0.20F)}).empty(),
+            "Dissimilar low-confidence appearance rescued an active identity");
+    require(rescue.stats().appearance_rejections == 1 && rescue.stats().appearance_matches == 0 &&
+                rescue.stats().appearance_updates == 0 && rescue.stats().low_confidence_matches == 0,
+            "Dissimilar low observation contaminated appearance/lifecycle counters");
+    require(rescue.update({described(0.0F, {2.0F, 0.0F})}).front().track_id == id &&
+                rescue.stats().reactivations == 1 && rescue.stats().appearance_matches == 1 &&
+                rescue.stats().appearance_updates == 1,
+            "Appearance prevented normal lost high-confidence reactivation");
+    require(rescue.update({}).empty(), "Appearance returned an unobserved prediction");
+    require(rescue.update({described(0.0F, {1.0F, 0.0F}, 0.20F)}).empty(),
+            "Appearance allowed low confidence to revive a lost identity");
+
+    auto immediate = configuration;
+    immediate.max_missed_frames = 0;
+    KalmanTracker expiry(immediate);
+    const auto expired_id = expiry.update({described(0.0F, {1.0F, 0.0F})}).front().track_id;
+    (void)expiry.update({});
+    require(expiry.update({described(0.0F, {1.0F, 0.0F})}).front().track_id != expired_id,
+            "Appearance resurrected an expired identity outside the bounded lifecycle");
+}
+
+void appearance_high_only_ema() {
+    const auto configuration = appearance_config();
+    const std::vector<float> tilted{0.90F, std::sqrt(0.19F)};
+    const std::vector<float> probe{0.79F, std::sqrt(1.0F - 0.79F * 0.79F)};
+    // Probe similarity is .79 to the original prototype (rejected) but about
+    // .816 to normalized .90*original + .10*tilted (accepted). Therefore these
+    // observations distinguish EMA updates without exposing private state.
+    KalmanTracker high(configuration);
+    const auto high_id = high.update({described(0.0F, {1.0F, 0.0F})}).front().track_id;
+    require(high.update({described(0.0F, tilted)}).front().track_id == high_id,
+            "Compatible high appearance did not match before its EMA update");
+    require(high.update({described(0.0F, probe)}).front().track_id == high_id &&
+                high.stats().appearance_matches == 2 && high.stats().appearance_updates == 2 &&
+                high.stats().created_tracks == 1,
+            "High-confidence prototype did not receive the normalized frozen-momentum EMA");
+
+    KalmanTracker low(configuration);
+    const auto low_id = low.update({described(0.0F, {1.0F, 0.0F})}).front().track_id;
+    require(low.update({described(0.0F, tilted, 0.20F)}).front().track_id == low_id,
+            "Compatible low appearance did not rescue an active identity");
+    const auto rejected = low.update({described(0.0F, probe)});
+    require(rejected.size() == 1 && rejected.front().track_id != low_id &&
+                low.stats().appearance_matches == 1 && low.stats().appearance_updates == 0 &&
+                low.stats().low_confidence_matches == 1 && low.stats().appearance_rejections == 1,
+            "Low-confidence matching contaminated the appearance prototype");
+
+    auto exact_config = configuration;
+    exact_config.appearance_dimension = 3;
+    exact_config.max_cosine_distance = 0.0;
+    KalmanTracker exact(exact_config);
+    const auto exact_id = exact.update({described(0.0F, {3.0F, 4.0F, 5.0F})}).front().track_id;
+    require(exact.update({described(0.0F, {6.0F, 8.0F, 10.0F})}).front().track_id == exact_id,
+            "Zero-distance gate rejected equal directions due to normalization rounding");
+}
+
+void appearance_validation_and_bounds() {
+    for (bool enabled : {false, true}) {
+        for (int field = 0; field < 13; ++field) {
+            auto config = appearance_config();
+            config.use_appearance = enabled;
+            switch (field) {
+            case 0: config.appearance_dimension = 0; break;
+            case 1: config.appearance_dimension = 1025; break;
+            case 2: config.max_cosine_distance = std::numeric_limits<double>::quiet_NaN(); break;
+            case 3: config.max_cosine_distance = std::numeric_limits<double>::infinity(); break;
+            case 4: config.max_cosine_distance = -0.01; break;
+            case 5: config.max_cosine_distance = 1.01; break;
+            case 6: config.appearance_weight = std::numeric_limits<double>::quiet_NaN(); break;
+            case 7: config.appearance_weight = -0.01; break;
+            case 8: config.appearance_weight = 1.01; break;
+            case 9: config.appearance_momentum = std::numeric_limits<double>::quiet_NaN(); break;
+            case 10: config.appearance_momentum = -0.01; break;
+            case 11: config.appearance_momentum = 1.0; break;
+            default: config.appearance_momentum = std::numeric_limits<double>::infinity(); break;
+            }
+            rejects([&] { KalmanTracker invalid(config); }, "Invalid appearance configuration was accepted");
+        }
+    }
+
+    const auto configuration = appearance_config();
+    KalmanTracker tracker(configuration);
+    const auto before = tracker.update({described(0.0F, {1.0F, 0.0F})}).front();
+    const std::vector<std::vector<float>> malformed{
+        {}, {1.0F}, {1.0F, 0.0F, 0.0F}, {0.0F, 0.0F},
+        {std::numeric_limits<float>::quiet_NaN(), 1.0F},
+        {1.0F, std::numeric_limits<float>::infinity()}};
+    for (const auto score : {0.20F, 0.40F, 0.90F}) {
+        for (const auto& invalid : malformed) {
+            // A valid high observation first must not update age, IDs, stats or
+            // the appearance prototype before the malformed observation fails.
+            rejects([&] { (void)tracker.update({described(1.0F, {0.90F, std::sqrt(0.19F)}),
+                                              described(0.0F, invalid, score)}); },
+                    "Malformed eligible appearance embedding was accepted");
+        }
+    }
+    const std::vector<Detection> excess(KalmanTracker::max_detections + 1, described(0.0F, {1.0F, 0.0F}));
+    rejects([&] { (void)tracker.update(excess); }, "Appearance mode bypassed the detection input cap");
+    const auto after = tracker.update({described(0.0F, {1.0F, 0.0F})}).front();
+    require(after.track_id == before.track_id && after.age == before.age + 1 &&
+                tracker.stats().created_tracks == 1 && tracker.stats().appearance_matches == 1 &&
+                tracker.stats().appearance_updates == 1 && tracker.stats().appearance_rejections == 0,
+            "Rejected appearance input partially aged state or changed appearance counters");
+    const auto probe = tracker.update({described(0.0F, {0.79F, std::sqrt(1.0F - 0.79F * 0.79F)})});
+    require(probe.size() == 1 && probe.front().track_id == 2 && tracker.stats().appearance_updates == 1,
+            "Rejected appearance input mutated a prototype or consumed an identity");
+
+    KalmanTracker below(configuration);
+    require(below.update({described(0.0F, {std::numeric_limits<float>::quiet_NaN()}, 0.09F)}).empty(),
+            "Sub-low observation required an unused appearance feature");
+    for (const auto mode : {KalmanGateMode::FullBox, KalmanGateMode::CenterOnly}) {
+        KalmanTracker disabled(gate_config(mode));
+        const auto id = disabled.update({box(0.0F)}).front().track_id;
+        require(disabled.update({described(0.0F, {std::numeric_limits<float>::quiet_NaN()})}).front().track_id == id &&
+                    disabled.stats().appearance_matches == 0 && disabled.stats().appearance_rejections == 0 &&
+                    disabled.stats().appearance_updates == 0,
+                "Disabled appearance inspected embeddings or changed its geometric behavior");
+    }
+
+    auto immediate = configuration;
+    immediate.max_missed_frames = 0;
+    KalmanTracker capacity(immediate);
+    const std::vector<Detection> births(KalmanTracker::max_tracks + 1, described(0.0F, {1.0F, 0.0F}));
+    require(capacity.update(births).size() == KalmanTracker::max_tracks &&
+                capacity.stats().capacity_rejections == 1 && capacity.stats().appearance_matches == 0 &&
+                capacity.stats().appearance_updates == 0,
+            "Appearance prototypes bypassed live capacity or counted births as updates");
+    (void)capacity.update({});
+    require(capacity.stats().expired_tracks == KalmanTracker::max_tracks &&
+                capacity.update({described(0.0F, {1.0F, 0.0F})}).front().track_id == KalmanTracker::max_tracks + 1,
+            "Capacity-suppressed appearance identity was consumed or revived after expiry");
+
+    auto exact_config = configuration;
+    exact_config.max_cosine_distance = 0.0;
+    KalmanTracker norms(exact_config);
+    const float maximum = std::numeric_limits<float>::max();
+    const float minimum = std::numeric_limits<float>::denorm_min();
+    const auto norm_id = norms.update({described(0.0F, {maximum, maximum})}).front().track_id;
+    require(norms.update({described(0.0F, {minimum, minimum})}).front().track_id == norm_id &&
+                norms.stats().numerical_resets == 0,
+            "Finite extreme/subnormal appearance normalization overflowed or underflowed");
+    for (const auto dimension : {std::size_t{1}, std::size_t{1024}}) {
+        auto boundary = configuration;
+        boundary.appearance_dimension = dimension;
+        KalmanTracker valid(boundary);
+        const auto observation = described(0.0F, std::vector<float>(dimension, 1.0F));
+        const auto id = valid.update({observation}).front().track_id;
+        require(valid.update({observation}).front().track_id == id,
+                "Valid appearance dimension boundary was rejected");
+    }
+}
 }  // namespace
 
 int main() {
@@ -299,7 +528,9 @@ int main() {
             lifecycle_and_motion(mode); association_order_and_gating(mode); bounds_and_validation(mode);
         }
         center_gate_size_jitter(); center_gate_nearby_crossing();
-        std::cout << "Kalman motion, active priority, full-box/center gating, size jitter, recovery and bounded-state tests passed\n";
+        appearance_ambiguous_assignment(); appearance_hard_gates_and_lifecycle(); appearance_high_only_ema();
+        appearance_validation_and_bounds();
+        std::cout << "Kalman motion, active priority, full-box/center gating, appearance association/EMA, recovery and bounded-state tests passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

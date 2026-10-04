@@ -199,6 +199,8 @@ std::optional<LiveFrame> LiveSource::next(Ms wait) {
 LiveSummary analyze_stream(const std::string& url, IDetector& detector, const VideoConfig& tracking,
     const LiveConfig& config, const std::atomic_bool& cancel, LiveFrameSink sink,
     LiveProgress progress, LiveCaptureFactory factory) {
+    if (tracking.use_appearance)
+        throw std::invalid_argument("Appearance tracking requires local video; live appearance is not supported");
     validate_rtsp_url(url); validate_live_config(config);
     auto tracker = make_tracker(tracking);
     if (!sink) throw std::invalid_argument("Live frame sink required");
@@ -251,6 +253,8 @@ LiveSummary analyze_stream(const std::string& url, IDetector& detector, const Vi
 LiveSummary process_stream(const std::string& url, const std::filesystem::path& output,
     IDetector& detector, const VideoConfig& tracking, const LiveConfig& config, LiveCaptureFactory factory) {
     namespace fs = std::filesystem;
+    if (tracking.use_appearance)
+        throw std::invalid_argument("Appearance tracking requires local video; live appearance is not supported");
     validate_rtsp_url(url); validate_live_config(config);
     (void)make_tracker(tracking);
     if (fs::exists(output) && (!fs::is_directory(output) || !fs::is_empty(output)))

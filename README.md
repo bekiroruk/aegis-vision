@@ -16,6 +16,8 @@ içinde birleştirmektir.
 - Sınıf duyarlı IoU tracker
 - İsteğe bağlı iki aşamalı tracker: düşük güvenli tespitle takip sürdürme, doğrusal hareket tahmini ve Hungarian eşleştirme
 - Deneysel yerel-video Kalman tracker: aktif-önce eşleştirme, tam kutu veya merkez odaklı Mahalanobis kapısı, sınırlı state ve hata sayaçları; gerçek etiketli karşılaştırmalar
+- İsteğe bağlı gerçek OSNet kişi görünüşü embedding'i ve Kalman eşleştirmesi; C++ inference,
+  high-score prototip güncellemesi, beş takipçili karşılaştırma; [kapsam ve kullanım](docs/person-appearance.md)
 - Cosine similarity tabanlı yerel vektör indeksi
 - ONNX Runtime ile CLIP görsel/metin embedding, Unicode BPE tokenizer ve Qdrant'ta kalıcı arama
 - COCO validation nesne kırpmalarını toplu indeksleme ve Recall@K/Hit@K raporu
@@ -33,7 +35,7 @@ içinde birleştirmektir.
   sonlu indeksleme ve CLIP/Qdrant üzerinden canlı kayıtta arama/klip anına atlama
 - ORB + Hamming eşleştirme, oran filtresi ve RANSAC ile kaynak → hedef homografisi
 - Hizalanmış görsel, eşleşme görselleştirmesi ve sayısal hata raporu
-- Detection → tracking → embedding → indexing pipeline'ı
+- Detection → isteğe bağlı embedding/indexing → tracking pipeline'ı
 - Harici bağımlılığı olmayan deterministik demo adaptörleri
 - CMake/CTest, Windows ve Linux CI
 - Redis ve Qdrant için Docker Compose altyapısı
@@ -90,7 +92,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
 6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1 ve CPU p50/p95;
-   geniş bağımsız test kümesi, HOTA, tam ByteTrack / Re-ID ve çoklu kamera bekliyor
+   OSNet görünüşü eşleştirmesi eklendi; bağımsız test kümesi, HOTA, tam ByteTrack ve çoklu kamera bekliyor
 7. [Yerel servis, RTSP CLI, canlı ekran ve sınırlı arşiv tamamlandı] C++ HTTP API,
    SQLite kurtarma, canlı/video arama, önizleme ve RTSP reconnect/backpressure;
    kamera PTS, tam FPS/sesli canlı kayıt ve Redis bekliyor

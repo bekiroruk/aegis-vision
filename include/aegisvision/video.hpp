@@ -18,6 +18,10 @@ struct VideoConfig {
     float new_track_confidence{0.50F};
     double kalman_gating_threshold{13.2767};
     KalmanGateMode kalman_gate_mode{KalmanGateMode::FullBox};
+    bool use_appearance{false};
+    double max_cosine_distance{0.20};
+    double appearance_weight{0.50};
+    double appearance_momentum{0.90};
 };
 struct VideoSummary {
     int processed_frames{};
@@ -32,7 +36,9 @@ struct VideoSummary {
 
 // One tracker per invocation/source. The injected detector may own a loaded YOLO model.
 // OUTPUT must be new/empty. Partial files remain on error; summary.json is only written on success.
+// Appearance is Kalman/person-only. An embedder is required exactly when enabled;
+// its 512-component features are consumed locally, without indexing/search.
 [[nodiscard]] VideoSummary process_video(const std::filesystem::path &input,
                                          const std::filesystem::path &output, IDetector &detector,
-                                         const VideoConfig &config = {});
+                                         const VideoConfig &config = {}, IEmbedder *appearance = nullptr);
 } // namespace aegisvision::vision

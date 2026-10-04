@@ -313,7 +313,8 @@ struct KalmanComparison {
         : name(std::move(key)), title(std::move(label)), config(settings), tracker(settings) {}
 };
 Json video_run(const Json &manifest, const fs::path &base, const fs::path &output,
-               IDetector &detector, int iterations, bool compare_kalman, bool compare_center) {
+               IDetector &detector, int iterations, bool compare_kalman, bool compare_center,
+               IEmbedder *appearance) {
     if (manifest.at("classes") != Json::array({"person"}))
         throw std::invalid_argument("Tracking baseline evaluates person only");
     const auto input = local_file(base, text(manifest, "video"));
@@ -360,18 +361,30 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         comparisons.push_back(std::make_unique<KalmanComparison>(
             "kalman_center", "Kalman center-only", center));
     }
+    if (appearance) {
+        KalmanTrackerConfig reid;
+        reid.gate_mode = KalmanGateMode::CenterOnly;
+        reid.gating_threshold = kalman_center_gate99;
+        reid.use_appearance = true;
+        comparisons.push_back(std::make_unique<KalmanComparison>(
+            "kalman_reid", "Kalman + OSNet appearance", reid));
+    }
     std::vector<TrackingFrame> iou_frames, two_frames;
-    std::vector<double> inference, read_times, iou_times, two_times;
+    std::vector<double> inference, read_times, iou_times, two_times, appearance_times;
+    std::size_t appearance_calls = 0;
     auto exported = Json::array();
     std::ofstream timings(output / "timings.csv"), iou_rows(output / "iou-mot.txt"),
         two_rows(output / "two-stage-mot.txt");
     timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms";
     for (auto &entry : comparisons) {
         timings << ',' << entry->name << "_ms";
-        entry->rows.open(output / (entry->name == "kalman" ? "kalman-mot.txt" : "kalman-center-mot.txt"));
+        const auto filename = entry->name == "kalman" ? "kalman-mot.txt"
+            : entry->name == "kalman_center" ? "kalman-center-mot.txt" : "kalman-reid-mot.txt";
+        entry->rows.open(output / filename);
         entry->rows << std::setprecision(9);
         if (!entry->rows) throw std::runtime_error("Cannot open Kalman MOT export");
     }
+    if (appearance) timings << ",appearance_ms,appearance_crops";
     timings << '\n' << std::setprecision(12);
     iou_rows << std::setprecision(9);
     two_rows << std::setprecision(9);
@@ -405,6 +418,23 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
                 if (d.score >= .35F)
                     high.push_back(d);
             }
+        std::vector<Detection> appearance_low;
+        double appearance_ms = 0;
+        if (appearance) {
+            if (low.size() > KalmanTracker::max_detections)
+                throw std::invalid_argument("Appearance benchmark exceeds bounded detection capacity");
+            const auto start = Clock::now();
+            appearance_low = low; // Never change the inputs of the four geometry-only trackers.
+            if (!appearance_low.empty()) {
+                const auto frame = vision::image_frame(image, std::to_string(i + 1), "quality-appearance");
+                for (auto &d : appearance_low) {
+                    d.embedding = appearance->embed_image(frame, d);
+                    ++appearance_calls;
+                }
+            }
+            appearance_ms = elapsed(start);
+            appearance_times.push_back(appearance_ms);
+        }
         const auto iou_start = Clock::now();
         auto a = iou.update(high);
         const auto a_ms = elapsed(iou_start);
@@ -413,7 +443,7 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         const auto b_ms = elapsed(two_start);
         for (auto &entry : comparisons) {
             const auto start = Clock::now();
-            entry->observed = entry->tracker.update(low);
+            entry->observed = entry->tracker.update(entry->config.use_appearance ? appearance_low : low);
             entry->last_ms = elapsed(start);
             entry->times.push_back(entry->last_ms);
         }
@@ -463,6 +493,7 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         timings << i + 1 << ',' << read_ms << ',' << ms << ',' << a_ms << ',' << b_ms;
         for (const auto &entry : comparisons)
             timings << ',' << entry->last_ms;
+        if (appearance) timings << ',' << appearance_ms << ',' << appearance_low.size();
         timings << '\n';
     }
     const auto run_ms = elapsed(run_start);
@@ -511,7 +542,7 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         {"limitations",
          {"Single MOT15 training sequence using official reencoded preview video, not "
           "challenge leaderboard-comparable scores.",
-          "No HOTA, multi-camera or Re-ID evaluation; no parameter tuning in this run.",
+          "No HOTA, multi-camera or standalone Re-ID retrieval evaluation; no parameter tuning in this run.",
           "Tracking throughput includes comparison rendering and is not a live RTSP FPS "
           "guarantee."}}};
     for (const auto &entry : comparisons) {
@@ -535,6 +566,31 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
             {"low_confidence_matches", s.low_confidence_matches},
             {"capacity_rejections", s.capacity_rejections}};
         report["performance"][entry->name + "_tracker"] = latency(entry->times);
+        if (entry->config.use_appearance) {
+            report["tracking"]["parameters"][entry->name]["appearance"] = {
+                {"dimension", entry->config.appearance_dimension},
+                {"max_cosine_distance", entry->config.max_cosine_distance},
+                {"weight", entry->config.appearance_weight},
+                {"momentum", entry->config.appearance_momentum},
+                {"prototype_updates", "high-score matches only; births seed normalized features"},
+                {"hard_gates", "class, IoU, center Mahalanobis, cosine distance"}};
+            auto &diagnostics = report["tracking"][entry->name]["diagnostics"];
+            diagnostics["appearance_matches"] = s.appearance_matches;
+            diagnostics["appearance_rejections"] = s.appearance_rejections;
+            diagnostics["appearance_updates"] = s.appearance_updates;
+        }
+    }
+    if (appearance) {
+        report["performance"]["appearance"] = latency(appearance_times);
+        report["performance"]["appearance_crop_calls"] = appearance_calls;
+        report["performance"]["appearance_warmup_iterations"] = 0;
+        report["performance"]["appearance_scope"] =
+            "per decoded frame: low-score person copy, one owned frame copy, crop/resize/normalization, "
+            "one model forward per crop and output L2; no separate crop warmup, first real crop included; "
+            "model constructor/load/probe excluded; tracker timing excludes embedding; loop includes both";
+        report["limitations"].push_back(
+            "Appearance-assisted single-camera association is not full DeepSORT, cross-camera identity "
+            "or proof of who a person is. Development sequences were already inspected; not held-out evaluation.");
     }
     return report;
 }
@@ -573,7 +629,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     const auto kind = text(manifest, "kind"), dataset = text(manifest, "dataset");
     if (kind != "images" && kind != "video")
         throw std::invalid_argument("Unknown benchmark kind");
-    if (kind=="images" && (config.compare_kalman || config.compare_kalman_center))
+    if (kind=="images" && (config.compare_kalman || config.compare_kalman_center || config.appearance_embedder))
         throw std::invalid_argument("Kalman comparison requires a video manifest");
     const auto digest = quality_file_sha256(manifest_path);
     const auto base = fs::canonical(manifest_path).parent_path();
@@ -581,7 +637,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     auto report = kind == "images"
                       ? image_run(manifest, base, output, detector, config.warmup_iterations)
                       : video_run(manifest, base, output, detector, config.warmup_iterations,
-                                  config.compare_kalman, config.compare_kalman_center);
+                                  config.compare_kalman, config.compare_kalman_center, config.appearance_embedder);
     if (quality_file_sha256(manifest_path) != digest)
         throw std::runtime_error("Manifest changed during evaluation");
     report["version"] = 1;

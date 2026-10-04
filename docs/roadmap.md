@@ -38,6 +38,9 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 - Ayrı merkez odaklı Kalman gate, dört yöntemli gerçek video karşılaştırması ve
   resmi referans doğrulaması. Campus boyut titreşimi azalırken Stadtmitte FP artışı
   raporlandı; geliştirme sahnelerinde gözlemdir, bağımsız hold-out sonucu değildir.
+- Gerçek eğitimli OSNet x0.25 ile 512-boyut kişi görünüşü, native C++ ONNX inference,
+  sınırlı high-score EMA prototipi ve isteğe bağlı Kalman association;
+  [sözleşme, test ve kullanım](person-appearance.md). Canlı/çoklu kamera/global kimlik yoktur.
 
 ## Kalan işler — önerilen sıra
 
@@ -53,7 +56,7 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
    Sonraki iş, bağımsız ve daha geniş veriyle sabit train/validation/test ayrımı,
    HOTA ve hata analizi. Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
    İhtiyaca göre
-   fine-tuning, metric learning ve tam ByteTrack / appearance Re-ID ekle. Mevcut
+   fine-tuning, metric learning, tam ByteTrack ve appearance ablation/kalibrasyonunu genişlet. Mevcut
    Kalman backend resmi ByteTrack değildir; canlıda zaman-adımı desteği de gerekir. Çoklu kamera için
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.

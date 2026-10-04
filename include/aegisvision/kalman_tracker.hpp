@@ -24,6 +24,14 @@ struct KalmanTrackerConfig {
     // kalman_center_gate99 for two measurements at the same nominal coverage.
     double gating_threshold{kalman_box_gate99};
     KalmanGateMode gate_mode{KalmanGateMode::FullBox};
+    // Optional local appearance association. All candidates still have to pass
+    // the class, IoU and selected motion gate; no gallery/global Re-ID exists.
+    bool use_appearance{false};
+    // Dimension [1,1024], distance/weight [0,1], momentum [0,1).
+    std::size_t appearance_dimension{512};
+    double max_cosine_distance{0.20};
+    double appearance_weight{0.50};
+    double appearance_momentum{0.90};
 };
 
 struct KalmanTrackingStats {
@@ -34,6 +42,12 @@ struct KalmanTrackingStats {
     std::uint64_t gate_rejections{};
     std::uint64_t numerical_resets{};
     std::uint64_t capacity_rejections{};
+    // Geometry-valid candidate pairs rejected by the appearance distance gate.
+    std::uint64_t appearance_rejections{};
+    // Accepted high/low assignments with appearance enabled, excluding births.
+    std::uint64_t appearance_matches{};
+    // Renormalized high-confidence matched EMA updates, excluding low/births.
+    std::uint64_t appearance_updates{};
 };
 
 // Bounded, class-aware constant-velocity Kalman matching. The eight states are
@@ -44,6 +58,10 @@ struct KalmanTrackingStats {
 // Only observed detections are returned; predictions are never visible objects.
 // More than 512 observations reject the whole update; at 256 live identities,
 // valid unmatched births are suppressed and counted without consuming an ID.
+// Optional appearance keeps one normalized EMA prototype per live identity.
+// Eligible observations must provide finite nonzero embeddings of the configured
+// dimension; only high-confidence matches update the prototype. Disabled mode
+// does not require, inspect, copy or score detection embeddings.
 // This is a project-specific backend, not official ByteTrack, SORT or Re-ID.
 class KalmanTracker final : public ITracker {
 public:
@@ -59,6 +77,7 @@ private:
         Track track;
         std::array<double, 8> mean{};
         std::array<double, 64> covariance{};
+        std::vector<double> appearance;
     };
 
     KalmanTrackerConfig config_;

@@ -22,6 +22,14 @@ template<class F> void rejects(F action) {
     try { action(); } catch (const std::exception&) { return; }
     throw std::runtime_error("Invalid live configuration accepted");
 }
+template<class F> void rejects_appearance(F action) {
+    try { action(); } catch (const std::invalid_argument& error) {
+        require(std::string(error.what()).find("Appearance") != std::string::npos,
+            "Unsupported live appearance failed for a different validation reason");
+        return;
+    }
+    throw std::runtime_error("Unsupported live appearance was accepted");
+}
 struct State {
     std::atomic<bool> allow_open{true}, disconnect{false}, unlimited{false}, invalid{false};
     std::atomic<int> credits{0}, emitted{0}, opens{0}, closes{0};
@@ -123,6 +131,54 @@ public:
         return {{{10,10,80,90}, "person", .9F, {}, {}}};
     }
 };
+class ProbeDetector final : public IDetector {
+public:
+    int calls{};
+    std::vector<Detection> detect(const Frame&) override {
+        ++calls;
+        return {};
+    }
+};
+void appearance_rejection_checks(const std::filesystem::path& root) {
+    ProbeDetector detector;
+    const auto config = fast_config();
+    for (const auto mode : {TrackerMode::IoU, TrackerMode::TwoStage, TrackerMode::Kalman}) {
+        VideoConfig tracking;
+        tracking.tracker_mode = mode;
+        tracking.use_appearance = true;
+        auto state = std::make_shared<State>();
+        std::atomic<int> source_factories{0};
+        LiveCaptureFactory untouched = [&] {
+            ++source_factories;
+            return std::make_unique<FakeCapture>(state);
+        };
+        int sinks = 0, progress_calls = 0;
+        std::atomic_bool cancel{false};
+        rejects_appearance([&] {
+            (void)analyze_stream("rtsp://127.0.0.1/test", detector, tracking, config, cancel,
+                [&](const LiveFrame&, const AnalysisResult&, const LiveSummary&, double, double) { ++sinks; },
+                [&](const LiveSummary&) { ++progress_calls; }, untouched);
+        });
+        const auto output = root / ("appearance-rejected-" + std::to_string(static_cast<int>(mode)));
+        rejects_appearance([&] {
+            (void)process_stream("rtsp://127.0.0.1/test", output, detector, tracking, config, untouched);
+        });
+        require(!std::filesystem::exists(output) && source_factories == 0 && state->opens == 0 &&
+            state->emitted == 0 && state->closes == 0 && detector.calls == 0 && sinks == 0 && progress_calls == 0,
+            "Rejected live appearance touched output, source/network, detector or callbacks");
+        // Public entry points reject the unsupported mode before even URL
+        // validation, including when cancellation would otherwise return early.
+        cancel = true;
+        rejects_appearance([&] {
+            (void)analyze_stream("invalid-url", detector, tracking, config, cancel, {}, {}, untouched);
+        });
+        rejects_appearance([&] {
+            (void)process_stream("invalid-url", output, detector, tracking, config, untouched);
+        });
+        require(!std::filesystem::exists(output) && source_factories == 0 && detector.calls == 0,
+            "Invalid URL/cancellation bypassed fail-fast live appearance rejection");
+    }
+}
 }
 int main(int argc, char* argv[]) {
     namespace fs = std::filesystem;
@@ -154,6 +210,7 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         require(argc == 1, "Use --rtsp URL for real transport integration");
+        appearance_rejection_checks(root);
         source_checks();
         auto state = std::make_shared<State>(); state->unlimited = true;
         SlowDetector detector;

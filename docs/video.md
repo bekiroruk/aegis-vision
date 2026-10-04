@@ -102,6 +102,16 @@ Geliştirme koşusunda Campus IDF1 %43.44 → %67.39, ID switch 22 → 5 oldu.
 Stadtmitte'de IDF1 %76.77 → %76.68, FP 46 → 71: daha geniş kabul bazı kısmi
 kutuları da sürdürür. Bu iki sahne tasarımda kullanıldığı için bağımsız test değildir.
 
+### Kişi görünüşü destekli alternatif
+
+Search-enabled build ve gerçek OSNet bundle ile config-only `kalman-reid`
+kullanılabilir: `configs/video-reid.toml`. Bu mod yalnız kişileri takip eder;
+konum/sınıf/IoU kontrollerine cosine kapısı ve normalize görünüş prototipi ekler.
+Native CLI bu modda bir OpenCV thread kullanır. Varsayılan yöntem değişmez;
+görünüş desteği her sahnede daha iyi sonuç sağlamaz. RTSP/servis/çoklu kamera
+desteği yoktur. Model, ayarlar, çıktı ve beşli karşılaştırma için
+[kişi görünüşü kılavuzu](person-appearance.md).
+
 Varsayılan greedy IoU referans takipçisinde hareket kestirimi yoktur. İki aşamalı
 seçenekte basit hareket kestirimi vardır. Her iki modda hızlı hareket, örtüşme,
 yön değişimi ve sınıf değişiminde kimlik parçalanması veya yanlış eşleşme olabilir.
@@ -110,7 +120,7 @@ yön değişimi ve sınıf değişiminde kimlik parçalanması veya yanlış eş
 Her kare sırayla işlenir. Kaynak FPS çıktı videosunda korunur; CPU işlemesi kaynak
 hızından yavaş olabilir. `processing_fps` model yüklemesi ve ilk kare okumadan sonraki
 analiz/çizim/kodlama/disk işini ölçer; `mean_analysis_ms` piksel kopyalama, YOLO ve
-tracking ortalamasıdır. Tek yerel koşunun hızı kontrollü performans benchmark'ı değildir.
+tracking (appearance modunda crop embedding dahil) ortalamasıdır. Tek yerel koşunun hızı kontrollü performans benchmark'ı değildir.
 Yoğun sahnelerde Hungarian maliyeti ayrıca ölçülmelidir; gerçek zaman garantisi verilmez.
 
 Zaman damgaları `frame_index / fps` üzerinden hesaplanır. Değişken FPS videoların

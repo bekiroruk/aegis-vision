@@ -49,6 +49,19 @@ class Detector final : public aegisvision::IDetector {
         return {{{4, 4, 16, 24}, "person", .9F, {}, {}}, {{0, 0, 4, 4}, "excluded", .99F, {}, {}}};
     }
 };
+class Appearance final : public aegisvision::IEmbedder {
+  public:
+    int calls{};
+    std::vector<float> embed_image(const aegisvision::Frame &frame,
+                                   const aegisvision::Detection &detection) override {
+        require(frame.image && detection.label == "person", "Appearance received non-person or no pixels");
+        ++calls;
+        std::vector<float> feature(512);
+        feature[0] = 1;
+        return feature;
+    }
+    std::vector<float> embed_text(std::string_view) override { throw std::logic_error("No text Re-ID"); }
+};
 Json image_manifest(const fs::path &root) {
     return {{"version", 1},
             {"kind", "images"},
@@ -266,6 +279,39 @@ int main() {
         }
         four_video.release();
         require(four_count == 3, "Four-panel comparison lost frames");
+        Detector five_detector;
+        Appearance appearance;
+        const auto five = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "five", five_detector,
+            {0, Json::object(), true, true, &appearance});
+        require(five_detector.calls == 3 && appearance.calls == 3 &&
+                    five["tracking"]["kalman_reid"]["idf1"] == 1.0 &&
+                    five["performance"]["appearance"]["samples"] == 3 &&
+                    five["performance"]["appearance_crop_calls"] == 3 &&
+                    five["tracking"]["kalman_reid"]["diagnostics"]["appearance_matches"] == 2 &&
+                    five["tracking"]["parameters"]["kalman_reid"]["appearance"]["max_cosine_distance"] == .20,
+                "Appearance comparison omitted embeddings, frozen defaults or diagnostics");
+        const auto five_frames = load(root / "five/tracking-frames.json");
+        for (const auto name : {"iou", "two_stage", "kalman", "kalman_center"}) {
+            require(five["tracking"][name] == four["tracking"][name], "Appearance changed an old tracker metric");
+            for (std::size_t i = 0; i < five_frames.size(); ++i)
+                require(five_frames[i][name] == four_frames[i][name] &&
+                            five_frames[i]["raw_detections"] == four_frames[i]["raw_detections"],
+                        "Appearance changed shared geometry-only inputs or predictions");
+        }
+        require(fs::exists(root / "five/kalman-reid-mot.txt"), "Re-ID MOT export missing");
+        cv::VideoCapture five_video((root / "five/comparison.avi").string());
+        int five_count = 0;
+        while (five_video.read(frame)) {
+            ++five_count;
+            require(frame.cols == 160 && frame.rows == 32, "Five-panel layout wrong");
+        }
+        five_video.release();
+        require(five_count == 3, "Five-panel comparison lost frames");
+        rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
+            root / "manifest.json", root / "reid-images", detector,
+            {0, Json::object(), false, false, &appearance}); }, "Images accepted appearance comparison");
+        require(!fs::exists(root / "reid-images"), "Re-ID image validation created output");
         Detector center_detector;
         const auto center_only = aegisvision::evaluation::run_quality_benchmark(
             root / "movie.json", root / "center-only", center_detector, {0, Json::object(), false, true});

@@ -1,8 +1,12 @@
 #include "aegisvision/video.hpp"
 #include "aegisvision/application_config.hpp"
 #include "aegisvision/yolo.hpp"
+#ifdef AEGISVISION_WITH_REID
+#include "aegisvision/reid.hpp"
+#endif
 #include <charconv>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -18,6 +22,7 @@ int run(const std::vector<std::filesystem::path> &args) {
                          "Kalman adds covariance gating and active-first matching; consecutive "
                          "local frames only.\n"
                          "kalman-center gates center motion only; box overlap and 4D correction remain.\n"
+                         "Appearance-assisted kalman-reid requires --config and a build with Re-ID support.\n"
                          "Writes tracked.avi (MJPEG), preview.jpg, tracks.csv and summary.json.\n"
                          "MAX_FRAMES: positive integer, omitted = entire file. Output directory "
                          "must be empty.\n";
@@ -39,9 +44,18 @@ int run(const std::vector<std::filesystem::path> &args) {
                     settings.video.max_frames < 1)
                     throw std::invalid_argument("MAX_FRAMES must be a positive integer");
             }
+            std::unique_ptr<aegisvision::IEmbedder> appearance;
+            if (settings.video.use_appearance) {
+#ifdef AEGISVISION_WITH_REID
+                cv::setNumThreads(1); // Match the measured CPU appearance configuration.
+                appearance = std::make_unique<aegisvision::ReIdEmbedder>(settings.reid_bundle);
+#else
+                throw std::runtime_error("Appearance tracking is unavailable in this build; enable Re-ID support");
+#endif
+            }
             auto detector = aegisvision::vision::make_configured_detector(settings);
             const auto summary =
-                aegisvision::vision::process_video(args[3], args[4], *detector, settings.video);
+                aegisvision::vision::process_video(args[3], args[4], *detector, settings.video, appearance.get());
             std::cout << "frames=" << summary.processed_frames
                       << " unique_track_ids=" << summary.unique_track_ids
                       << " processing_fps=" << summary.processing_fps

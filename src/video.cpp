@@ -11,6 +11,7 @@
 #include <opencv2/videoio.hpp>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace aegisvision::vision {
 namespace {
@@ -27,16 +28,57 @@ std::string csv_string(const std::string &text) {
     }
     return escaped + '"';
 }
+
+class PersonAppearanceDetector final : public IDetector {
+  public:
+    PersonAppearanceDetector(IDetector &detector, float threshold)
+        : detector_(detector), threshold_(threshold) {}
+
+    std::vector<Detection> detect(const Frame &frame) override {
+        auto observations = detector_.detect(frame);
+        if (observations.size() > KalmanTracker::max_detections)
+            throw std::invalid_argument("Appearance detector exceeded bounded Kalman input capacity");
+        std::vector<Detection> persons;
+        persons.reserve(observations.size());
+        for (auto &detection : observations) {
+            if (detection.label != "person")
+                continue;
+            if (!std::isfinite(detection.score) || detection.score < 0.0F || detection.score > 1.0F)
+                throw std::invalid_argument("Appearance person confidence must be finite and in [0,1]");
+            if (detection.score < threshold_)
+                continue;
+            const auto &box = detection.bbox;
+            for (const auto coordinate : {box.x1, box.y1, box.x2, box.y2}) {
+                if (!std::isfinite(coordinate) || std::abs(static_cast<double>(coordinate)) > 1'000'000.0)
+                    throw std::invalid_argument("Appearance person coordinates exceed bounded Kalman input");
+            }
+            const double width = static_cast<double>(box.x2) - box.x1;
+            const double height = static_cast<double>(box.y2) - box.y1;
+            if (width <= 0.0 || height <= 0.0 || width > 1'000'000.0 || height > 1'000'000.0)
+                throw std::invalid_argument("Appearance person dimensions exceed bounded Kalman input");
+            persons.push_back(std::move(detection));
+        }
+        return persons;
+    }
+
+  private:
+    IDetector &detector_;
+    float threshold_;
+};
 } // namespace
 
 VideoSummary process_video(const std::filesystem::path &input, const std::filesystem::path &output,
-                           IDetector &detector, const VideoConfig &config) {
+                           IDetector &detector, const VideoConfig &config, IEmbedder *appearance) {
     namespace fs = std::filesystem;
     using Clock = std::chrono::steady_clock;
     if (config.max_frames < 0 || !std::isfinite(config.fallback_fps) || config.fallback_fps <= 0 ||
         config.fallback_fps > 1000) {
         throw std::invalid_argument("Invalid video configuration");
     }
+    if (config.use_appearance && config.tracker_mode != TrackerMode::Kalman)
+        throw std::invalid_argument("Appearance video tracking requires the Kalman backend");
+    if (config.use_appearance != (appearance != nullptr))
+        throw std::invalid_argument("An appearance embedder is required exactly when appearance tracking is enabled");
     std::unique_ptr<ITracker> tracker;
     TwoStageTracker *two_stage = nullptr;
     KalmanTracker *kalman = nullptr;
@@ -52,11 +94,18 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
         auto instance = std::make_unique<KalmanTracker>(KalmanTrackerConfig{
             config.low_confidence, config.high_confidence, config.new_track_confidence,
             config.tracking_iou, config.max_missed_frames, config.kalman_gating_threshold,
-            config.kalman_gate_mode});
+            config.kalman_gate_mode, config.use_appearance, 512, config.max_cosine_distance,
+            config.appearance_weight, config.appearance_momentum});
         kalman = instance.get();
         tracker = std::move(instance);
     } else {
         throw std::invalid_argument("Unknown tracker mode");
+    }
+    std::unique_ptr<IDetector> person_detector;
+    IDetector *pipeline_detector = &detector;
+    if (config.use_appearance) {
+        person_detector = std::make_unique<PersonAppearanceDetector>(detector, config.low_confidence);
+        pipeline_detector = person_detector.get();
     }
     if (!fs::is_regular_file(input))
         throw std::runtime_error("Input must be an existing local video file");
@@ -87,9 +136,9 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
     if (!rows)
         throw std::runtime_error("Cannot open tracks.csv");
     PipelineConfig pipeline_config;
-    pipeline_config.enable_embeddings = false;
+    pipeline_config.enable_embeddings = config.use_appearance;
     pipeline_config.index_embeddings = false;
-    AnalysisPipeline pipeline(pipeline_config, detector, tracker.get(), nullptr, nullptr, nullptr);
+    AnalysisPipeline pipeline(pipeline_config, *pipeline_detector, tracker.get(), appearance, nullptr, nullptr);
     VideoSummary summary;
     summary.source_fps = fps;
     std::set<std::uint64_t> ids;
@@ -161,7 +210,8 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
            << summary.mean_analysis_ms;
     report << "timestamp_basis" << "frame_index / source_fps (CFR estimate)";
     report << "stop_reason" << summary.stop_reason << "tracker"
-           << (kalman      ? "kalman active-first Hungarian"
+           << (config.use_appearance ? "kalman appearance-assisted active-first Hungarian"
+               : kalman      ? "kalman active-first Hungarian"
                : two_stage ? "two-stage linear-motion Hungarian"
                            : "class-aware greedy IoU");
     if (two_stage || kalman) {
@@ -184,6 +234,14 @@ VideoSummary process_video(const std::filesystem::path &input, const std::filesy
         report << "gate_rejections" << static_cast<double>(summary.kalman_stats.gate_rejections);
         report << "numerical_resets" << static_cast<double>(summary.kalman_stats.numerical_resets);
         report << "capacity_rejections" << static_cast<double>(summary.kalman_stats.capacity_rejections);
+        if (config.use_appearance) {
+            report << "appearance_enabled" << 1 << "appearance_scope" << "person only; local bounded lifecycle";
+            report << "appearance_dimension" << 512 << "max_cosine_distance" << config.max_cosine_distance;
+            report << "appearance_weight" << config.appearance_weight << "appearance_momentum" << config.appearance_momentum;
+            report << "appearance_rejections" << static_cast<double>(summary.kalman_stats.appearance_rejections);
+            report << "appearance_matches" << static_cast<double>(summary.kalman_stats.appearance_matches);
+            report << "appearance_updates" << static_cast<double>(summary.kalman_stats.appearance_updates);
+        }
     }
     report << "tracking_iou" << config.tracking_iou << "max_missed_frames"
            << static_cast<double>(config.max_missed_frames);

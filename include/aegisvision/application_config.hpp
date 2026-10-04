@@ -18,6 +18,7 @@ struct ApplicationSettings {
     LiveConfig live;
     std::filesystem::path clip_bundle;
     QdrantConfig qdrant;
+    std::filesystem::path reid_bundle;
 };
 
 [[nodiscard]] ApplicationSettings load_application_settings(const std::filesystem::path& file);

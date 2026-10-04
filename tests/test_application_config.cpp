@@ -36,6 +36,13 @@ int main() {
         save(root / "models/detector.onnx", "placeholder");
         for (auto name : {"manifest.json", "vision.onnx", "text.onnx", "tokenizer.json"})
             save(root / "models" / name, "placeholder");
+        fs::create_directories(root / "models/reid");
+        fs::create_directories(root / "models/reid-missing-model");
+        fs::create_directories(root / "models/reid-missing-manifest");
+        save(root / "models/reid/manifest.json", "placeholder");
+        save(root / "models/reid/model.onnx", "placeholder");
+        save(root / "models/reid-missing-model/manifest.json", "placeholder");
+        save(root / "models/reid-missing-manifest/model.onnx", "placeholder");
         const std::string detector =
             "[detector]\nbackend = \"yolo_onnx\"\nmodel = \"models/detector.onnx\"\n"
             "confidence_threshold = 0.4\ninput_size = 640\n";
@@ -81,6 +88,31 @@ int main() {
         save(root / "center-custom.toml", kalman_base + "gating_mode = \"center\"\nmahalanobis_gate = 7\n");
         config = aegisvision::vision::load_application_settings(root / "center-custom.toml");
         require(config.video.kalman_gating_threshold == 7.0, "Explicit center gate override lost");
+        const std::string reid_base = "version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
+                                      "[tracking]\nbackend = \"kalman-reid\"\n";
+        const std::string appearance = "[appearance]\nbackend = \"osnet_onnx\"\nbundle = \"models/reid\"\n";
+        save(root / "reid.toml", reid_base + appearance);
+        config = aegisvision::vision::load_application_settings(root / "reid.toml");
+        require(config.video.tracker_mode == aegisvision::vision::TrackerMode::Kalman &&
+                    config.video.use_appearance && config.video.kalman_gate_mode == aegisvision::KalmanGateMode::CenterOnly &&
+                    config.video.kalman_gating_threshold == aegisvision::kalman_center_gate99 &&
+                    config.video.max_cosine_distance == 0.20 && config.video.appearance_weight == 0.50 &&
+                    config.video.appearance_momentum == 0.90 &&
+                    config.reid_bundle == fs::weakly_canonical(root / "models/reid") &&
+                    config.detector.confidence_threshold == 0.10F,
+                "Appearance config defaults, resolved bundle or low-score detector floor were lost");
+        // Placeholder files intentionally are not loadable model/manifest graphs;
+        // configuration parsing checks existence without running model loading.
+        save(root / "reid-full-box.toml", reid_base + "gating_mode = \"full-box\"\n" + appearance);
+        config = aegisvision::vision::load_application_settings(root / "reid-full-box.toml");
+        require(config.video.kalman_gate_mode == aegisvision::KalmanGateMode::FullBox &&
+                    config.video.kalman_gating_threshold == aegisvision::kalman_box_gate99,
+                "Explicit full-box appearance motion gate override was lost");
+        save(root / "reid-custom.toml", reid_base + appearance + "max_cosine_distance = 0\nweight = 1\nmomentum = 0\n");
+        config = aegisvision::vision::load_application_settings(root / "reid-custom.toml");
+        require(config.video.max_cosine_distance == 0 && config.video.appearance_weight == 1 &&
+                    config.video.appearance_momentum == 0,
+                "Valid appearance parameter boundaries were rejected or ignored");
         const std::string search =
             "version = 1\n[pipeline]\nmode = \"search\"\n"
             "[embedding]\nbackend = \"clip_onnx\"\nbundle = \"models\"\ndimension = 512\n"
@@ -110,6 +142,28 @@ int main() {
         bad(live + "output_fps = false\n");
         bad(live + "reconnect_initial_ms = 4000\nreconnect_max_ms = 2\n");
         bad(live + "[video]\nmax_frames = 1\n");
+        bad(reid_base);
+        bad(video + appearance);
+        bad(kalman_base + appearance);
+        bad(live + appearance);
+        bad(search + appearance);
+        bad("version = 1\n[pipeline]\nmode = \"image\"\n" + detector + appearance);
+        bad("version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
+            "[tracking]\nbackend = \"kalman-reid\"\n[stream]\nduration_seconds = 1\n");
+        bad(reid_base + "[appearance]\nbackend = \"clip_onnx\"\nbundle = \"models/reid\"\n");
+        bad(reid_base + "[appearance]\nbackend = \"osnet_onnx\"\n");
+        bad(reid_base + "[appearance]\nbackend = \"osnet_onnx\"\nbundle = \"missing\"\n");
+        bad(reid_base + "[appearance]\nbackend = \"osnet_onnx\"\nbundle = \"models/detector.onnx\"\n");
+        bad(reid_base + "[appearance]\nbackend = \"osnet_onnx\"\nbundle = \"models/reid-missing-model\"\n");
+        bad(reid_base + "[appearance]\nbackend = \"osnet_onnx\"\nbundle = \"models/reid-missing-manifest\"\n");
+        for (const auto &parameter : {"max_cosine_distance = -0.01\n", "max_cosine_distance = 1.01\n",
+                                     "max_cosine_distance = nan\n", "max_cosine_distance = true\n",
+                                     "weight = -0.01\n", "weight = 1.01\n", "weight = inf\n",
+                                     "momentum = -0.01\n", "momentum = 1\n", "momentum = nan\n",
+                                     "dimension = 512\n", "unknown = 1\n"})
+            bad(reid_base + appearance + parameter);
+        bad("version = 1\n[pipeline]\nmode = \"video\"\n" + detector +
+            "max_detections = 513\n[tracking]\nbackend = \"kalman-reid\"\n" + appearance);
         bad(video + "[stream]\nduration_seconds = 12\n");
         bad("version = 1\n[pipeline]\nmode = \"stream\"\n" + detector +
             "[tracking]\nbackend = \"kalman\"\n[stream]\nduration_seconds = 1\n");

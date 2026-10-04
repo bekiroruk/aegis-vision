@@ -384,6 +384,91 @@ Yalnız `--kalman-center` üç panel üretir; eski `--kalman` zorunlu değildir.
 Yerel video CLI için `configs/video-kalman-center.toml` veya `--tracker kalman-center`.
 İki Kalman modu da RTSP'de desteklenmez; timestamp-aware zaman adımı henüz yoktur.
 
+## OSNet kişi görünüşü ve beşli karşılaştırma — 2026-10-02
+
+Gerçek eğitimli OSNet x0.25 / MSMT17-combineall, C++ OpenCV DNN ile kişilerin
+512-boyut özelliklerini çıkarır. Yeni `kalman_reid` CenterOnly hareket takibine
+cosine distance ≤ .20, IoU/cosine eşit reward ve high-score-only .90 EMA ekler.
+Model/protokol, lisans ve tekrar üretim için [kişi görünüşü](person-appearance.md),
+[ADR-0015](adr/0015-person-appearance-association.md).
+Bu değerler iki ölçümden önce donduruldu; sonuçlara göre yeniden ayarlanmadı.
+
+| Sekans | Yöntem | IDF1 | ID switch | FP | FN | MOTA |
+|---|---|---:|---:|---:|---:|---:|
+| Stadtmitte | CenterOnly | %76.68 | 11 | 71 | 179 | %77.42 |
+| Stadtmitte | CenterOnly + OSNet | %75.98 | 19 | 47 | 182 | %78.55 |
+| Campus | CenterOnly | %67.39 | 5 | 75 | 57 | %61.84 |
+| Campus | CenterOnly + OSNet | %64.29 | 10 | 69 | 59 | %61.56 |
+
+**Yanlış kutular azaldı, kimlik sürekliliği geriledi. Genel takip iyileşmesi yok;
+appearance deneysel kalır ve varsayılan IoU değiştirilmez.** Stadtmitte
+IDTP 845→827, TP 977→974; Campus IDTP 248→234, TP 302→300. IDF1 kaybı,
+yalnız toplam ID sayısına bakılarak gizlenmez. İki geliştirme sekansı bağımsız
+hold-out değildir; model, eşikler veya kullanım önerisi buradan genellenmez.
+
+Kare çıktısı incelemesi Campus GT 7'nin CenterOnly track 11 ile 25–71 arası
+tek kimlikte kaldığını, OSNet modunda 14→17→18 olarak parçalandığını gösterir
+(geçişler 27 ve 29). Aynı ham tespitler görüntü soluna kırpılmıştır: kutu
+genişlikleri kare 25/27/29'da 39.65/49.97/65.79, skorları .855/.865/.872.
+Crop değişimi gözlenir; per-pair cosine log'u olmadığı için bu geçişlerin
+belirli bir mesafe reddinden kaynaklandığı kanıtlanmaz. GT 3'ün track 3 ile 63
+gözlemi korunur. Stadtmitte GT 2'nin CenterOnly ile düzelmiş 120 gözlemli track 3
+sürekliliği de korunur; başka kimliklerde ek parçalanma vardır.
+
+Campus 42 / Stadtmitte 36 `appearance_rejections`, diğer kapıları geçen aday
+**çiftlerinin** cosine kapısından elenmesidir; bunlar 42/36 kaçırılan kişi demek
+değildir. Appearance match 343/988, high-score prototype update 328/973,
+low-score match 15/15; numerical reset ve capacity rejection iki koşuda 0.
+
+Resmi TrackEval `CLEAR`/`Identity` iki `reference-validation.json` için **passed**:
+beş takipçinin sayımları tam eşit, oran toleransı 1e-6. Eski dört takipçinin 18
+metrik alanı, her karedeki tahminleri, GT ve ham detection listeleri önceki
+`quality-*-center` koşularıyla bire bir aynı. Golden doğrulamada bir sentetik
+renk örneği ve iki gerçek kişi crop'u için C++ input blob farkı 0; normalize
+özelliklerin PyTorch/OpenCV referansına maksimum farkı 4.992e-7. Bu, inference
+uygulama eşitliğidir; kişi tanıma doğruluğu ölçümü değildir.
+
+CPU FP32, bir OpenCV thread, önceki YOLO/config/veri hash'leri ve beş detector
+warmup korunur. Model ONNX SHA256
+`32d0f46f48f7a6dd783dc17e4715ad262ad95195ff8496f6c8a1f95cdba730b5`,
+bundle manifest SHA256
+`e723b7fa52a3c3f1f7b4da154440e5512edd6a4032dc788a96a1ca6235223d66`.
+Model load/probe detector ve appearance örneklerine dahil değildir; ayrı crop
+warmup'u yoktur, ilk gerçek crop dahildir.
+
+| Sekans | YOLO p50/p95 ms | Appearance p50/p95 ms/kare | Crop çağrısı | Yeni tracker p50/p95 ms | Beşli loop FPS |
+|---|---:|---:|---:|---:|---:|
+| Stadtmitte | 298.97 / 820.16 | 79.93 / 245.54 | 1.328 | .0986 / .3024 | 1.72 |
+| Campus | 748.63 / 852.37 | 263.32 / 360.15 | 676 | .2697 / .4988 | .92 |
+
+Appearance süresi frame/observation kopyası, bütün low-person crop'ları,
+preprocessing, crop başına forward ve L2'yi içerir; tracker süresi bundan ayrıdır.
+Loop bütün beş takipçi, embedding, çizim ve MJPEG/CSV yazımını içerir. Koşular
+ardışık, derleme/diğer model inference işleriyle örtüşmeden çalıştırıldı; güç
+modu, CPU frekansı/ısı ve dış arka plan yükü kontrol edilmedi. Bu değişken süreler
+kontrollü hız karşılaştırması değildir; 25 FPS MP4 oynatımı analiz FPS'i değildir.
+
+Yerel `outputs/quality-tud-reid/` ve `outputs/quality-campus-reid/`: rapor, ham
+detection/frame JSON, beş ayrı MOT dosyası, CSV, resmi doğrulama, AVI/MP4.
+Beşli H.264 MP4 **3200×480 / 25 FPS**, Stadtmitte 179 kare / 7.16 s,
+Campus 71 kare / 2.84 s; decode sayıları ayrıca doğrulandı. Soldan sağa
+IoU / iki aşamalı / FullBox / CenterOnly / OSNet. Kaynak kareler ve gerçek
+inference kullanılır; sarı GT yalnız değerlendirme/çizim içindir.
+Native `aegisvision_video --config configs/video-reid.toml` yolu da gerçek
+YOLO/OSNet ile ilk üç karede decode, takip, AVI/CSV ve başarılı JSON üretimiyle
+kontrol edildi; bu küçük smoke test doğruluk benchmark'ı değildir.
+
+```powershell
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-reid --kalman --kalman-center --reid artifacts/models/osnet-x0-25-msmt17
+build/search/Release/aegisvision_quality.exe configs/evaluation.toml artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-reid --kalman --kalman-center --reid artifacts/models/osnet-x0-25-msmt17
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-tud/quality-manifest.json outputs/quality-tud-reid
+python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-reid
+```
+
+Var olan sonuçları korumak için yeni dizin seçin. Ayrı validation/test verisi,
+HOTA, mesafe/görünüş ağırlığı kalibrasyonu ve appearance ablation sonraki iş;
+bu iki sekansa bakıp eşiği değiştirerek aynı veriyi bağımsız test diye sunmayın.
+
 ## Protokol kaynakları
 
 - [Resmi COCO veri ve değerlendirme](https://cocodataset.org/#detection-eval).

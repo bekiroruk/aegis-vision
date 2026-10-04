@@ -23,12 +23,12 @@ class QualityReferenceTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
 
-    def fixture(self, motion=False, center=False):
+    def fixture(self, motion=False, center=False, reid=False):
         source_box = [-1.0, 2.0, 10.123456789, 22.123456789]
         manifest = {"frames": 2, "classes": ["person"], "ground_truth": [
             {"frame_index": 1, "id": 5, "bbox": source_box}]}
         names = (["iou", "two_stage"] + (["kalman"] if motion else [])
-                 + (["kalman_center"] if center else []))
+                 + (["kalman_center"] if center else []) + (["kalman_reid"] if reid else []))
         report = {"tracking": {name: {"idf1": None} for name in names}}
         report["tracking"].update({"parameters": {"match_iou": .3}, "protocol": "fixture"})
         frames = []
@@ -44,6 +44,35 @@ class QualityReferenceTests(unittest.TestCase):
         before = deepcopy(inputs)
         self.assertEqual(tracking_frame_inputs(*inputs), ("iou", "two_stage"))
         self.assertEqual(inputs, before)
+
+    def test_reid_optional_and_five_tracker_report_unchanged(self):
+        for motion, center in ((False, False), (True, True)):
+            inputs = self.fixture(motion=motion, center=center, reid=True)
+            before = deepcopy(inputs)
+            expected = ("iou", "two_stage", "kalman", "kalman_center", "kalman_reid") if motion else (
+                "iou", "two_stage", "kalman_reid")
+            self.assertEqual(tracking_frame_inputs(*inputs), expected)
+            self.assertEqual(inputs, before)
+
+    def test_reid_report_and_each_frame_must_agree(self):
+        for side in ("report", "first", "last"):
+            inputs = self.fixture(motion=True, center=True, reid=True)
+            if side == "report":
+                del inputs[1]["tracking"]["kalman_reid"]
+            else:
+                del inputs[2][0 if side == "first" else 1]["kalman_reid"]
+            with self.assertRaisesRegex(ValueError, "Tracker set differs"):
+                tracking_frame_inputs(*inputs)
+
+    def test_reid_objects_and_names_are_strictly_validated(self):
+        inputs = self.fixture(reid=True)
+        inputs[2][0]["kalman_reid"] = [{"id": -1, "bbox": [1, 2, 3, 4]}]
+        with self.assertRaises(ValueError):
+            tracking_frame_inputs(*inputs)
+        inputs = self.fixture(reid=True)
+        inputs[1]["tracking"]["kalman-reid"] = inputs[1]["tracking"].pop("kalman_reid")
+        with self.assertRaisesRegex(ValueError, "Unknown tracking report keys"):
+            tracking_frame_inputs(*inputs)
 
     def test_three_tracker_report_and_raw_detection_provenance(self):
         inputs = self.fixture(motion=True)

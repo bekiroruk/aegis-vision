@@ -1,0 +1,35 @@
+# Experimental person-only, local appearance-assisted tracking.
+# Class, IoU and center-motion gates still apply; this is not global/cross-camera Re-ID.
+version = 1
+
+[pipeline]
+mode = "video"
+
+[detector]
+backend = "yolo_onnx"
+model = "../artifacts/models/yolov8n.onnx"
+confidence_threshold = 0.35
+nms_iou_threshold = 0.45
+input_size = 640
+max_detections = 300
+
+[tracking]
+backend = "kalman-reid"
+iou_threshold = 0.30
+max_missed_frames = 20
+low_confidence = 0.10
+new_track_confidence = 0.50
+# Default gating_mode=center, nominal chi-square(2) 99% gate=9.2103.
+
+[appearance]
+backend = "osnet_onnx"
+bundle = "../artifacts/models/osnet-x0-25-msmt17"
+# Frozen before benchmark runs; no labelled-video tuning.
+max_cosine_distance = 0.20
+weight = 0.50
+momentum = 0.90
+
+[runtime]
+device = "cpu"
+precision = "fp32"
+engine = "opencv-dnn"

@@ -223,6 +223,51 @@ void validate_detection(const Detection& detection) {
         throw std::invalid_argument("Kalman tracker box dimensions must be in (0,1,000,000]");
     }
 }
+
+std::vector<double> normalized_appearance(const std::vector<float>& embedding, std::size_t dimension) {
+    if (embedding.size() != dimension) {
+        throw std::invalid_argument("Kalman appearance embedding dimension mismatch");
+    }
+    std::vector<double> normalized(dimension);
+    double squared_norm = 0.0;
+    for (std::size_t i = 0; i < dimension; ++i) {
+        const double value = embedding[i];
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument("Kalman appearance embeddings must be finite");
+        }
+        normalized[i] = value;
+        squared_norm += value * value;
+    }
+    // Finite float inputs with at most 1024 elements cannot overflow this
+    // double-precision norm, including float subnormal/maximum-magnitude values.
+    if (!std::isfinite(squared_norm) || squared_norm <= 0.0) {
+        throw std::invalid_argument("Kalman appearance embeddings must have a nonzero norm");
+    }
+    const double norm = std::sqrt(squared_norm);
+    for (auto& value : normalized) value /= norm;
+    return normalized;
+}
+
+double cosine_similarity(const std::vector<double>& prototype, const std::vector<double>& observed) {
+    double similarity = 0.0;
+    for (std::size_t i = 0; i < prototype.size(); ++i) similarity += prototype[i] * observed[i];
+    return std::clamp(similarity, -1.0, 1.0);
+}
+
+void update_appearance(std::vector<double>& prototype, const std::vector<double>& observed, double momentum) {
+    double squared_norm = 0.0;
+    for (std::size_t i = 0; i < prototype.size(); ++i) {
+        prototype[i] = momentum * prototype[i] + (1.0 - momentum) * observed[i];
+        squared_norm += prototype[i] * prototype[i];
+    }
+    // Accepted prototypes are not antipodal (cosine distance <= 1), so a
+    // convex EMA with momentum in [0,1) always has a finite nonzero norm.
+    if (!std::isfinite(squared_norm) || squared_norm <= 0.0) {
+        throw std::runtime_error("Kalman appearance prototype normalization failed");
+    }
+    const double norm = std::sqrt(squared_norm);
+    for (auto& value : prototype) value /= norm;
+}
 }  // namespace
 
 KalmanTracker::KalmanTracker(KalmanTrackerConfig config) : config_(config) {
@@ -239,11 +284,26 @@ KalmanTracker::KalmanTracker(KalmanTrackerConfig config) : config_(config) {
     if (config.gate_mode != KalmanGateMode::FullBox && config.gate_mode != KalmanGateMode::CenterOnly) {
         throw std::invalid_argument("Invalid Kalman tracker gate mode");
     }
+    if (config.appearance_dimension == 0 || config.appearance_dimension > 1024 ||
+        !std::isfinite(config.max_cosine_distance) || config.max_cosine_distance < 0.0 || config.max_cosine_distance > 1.0 ||
+        !std::isfinite(config.appearance_weight) || config.appearance_weight < 0.0 || config.appearance_weight > 1.0 ||
+        !std::isfinite(config.appearance_momentum) || config.appearance_momentum < 0.0 || config.appearance_momentum >= 1.0) {
+        throw std::invalid_argument("Invalid Kalman appearance dimension, distance, weight or momentum");
+    }
 }
 
 std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detections) {
     if (detections.size() > max_detections) throw std::invalid_argument("Kalman tracker detection capacity exceeded");
     for (const auto& detection : detections) validate_detection(detection);
+    std::vector<std::vector<double>> appearance;
+    if (config_.use_appearance) {
+        appearance.resize(detections.size());
+        for (std::size_t i = 0; i < detections.size(); ++i) {
+            if (detections[i].score >= config_.low_threshold) {
+                appearance[i] = normalized_appearance(detections[i].embedding, config_.appearance_dimension);
+            }
+        }
+    }
 
     // Work on bounded copies and commit only on success. Malformed observations,
     // assignment failure and allocation failure cannot partially age live state.
@@ -303,7 +363,20 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
                     ++statistics.gate_rejections;
                     continue;
                 }
-                weights[i][j] = overlap;
+                if (config_.use_appearance) {
+                    const double similarity = cosine_similarity(state.appearance, appearance[indices[j]]);
+                    // Exact-match mode allows only rounding-sized norm error.
+                    // For other thresholds the bound remains exact, keeping
+                    // every admitted similarity nonnegative and fusion in [0,1].
+                    const double tolerance = config_.max_cosine_distance == 0.0 ? 1e-12 : 0.0;
+                    if (!std::isfinite(similarity) || 1.0 - similarity > config_.max_cosine_distance + tolerance) {
+                        ++statistics.appearance_rejections;
+                        continue;
+                    }
+                    weights[i][j] = (1.0 - config_.appearance_weight) * overlap + config_.appearance_weight * similarity;
+                } else {
+                    weights[i][j] = overlap;
+                }
             }
         }
         for (const auto& [i, j] : assign_max_weight(weights)) {
@@ -314,6 +387,13 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
             if (!correct(state.mean, state.covariance, measurement(detection.bbox))) {
                 initialize(state.mean, state.covariance, detection.bbox);
                 ++statistics.numerical_resets;
+            }
+            if (config_.use_appearance) {
+                ++statistics.appearance_matches;
+                if (!low_stage) {
+                    update_appearance(state.appearance, appearance[index], config_.appearance_momentum);
+                    ++statistics.appearance_updates;
+                }
             }
             if (low_stage) ++statistics.low_confidence_matches;
             if (state.track.missed_frames > 0) ++statistics.reactivations;
@@ -350,6 +430,7 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
         State state;
         state.track = {next_id++, detection.bbox, detection.label, detection.score, 1, 0};
         initialize(state.mean, state.covariance, detection.bbox);
+        if (config_.use_appearance) state.appearance = appearance[index];
         visible.push_back(state.track);
         working.emplace(state.track.track_id, std::move(state));
         ++statistics.created_tracks;
