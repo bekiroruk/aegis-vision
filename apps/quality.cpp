@@ -17,6 +17,12 @@ int run(const std::vector<std::filesystem::path> &args) {
                          "outputs for selected trackers. Each Kalman flag or --reid bundle adds a panel.\n"
                       << "Re-ID embeddings are timed separately; person-only appearance association, "
                          "not cross-camera identity.\n";
+            std::cout << "Offline switch audit: aegisvision_quality --audit RESULT_DIR NEW_OUTPUT_DIR\n";
+            return 0;
+        }
+        if (args.size() == 4 && args[1] == "--audit") {
+            const auto result = aegisvision::evaluation::audit_tracking_output(args[2], args[3]);
+            std::cout << "Tracking switch audit completed: " << result.at("dataset") << '\n';
             return 0;
         }
         if (args.size() < 4 || args.size() > 9)

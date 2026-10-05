@@ -308,6 +308,29 @@ int main() {
         }
         five_video.release();
         require(five_count == 3, "Five-panel comparison lost frames");
+        const auto audit = aegisvision::evaluation::audit_tracking_output(root / "five", root / "audit");
+        require(audit["trackers"].size() == 5 && audit["trackers"]["kalman_reid"]["events"].empty() &&
+                fs::exists(root / "audit/switch-events.csv"), "Offline audit omitted trackers or CSV");
+        rejects([&] { (void)aegisvision::evaluation::audit_tracking_output(root / "five", root / "audit"); },
+                "Audit overwrote previous output");
+        auto changed_report = five;
+        changed_report["tracking"]["iou"]["id_switches"] = 99;
+        save(root / "five/report.json", changed_report);
+        rejects([&] { (void)aegisvision::evaluation::audit_tracking_output(root / "five", root / "bad-audit"); },
+                "Audit accepted metrics inconsistent with exported frames");
+        require(!fs::exists(root / "bad-audit"), "Invalid audit created output");
+        save(root / "five/report.json", five);
+        auto changed_frames = five_frames;
+        changed_frames[0]["ground_truth"][0]["id"] = -1;
+        save(root / "five/tracking-frames.json", changed_frames);
+        rejects([&] { (void)aegisvision::evaluation::audit_tracking_output(root / "five", root / "bad-audit"); },
+                "Audit accepted invalid GT identity");
+        changed_frames = five_frames;
+        changed_frames[0]["ground_truth"][0]["bbox"][0] = -500;
+        save(root / "five/tracking-frames.json", changed_frames);
+        rejects([&] { (void)aegisvision::evaluation::audit_tracking_output(root / "five", root / "bad-audit"); },
+                "Audit accepted GT differing from manifest");
+        save(root / "five/tracking-frames.json", five_frames);
         require(five["tracking"]["kalman_reid"]["hota"]["mean"] == 1.0 &&
                 five["tracking"]["kalman_reid"]["hota"]["thresholds"].size() == 19,
                 "Native HOTA did not reach benchmark JSON");

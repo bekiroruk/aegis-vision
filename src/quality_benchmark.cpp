@@ -17,6 +17,7 @@
 #include <opencv2/videoio.hpp>
 #include <picosha2.h>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -627,6 +628,97 @@ std::string quality_file_sha256(const fs::path &path) {
     hash.finish();
     return picosha2::get_hash_hex_string(hash);
 }
+Json audit_tracking_output(const fs::path& source, const fs::path& output) {
+    if (fs::exists(output)) throw std::invalid_argument("Audit output must not already exist");
+    const auto report_path = source / "report.json", frames_path = source / "tracking-frames.json";
+    const auto report_hash = quality_file_sha256(report_path), frames_hash = quality_file_sha256(frames_path);
+    std::ifstream report_stream(report_path), frames_stream(frames_path);
+    const auto original = Json::parse(report_stream), exported = Json::parse(frames_stream);
+    if (original.at("version") != 1 || original.at("kind") != "video" || !exported.is_array() ||
+        exported.empty() || exported.size() > TrackingEvaluationLimits::max_frames)
+        throw std::invalid_argument("Expected bounded video benchmark exports");
+    const auto& manifest = original.at("data_provenance");
+    if (manifest.at("frames") != exported.size()) throw std::invalid_argument("Audit frame count differs");
+    std::vector<std::vector<TrackObject>> ground_truth(exported.size());
+    if (!manifest.at("ground_truth").is_array() ||
+        manifest.at("ground_truth").size() > TrackingEvaluationLimits::max_total_detections)
+        throw std::invalid_argument("Audit GT limit exceeded");
+    for (const auto& row : manifest.at("ground_truth"))
+        ground_truth.at(number(row, "frame_index", 1, static_cast<int>(exported.size())) - 1)
+            .push_back({read_id(row.at("id")), read_box(row.at("bbox"))});
+    const auto parse_objects = [](const Json& rows) {
+        if (!rows.is_array() || rows.size() > TrackingEvaluationLimits::max_objects_per_side_per_frame)
+            throw std::invalid_argument("Audit per-frame object limit exceeded");
+        std::vector<TrackObject> objects;
+        for (const auto& row : rows) objects.push_back({read_id(row.at("id")), read_box(row.at("bbox"))});
+        return objects;
+    };
+    Json result{{"version", 1}, {"dataset", original.at("dataset")},
+        {"source_report_sha256", report_hash}, {"source_frames_sha256", frames_hash},
+        {"protocol", "CLEAR IoU .5 switch events; unmatched gap is time since last GT match minus one; GT absence is not proof of occlusion"},
+        {"limitations", "First seen means first emitted prediction, not access to internal tracker birth state. No causal gate/appearance attribution. Observed datasets are not fresh test data."},
+        {"trackers", Json::object()}};
+    std::ostringstream csv;
+    csv << "tracker,frame,gt_id,old_id,new_id,previous_match_frame,unmatched_frames,gt_absent_frames,new_id_first_seen,old_id_visible,match_iou\n";
+    const std::set<std::string> supported{"iou", "two_stage", "kalman", "kalman_center", "kalman_reid"};
+    std::size_t selected = 0;
+    for (const auto& name : supported) {
+        if (!original.at("tracking").contains(name)) continue;
+        ++selected;
+        std::vector<TrackingFrame> frames;
+        for (std::size_t i = 0; i < exported.size(); ++i) {
+            const auto& row = exported.at(i);
+            auto gt = parse_objects(row.at("ground_truth"));
+            const auto& expected = ground_truth.at(i);
+            if (gt.size() != expected.size()) throw std::invalid_argument("Export GT differs from source report");
+            // Benchmark exports preserve manifest order; no guessed remapping.
+            for (std::size_t j = 0; j < gt.size(); ++j)
+                if (gt[j].id != expected[j].id || box(gt[j].bbox) != box(expected[j].bbox))
+                    throw std::invalid_argument("Export GT differs from source report");
+            frames.push_back({number(row, "frame_index", 1, static_cast<int>(exported.size())),
+                              std::move(gt), parse_objects(row.at(name))});
+        }
+        const auto evaluated = evaluate_tracking(frames);
+        const auto metrics = tracking_report(evaluated);
+        const auto& baseline = original.at("tracking").at(name);
+        for (const auto& [key, value] : metrics.items()) {
+            const auto& old = baseline.at(key);
+            if (value.is_number_float() && old.is_number()) {
+                if (std::abs(value.get<double>() - old.get<double>()) > 1e-9)
+                    throw std::invalid_argument("Audit metric differs from source report: " + name + "/" + key);
+            } else if (value != old) throw std::invalid_argument("Audit counts differ from source report");
+        }
+        Json events = Json::array();
+        std::size_t consecutive = 0, after_gap = 0, first_seen = 0, gt_absence = 0;
+        for (const auto& e : evaluated.switch_events) {
+            consecutive += e.unmatched_frames == 0; after_gap += e.unmatched_frames > 0;
+            first_seen += e.prediction_first_seen; gt_absence += e.gt_absent_frames > 0;
+            events.push_back({{"frame", e.frame_index}, {"gt_id", e.ground_truth_id},
+                {"old_id", e.previous_prediction_id}, {"new_id", e.prediction_id},
+                {"previous_match_frame", e.previous_match_frame}, {"unmatched_frames", e.unmatched_frames},
+                {"gt_absent_frames", e.gt_absent_frames}, {"new_id_first_seen", e.prediction_first_seen},
+                {"old_id_visible", e.previous_prediction_visible}, {"match_iou", e.match_iou},
+                {"gt_box", box(e.ground_truth_box)}, {"prediction_box", box(e.prediction_box)}});
+            csv << name << ',' << e.frame_index << ',' << e.ground_truth_id << ','
+                << e.previous_prediction_id << ',' << e.prediction_id << ',' << e.previous_match_frame << ','
+                << e.unmatched_frames << ',' << e.gt_absent_frames << ',' << e.prediction_first_seen << ','
+                << e.previous_prediction_visible << ',' << std::setprecision(17) << e.match_iou << '\n';
+        }
+        result["trackers"][name] = {{"id_switches", evaluated.id_switches},
+            {"consecutive", consecutive}, {"after_unmatched_gap", after_gap},
+            {"with_gt_absence", gt_absence}, {"new_id_first_seen", first_seen}, {"events", events}};
+    }
+    if (!selected) throw std::invalid_argument("No supported tracker in audit input");
+    if (quality_file_sha256(report_path) != report_hash || quality_file_sha256(frames_path) != frames_hash)
+        throw std::runtime_error("Audit inputs changed while reading");
+    if (!fs::create_directory(output)) throw std::invalid_argument("Audit output was concurrently created");
+    write_json(output / "switch-audit.json", result);
+    std::ofstream table(output / "switch-events.csv", std::ios::binary);
+    table << csv.str(); table.close();
+    if (!table) throw std::runtime_error("Could not write switch audit CSV");
+    return result;
+}
+
 Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output,
                            IDetector &detector, const QualityRunConfig &config) {
     if (config.warmup_iterations < 0 || config.warmup_iterations > 30 ||

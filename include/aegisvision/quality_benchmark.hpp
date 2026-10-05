@@ -19,4 +19,8 @@ struct QualityRunConfig {
                                                    IDetector &detector,
                                                    const QualityRunConfig &config = {});
 [[nodiscard]] std::string quality_file_sha256(const std::filesystem::path &path);
+// Offline audit of immutable benchmark exports; no detector/tracker inference.
+// Recomputed CLEAR/Identity must agree with the source report before writing.
+[[nodiscard]] nlohmann::json audit_tracking_output(const std::filesystem::path& source,
+                                                   const std::filesystem::path& output);
 } // namespace aegisvision::evaluation

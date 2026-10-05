@@ -43,6 +43,8 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
   [sözleşme, test ve kullanım](person-appearance.md). Canlı/çoklu kamera/global kimlik yoktur.
 - Native C++ HOTA, 19 IoU eşiği ve resmi TrackEval kontrolü; model/config/eşik
   sabitlemeli proje düzeyinde validation/test ayrımı; [protokol](tracking-transfer.md).
+- Modeli yeniden çalıştırmadan CLEAR kimlik değişimi olayları, ardışık/boşluk
+  ayrımı ve eski rapora karşı kontrol; [hata analizi](tracking-switch-audit.md).
 
 ## Kalan işler — önerilen sıra
 

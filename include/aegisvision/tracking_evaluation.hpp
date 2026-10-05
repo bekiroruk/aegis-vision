@@ -32,6 +32,14 @@ struct TrackingEvaluationLimits {
     static constexpr std::size_t max_frame_pair_comparisons = 25'000'000;
 };
 
+struct IdentitySwitchEvent {
+    int frame_index{}, previous_match_frame{}, unmatched_frames{}, gt_absent_frames{};
+    std::uint64_t ground_truth_id{}, previous_prediction_id{}, prediction_id{};
+    bool prediction_first_seen{}, previous_prediction_visible{};
+    double match_iou{};
+    BoundingBox ground_truth_box, prediction_box;
+};
+
 struct TrackingReport {
     std::size_t frames{};
     double iou_threshold{};
@@ -45,6 +53,9 @@ struct TrackingReport {
     std::uint64_t false_positives{};
     std::uint64_t false_negatives{};
     std::uint64_t id_switches{};
+    // One event per CLEAR switch, in frame/GT order. These describe observable
+    // transitions, not tracker-internal gate failures or physical occlusion.
+    std::vector<IdentitySwitchEvent> switch_events;
     double motp_sum{}; // Sum of IoU for CLEAR's selected matches, not distances.
 
     // Identity counts use a separate, sequence-wide identity assignment.

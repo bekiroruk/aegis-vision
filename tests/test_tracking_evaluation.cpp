@@ -245,6 +245,24 @@ void validation_and_limits() {
     rejects([&] { (void)evaluate_tracking(too_many_detections); },
             "Total detection budget ignored");
 }
+void switch_audit() {
+    const auto report = evaluate_tracking({{1, {object(1)}, {object(10), object(30, 100)}},
+        {2, {object(1)}, {object(20)}}, {3, {object(1)}, {}}, {4, {}, {}},
+        {5, {object(1)}, {object(30), object(20, 100)}}});
+    require(report.id_switches == 2 && report.switch_events.size() == report.id_switches,
+        "Switch audit lost or duplicated CLEAR events");
+    const auto& first = report.switch_events[0];
+    require(first.frame_index == 2 && first.previous_match_frame == 1 && first.unmatched_frames == 0 &&
+        first.gt_absent_frames == 0 && first.ground_truth_id == 1 && first.previous_prediction_id == 10 &&
+        first.prediction_id == 20 && first.prediction_first_seen && !first.previous_prediction_visible &&
+        first.match_iou == 1, "Consecutive switch event differs");
+    const auto& gap = report.switch_events[1];
+    require(gap.frame_index == 5 && gap.previous_match_frame == 2 && gap.unmatched_frames == 2 &&
+        gap.gt_absent_frames == 1 && !gap.prediction_first_seen && gap.previous_prediction_visible,
+        "GT absence, unmatched gap or emitted identity history conflated");
+    require(evaluate_tracking({{1, {object(1)}, {object(10)}}, {2, {}, {}},
+        {3, {object(1)}, {object(10)}}}).switch_events.empty(), "Reappearance without switch emitted event");
+}
 void hota_protocol() {
     const auto perfect = evaluate_hota({{1, {object(1)}, {object(9)}}, {2, {object(1)}, {object(9)}}});
     near(perfect.hota, 1, "Perfect HOTA differs");
@@ -293,6 +311,7 @@ int main() {
         undefined_scores();
         validation_and_limits();
         hota_protocol();
+        switch_audit();
         std::cout << "CLEAR continuity, global identity, gap and bounded-input tests passed\n";
         return 0;
     } catch (const std::exception &error) {

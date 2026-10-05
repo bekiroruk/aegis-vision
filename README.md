@@ -30,6 +30,8 @@ içinde birleştirmektir.
 - Etiketli tam görüntülerde C++ bbox AP; gerçek yaya videosunda CLEAR/IDF1/HOTA,
   aynı tespitlerle beş tracker karşılaştırması ve bağımsız referans doğrulaması;
   [sabit ayarlı yeni sekans değerlendirmesi](docs/tracking-transfer.md)
+- Eski analizlerden C++ kare bazlı kimlik değişimi incelemesi ve CSV/JSON olay listesi;
+  [bulgular ve kullanım](docs/tracking-switch-audit.md)
 - RTSP/FFmpeg canlı kaynak: timeout, reconnect, sınırlı drop-oldest kuyruğu ve oturum bazlı takip
 - Tarayıcıdan süre sınırlı canlı analiz başlatma/durdurma, kutulu JPEG önizleme ve kesinti sayaçları
 - İsteğe bağlı canlı analiz arşivi: kısa MP4 parçaları, disk/parça kotası, SQLite ile

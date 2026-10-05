@@ -103,12 +103,17 @@ TrackingReport evaluate_tracking(const std::vector<TrackingFrame> &frames, doubl
     std::vector<std::vector<std::uint64_t>> potential_matches(
         gt_ids.size(), std::vector<std::uint64_t>(prediction_ids.size(), 0));
     PreviousMatches previous_match, previous_timestep_match;
+    std::map<std::uint64_t, int> last_match_frame, gt_observations, matched_gt_observations;
+    std::set<std::uint64_t> seen_predictions;
     constexpr double epsilon = std::numeric_limits<double>::epsilon();
 
     // Matching follows TrackEval CLEAR's implementation. In particular its
     // early empty-side branches preserve previous_timestep_match; IDSW compares
     // the last match of a GT identity even after arbitrarily long gaps.
     for (const auto &frame : frames) {
+        const auto prior_predictions = seen_predictions;
+        for (const auto& prediction : frame.predictions) seen_predictions.insert(prediction.id);
+        for (const auto& gt : frame.ground_truth) ++gt_observations[gt.id];
         if (frame.ground_truth.empty()) {
             report.false_positives += frame.predictions.size();
             continue;
@@ -155,7 +160,17 @@ TrackingReport evaluate_tracking(const std::vector<TrackingFrame> &frames, doubl
             const auto previous = previous_match.find(gt_id);
             if (previous != previous_match.end() && previous->second != prediction_id) {
                 ++report.id_switches;
+                const auto gap = frame.frame_index - last_match_frame.at(gt_id) - 1;
+                const auto present_between = gt_observations.at(gt_id) - matched_gt_observations.at(gt_id) - 1;
+                const bool old_visible = std::any_of(frame.predictions.begin(), frame.predictions.end(),
+                    [&](const auto& object) { return object.id == previous->second; });
+                report.switch_events.push_back({frame.frame_index, last_match_frame.at(gt_id), gap,
+                    gap - present_between, gt_id, previous->second, prediction_id,
+                    !prior_predictions.contains(prediction_id), old_visible, similarity[row][column],
+                    frame.ground_truth[row].bbox, frame.predictions[column].bbox});
             }
+            last_match_frame[gt_id] = frame.frame_index;
+            matched_gt_observations[gt_id] = gt_observations.at(gt_id);
             previous_match[gt_id] = prediction_id;
             previous_timestep_match[gt_id] = prediction_id;
             report.motp_sum += similarity[row][column];
