@@ -520,6 +520,48 @@ void appearance_validation_and_bounds() {
                 "Valid appearance dimension boundary was rejected");
     }
 }
+void association_trace() {
+    auto config = appearance_config(); config.trace_association = true;
+    KalmanTracker traced(config);
+    config.trace_association = false; KalmanTracker plain(config);
+    const std::vector<std::vector<Detection>> frames{
+        {described(0, {1,0})},
+        {described(0, {1,0}, .9F, "car"), described(100, {1,0}), described(0, {0,1}), described(0, {1,0})},
+        {}, {described(0, {1,0})}};
+    for (std::size_t f = 0; f < frames.size(); ++f) {
+        const auto a = traced.update(frames[f]), b = plain.update(frames[f]);
+        require(a.size() == b.size() && plain.last_trace().empty(), "Trace changed visible tracks or leaked when disabled");
+        for (std::size_t i = 0; i < a.size(); ++i)
+            require(a[i].track_id == b[i].track_id && a[i].bbox.x1 == b[i].bbox.x1 && a[i].age == b[i].age,
+                    "Trace changed tracker state");
+        if (f == 1) {
+            const auto& t = traced.last_trace();
+            require(t.size() == 7 && std::string(t[0].outcome) == "class" && !t[0].iou &&
+                std::string(t[1].outcome) == "iou" && !t[1].motion_distance &&
+                std::string(t[2].outcome) == "appearance" && t[2].cosine_distance == 1.0 &&
+                std::string(t[3].outcome) == "matched" && t[3].detection_index == 3 && t[3].reward == 1.0,
+                "Trace gate order, input mapping or assignment differs");
+        }
+        if (f == 2) require(traced.last_trace().empty(), "Trace retained earlier frame records");
+        if (f == 3) require(std::string(traced.last_trace()[0].stage) == "lost_high", "Lost stage missing");
+    }
+    const auto previous = traced.last_trace().size();
+    rejects([&] { (void)traced.update({described(0, {})}); }, "Invalid feature accepted");
+    require(traced.last_trace().size() == previous, "Failed update changed committed trace");
+    auto motion = gate_config(KalmanGateMode::CenterOnly);
+    motion.trace_association = true; motion.gating_threshold = 1e-8;
+    KalmanTracker moving(motion); (void)moving.update({box(0)}); (void)moving.update({box(1)});
+    require(std::string(moving.last_trace()[0].outcome) == "motion" &&
+            moving.last_trace()[0].motion_distance.value() > motion.gating_threshold &&
+            !moving.last_trace()[0].cosine_distance, "Motion rejection trace differs");
+    motion.gating_threshold = kalman_center_gate99;
+    KalmanTracker competing(motion); (void)competing.update({box(0)});
+    (void)competing.update({box(0), box(0, .8F)});
+    require(std::string(competing.last_trace()[0].outcome) == "matched" &&
+            std::string(competing.last_trace()[1].outcome) == "eligible", "Assignment loser confused with gate rejection");
+    (void)competing.update({box(0, .2F)});
+    require(std::string(competing.last_trace()[0].stage) == "active_low", "Low stage missing");
+}
 }  // namespace
 
 int main() {
@@ -530,6 +572,7 @@ int main() {
         center_gate_size_jitter(); center_gate_nearby_crossing();
         appearance_ambiguous_assignment(); appearance_hard_gates_and_lifecycle(); appearance_high_only_ema();
         appearance_validation_and_bounds();
+        association_trace();
         std::cout << "Kalman motion, active priority, full-box/center gating, appearance association/EMA, recovery and bounded-state tests passed\n";
         return 0;
     } catch (const std::exception& error) {

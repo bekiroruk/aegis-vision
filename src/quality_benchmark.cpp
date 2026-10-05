@@ -329,7 +329,7 @@ struct KalmanComparison {
 };
 Json video_run(const Json &manifest, const fs::path &base, const fs::path &output,
                IDetector &detector, int iterations, bool compare_kalman, bool compare_center,
-               IEmbedder *appearance) {
+               IEmbedder *appearance, bool trace_association) {
     if (manifest.at("classes") != Json::array({"person"}))
         throw std::invalid_argument("Tracking baseline evaluates person only");
     const auto input = local_file(base, text(manifest, "video"));
@@ -366,13 +366,17 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     IoUTracker iou(.30F, 20);
     TwoStageTracker two_stage;
     std::vector<std::unique_ptr<KalmanComparison>> comparisons;
-    if (compare_kalman)
+    if (compare_kalman) {
+        KalmanTrackerConfig full;
+        full.trace_association = trace_association;
         comparisons.push_back(std::make_unique<KalmanComparison>(
-            "kalman", "Kalman active-first", KalmanTrackerConfig{}));
+            "kalman", "Kalman active-first", full));
+    }
     if (compare_center) {
         KalmanTrackerConfig center;
         center.gate_mode = KalmanGateMode::CenterOnly;
         center.gating_threshold = kalman_center_gate99;
+        center.trace_association = trace_association;
         comparisons.push_back(std::make_unique<KalmanComparison>(
             "kalman_center", "Kalman center-only", center));
     }
@@ -381,6 +385,7 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         reid.gate_mode = KalmanGateMode::CenterOnly;
         reid.gating_threshold = kalman_center_gate99;
         reid.use_appearance = true;
+        reid.trace_association = trace_association;
         comparisons.push_back(std::make_unique<KalmanComparison>(
             "kalman_reid", "Kalman + OSNet appearance", reid));
     }
@@ -388,6 +393,12 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     std::vector<double> inference, read_times, iou_times, two_times, appearance_times;
     std::size_t appearance_calls = 0;
     auto exported = Json::array();
+    std::ofstream trace_file;
+    std::size_t trace_bytes = 0;
+    if (trace_association) {
+        trace_file.open(output / "association-trace.jsonl", std::ios::binary);
+        if (!trace_file) throw std::runtime_error("Cannot open association trace");
+    }
     std::ofstream timings(output / "timings.csv"), iou_rows(output / "iou-mot.txt"),
         two_rows(output / "two-stage-mot.txt");
     timings << "frame_index,read_ms,detector_ms,iou_ms,two_stage_ms";
@@ -461,6 +472,21 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
             entry->observed = entry->tracker.update(entry->config.use_appearance ? appearance_low : low);
             entry->last_ms = elapsed(start);
             entry->times.push_back(entry->last_ms);
+            if (trace_association) {
+                Json candidates = Json::array(), observations = Json::array();
+                for (const auto& d : low) observations.push_back({{"bbox", box(d.bbox)}, {"score", d.score}});
+                for (const auto& e : entry->tracker.last_trace())
+                    candidates.push_back({{"track_id", e.track_id}, {"detection_index", e.detection_index},
+                        {"stage", e.stage}, {"outcome", e.outcome}, {"iou", nullable(e.iou)},
+                        {"motion_distance", nullable(e.motion_distance)},
+                        {"cosine_distance", nullable(e.cosine_distance)}, {"reward", nullable(e.reward)}});
+                const auto line = Json{{"frame", i + 1}, {"tracker", entry->name},
+                    {"observations", observations}, {"candidates", candidates}}.dump() + "\n";
+                if (line.size() > 64 * 1024 * 1024 - trace_bytes)
+                    throw std::runtime_error("Association trace exceeds 64 MiB limit");
+                trace_bytes += line.size(); trace_file << line;
+                if (!trace_file) throw std::runtime_error("Association trace write failed");
+            }
         }
         TrackingFrame fa{i + 1, gt.at(i), {}}, fb{i + 1, gt.at(i), {}};
         const auto append = [&](const auto &tracks, auto &frame, std::ofstream &rows) {
@@ -515,6 +541,10 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     if (capture.read(image))
         throw std::runtime_error("Video has frames beyond labelled sequence");
     writer.release();
+    if (trace_association) {
+        trace_file.close();
+        if (!trace_file) throw std::runtime_error("Association trace finalization failed");
+    }
     if (quality_file_sha256(input) != manifest.at("video_sha256").get<std::string>())
         throw std::runtime_error("Video changed during evaluation");
     timings.flush();
@@ -606,6 +636,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         report["limitations"].push_back(
             "Appearance-assisted single-camera association is not full DeepSORT, cross-camera identity "
             "or proof of who a person is. Dataset split and prior exposure are documented in data_provenance.");
+    }
+    if (trace_association) {
+        report["association_trace"] = {{"file", "association-trace.jsonl"}, {"bytes", trace_bytes},
+            {"protocol", "First failed gate in class/IoU/motion/appearance order; eligible means not selected by assignment. Zero-based input detection index; no GT used."}};
+        report["limitations"].push_back("Diagnostic trace enabled: allocation/serialization overhead makes timing unsuitable for speed comparisons.");
     }
     return report;
 }
@@ -735,6 +770,9 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     const auto kind = text(manifest, "kind"), dataset = text(manifest, "dataset");
     if (kind != "images" && kind != "video")
         throw std::invalid_argument("Unknown benchmark kind");
+    if (config.trace_association && (kind != "video" ||
+        (!config.compare_kalman && !config.compare_kalman_center && !config.appearance_embedder)))
+        throw std::invalid_argument("Association trace requires a selected Kalman video tracker");
     if (kind=="images" && (config.compare_kalman || config.compare_kalman_center || config.appearance_embedder))
         throw std::invalid_argument("Kalman comparison requires a video manifest");
     if (manifest.contains("evaluation_protocol")) {
@@ -780,7 +818,8 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     auto report = kind == "images"
                       ? image_run(manifest, base, output, detector, config.warmup_iterations)
                       : video_run(manifest, base, output, detector, config.warmup_iterations,
-                                  config.compare_kalman, config.compare_kalman_center, config.appearance_embedder);
+                                  config.compare_kalman, config.compare_kalman_center, config.appearance_embedder,
+                                  config.trace_association);
     if (quality_file_sha256(manifest_path) != digest)
         throw std::runtime_error("Manifest changed during evaluation");
     report["version"] = 1;

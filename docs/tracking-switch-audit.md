@@ -81,7 +81,8 @@ ffmpeg -hide_banner -loglevel error -nostdin -n -i outputs/quality-campus-reid/c
 
 ## Sonraki kontrollü deney
 
-Önce geliştirme sahnelerinde aday düzeyi IoU/motion/appearance kapı izi ekle.
+Geliştirme sahneleri için [aday düzeyi karar kaydı](association-trace.md) eklendi;
+Campus'taki altı ardışık değişimin eski-ID adayları appearance kapısında eleniyor.
 Ardından appearance gate ve fusion etkisini ayrı ayrı kapatan ablation yap;
 aynı detector ve embedding çıktısını paylaş, FP/FN/HOTA/IDF1'i birlikte ölç.
 Öncelik yukarıdaki ardışık değişim örnekleri; henüz kanıtlanmış tracker düzeltmesi

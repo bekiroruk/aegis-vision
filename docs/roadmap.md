@@ -45,6 +45,8 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
   sabitlemeli proje düzeyinde validation/test ayrımı; [protokol](tracking-transfer.md).
 - Modeli yeniden çalıştırmadan CLEAR kimlik değişimi olayları, ardışık/boşluk
   ayrımı ve eski rapora karşı kontrol; [hata analizi](tracking-switch-audit.md).
+- İsteğe bağlı sınırlı Kalman aday karar kaydı; IoU/hareket/appearance reddi ile
+  assignment kaybını ayırma; [geliştirme sahnesi bulguları](association-trace.md).
 
 ## Kalan işler — önerilen sıra
 

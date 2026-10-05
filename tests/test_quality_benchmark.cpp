@@ -308,6 +308,26 @@ int main() {
         }
         five_video.release();
         require(five_count == 3, "Five-panel comparison lost frames");
+        Detector trace_detector;
+        const auto traced = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "traced", trace_detector,
+            {0, Json::object(), true, true, &appearance, true});
+        require(traced["tracking"] == five["tracking"] &&
+            load(root / "traced/tracking-frames.json") == five_frames &&
+            !fs::exists(root / "five/association-trace.jsonl"), "Trace changed metrics/outputs or default behavior");
+        std::ifstream trace_stream(root / "traced/association-trace.jsonl");
+        std::string trace_line; int trace_rows = 0;
+        while (std::getline(trace_stream, trace_line)) {
+            const auto row = Json::parse(trace_line); ++trace_rows;
+            require(row["observations"].size() == 1 && row["candidates"].size() == 1 &&
+                row["candidates"][0]["detection_index"] == 0, "Trace JSONL mapping differs");
+        }
+        require(trace_rows == 9 && traced["association_trace"]["bytes"] == fs::file_size(root / "traced/association-trace.jsonl"),
+                "Trace missing frame/tracker rows or size");
+        trace_stream.close(); // Release the fixture handle before Windows cleanup.
+        rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "no-tracker-trace", trace_detector,
+            {0, Json::object(), false, false, nullptr, true}); }, "Trace without tracker accepted");
         const auto audit = aegisvision::evaluation::audit_tracking_output(root / "five", root / "audit");
         require(audit["trackers"].size() == 5 && audit["trackers"]["kalman_reid"]["events"].empty() &&
                 fs::exists(root / "audit/switch-events.csv"), "Offline audit omitted trackers or CSV");

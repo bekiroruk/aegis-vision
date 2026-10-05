@@ -4,6 +4,7 @@
 
 #include <array>
 #include <map>
+#include <optional>
 
 namespace aegisvision {
 
@@ -32,6 +33,15 @@ struct KalmanTrackerConfig {
     double max_cosine_distance{0.20};
     double appearance_weight{0.50};
     double appearance_momentum{0.90};
+    bool trace_association{false}; // Diagnostic only; no change to matching.
+};
+
+struct AssociationTrace {
+    std::uint64_t track_id{};
+    std::size_t detection_index{}; // Index in the original update() input.
+    const char* stage{}; // active_high, active_low, lost_high, birth
+    const char* outcome{}; // First rejected gate, eligible, matched, created
+    std::optional<double> iou, motion_distance, cosine_distance, reward;
 };
 
 struct KalmanTrackingStats {
@@ -71,6 +81,9 @@ public:
     explicit KalmanTracker(KalmanTrackerConfig config = {});
     [[nodiscard]] std::vector<Track> update(const std::vector<Detection>& detections) override;
     [[nodiscard]] const KalmanTrackingStats& stats() const noexcept { return stats_; }
+    // Only the last successful update, <= max_tracks*max_detections + max_detections
+    // records. Later gates are absent when an earlier gate rejects the pair.
+    [[nodiscard]] const std::vector<AssociationTrace>& last_trace() const noexcept { return trace_; }
 
 private:
     struct State {
@@ -84,6 +97,7 @@ private:
     std::map<std::uint64_t, State> states_;
     std::uint64_t next_id_{1};
     KalmanTrackingStats stats_;
+    std::vector<AssociationTrace> trace_;
 };
 
 }  // namespace aegisvision

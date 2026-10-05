@@ -310,6 +310,7 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
     auto working = states_;
     auto statistics = stats_;
     auto next_id = next_id_;
+    std::vector<AssociationTrace> trace;
     std::vector<std::uint64_t> active, lost, all_ids;
     std::map<std::uint64_t, BoundingBox> predicted;
     std::map<std::uint64_t, Matrix4> factors;
@@ -348,23 +349,32 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
     std::set<std::size_t> matched_detections;
     std::vector<Track> visible;
     const auto associate = [&](const std::vector<std::uint64_t>& ids,
-                               const std::vector<std::size_t>& indices, bool low_stage) {
+                               const std::vector<std::size_t>& indices, bool low_stage, const char* stage) {
         std::vector<std::vector<double>> weights(ids.size(), std::vector<double>(indices.size(), -1.0));
+        const auto trace_start = trace.size();
         for (std::size_t i = 0; i < ids.size(); ++i) {
             const auto& state = working.at(ids[i]);
             for (std::size_t j = 0; j < indices.size(); ++j) {
                 const auto& detection = detections[indices[j]];
+                AssociationTrace* event = nullptr;
+                if (config_.trace_association) {
+                    trace.push_back({ids[i], indices[j], stage, "class", {}, {}, {}, {}});
+                    event = &trace.back();
+                }
                 if (state.track.label != detection.label) continue;
                 const auto overlap = predicted.at(ids[i]).iou(detection.bbox);
+                if (event) { event->outcome = "iou"; if (std::isfinite(overlap)) event->iou = overlap; }
                 if (!std::isfinite(overlap) || overlap < config_.match_iou) continue;
                 const double distance = squared_distance(state.mean, factors.at(ids[i]),
                                                          measurement(detection.bbox), config_.gate_mode);
+                if (event) { event->outcome = "motion"; if (std::isfinite(distance)) event->motion_distance = distance; }
                 if (!std::isfinite(distance) || distance < 0.0 || distance > config_.gating_threshold) {
                     ++statistics.gate_rejections;
                     continue;
                 }
                 if (config_.use_appearance) {
                     const double similarity = cosine_similarity(state.appearance, appearance[indices[j]]);
+                    if (event) { event->outcome = "appearance"; if (std::isfinite(similarity)) event->cosine_distance = 1.0 - similarity; }
                     // Exact-match mode allows only rounding-sized norm error.
                     // For other thresholds the bound remains exact, keeping
                     // every admitted similarity nonnegative and fusion in [0,1].
@@ -377,9 +387,11 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
                 } else {
                     weights[i][j] = overlap;
                 }
+                if (event) { event->outcome = "eligible"; event->reward = weights[i][j]; }
             }
         }
         for (const auto& [i, j] : assign_max_weight(weights)) {
+            if (config_.trace_association) trace.at(trace_start + i * indices.size() + j).outcome = "matched";
             const auto id = ids[i];
             const auto index = indices[j];
             auto& state = working.at(id);
@@ -403,13 +415,13 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
             matched_detections.insert(index);
         }
     };
-    associate(active, high, false);
+    associate(active, high, false, "active_high");
     std::vector<std::uint64_t> remaining_active;
     for (const auto id : active) if (!matched_ids.contains(id)) remaining_active.push_back(id);
-    associate(remaining_active, low, true);
+    associate(remaining_active, low, true, "active_low");
     std::vector<std::size_t> remaining_high;
     for (const auto index : high) if (!matched_detections.contains(index)) remaining_high.push_back(index);
-    associate(lost, remaining_high, false);
+    associate(lost, remaining_high, false, "lost_high");
 
     for (const auto id : all_ids) {
         if (matched_ids.contains(id)) continue;
@@ -429,6 +441,8 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
         }
         State state;
         state.track = {next_id++, detection.bbox, detection.label, detection.score, 1, 0};
+        if (config_.trace_association)
+            trace.push_back({state.track.track_id, index, "birth", "created", {}, {}, {}, {}});
         initialize(state.mean, state.covariance, detection.bbox);
         if (config_.use_appearance) state.appearance = appearance[index];
         visible.push_back(state.track);
@@ -441,6 +455,7 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
     states_ = std::move(working);
     stats_ = statistics;
     next_id_ = next_id;
+    trace_ = std::move(trace);
     return visible;
 }
 
