@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "protocol": "tracking-transfer-v1",
+  "frozen_before_inference": "2026-10-05",
+  "baseline_commit": "b1ce7aa01283fc10dd02999ca66360b221bb85ac",
+  "development_sequences": ["TUD-Campus", "TUD-Stadtmitte"],
+  "validation_sequences": ["ETH-Sunnyday"],
+  "test_sequences": ["PETS09-S2L1"],
+  "excluded_before_inference": {"KITTI-17": "Preview is 612x184 but annotations are 1224x370; unverified resize/crop geometry. No model results were generated or inspected."},
+  "selection": "Complete public MOT15 training sequences; chosen by duration and static/moving camera metadata before model results. No frame selection or threshold search.",
+  "model_sha256": "0ce2a36db63861d17a81866856ee37283a1e18eeb062369352267f3404239781",
+  "appearance_model_sha256": "32d0f46f48f7a6dd783dc17e4715ad262ad95195ff8496f6c8a1f95cdba730b5",
+  "detector_config_sha256": "9d341c5075a566ccfa50898f6bd502808e485e84da36641c4a33d8ba38428111",
+  "trackers": ["iou", "two_stage", "kalman", "kalman_center", "kalman_reid"],
+  "parameters": {"low": 0.10, "high": 0.35, "new": 0.50, "match_iou": 0.30, "max_missed_frames": 20, "full_box_gate": 13.2767, "center_gate": 9.2103, "max_cosine_distance": 0.20, "appearance_weight": 0.50, "appearance_momentum": 0.90},
+  "metrics": ["CLEAR", "Identity", "HOTA at alpha .05:.05:.95"],
+  "limitations": ["Project-level sequence separation, not the official MOT15 hidden test or a guarantee against pretrained training-data overlap.", "Official reencoded preview pixels, not original challenge JPEGs.", "After this one-shot report these sequences are observed; future tuning requires a fresh untouched test set."]
+}

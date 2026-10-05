@@ -1,2 +1,3 @@
 # Keep the byte-pinned evaluation configuration identical on Windows/Linux.
 configs/evaluation.toml text eol=lf
+configs/tracking-transfer-v1.json text eol=lf

@@ -145,6 +145,20 @@ Json tracking_report(const TrackingReport &r) {
             {"idf1", nullable(r.idf1)},
             {"iou_threshold", r.iou_threshold}};
 }
+Json tracking_report(const std::vector<TrackingFrame>& frames) {
+    auto report = tracking_report(evaluate_tracking(frames));
+    const auto h = evaluate_hota(frames);
+    Json levels = Json::array();
+    for (const auto& a : h.thresholds)
+        levels.push_back({{"alpha", a.alpha}, {"tp", a.true_positives},
+            {"fp", a.false_positives}, {"fn", a.false_negatives}, {"hota", a.hota},
+            {"det_a", a.detection_accuracy}, {"ass_a", a.association_accuracy},
+            {"loc_a", a.localization_accuracy}});
+    report["hota"] = {{"mean", nullable(h.hota)}, {"det_a", nullable(h.detection_accuracy)},
+        {"ass_a", nullable(h.association_accuracy)}, {"loc_a", nullable(h.localization_accuracy)},
+        {"thresholds", levels}, {"protocol", "global alignment then one frame assignment; alpha .05:.05:.95; arithmetic mean of per-alpha HOTA"}};
+    return report;
+}
 struct ImageEntry {
     std::string id;
     int coco_id{}, width{}, height{};
@@ -514,8 +528,8 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
     write_json(output / "tracking-frames.json", exported);
     Json report = {
         {"tracking",
-         {{"iou", tracking_report(evaluate_tracking(iou_frames))},
-          {"two_stage", tracking_report(evaluate_tracking(two_frames))},
+         {{"iou", tracking_report(iou_frames)},
+          {"two_stage", tracking_report(two_frames)},
           {"protocol", "CLEAR and Identity at IoU .5; single person class; same decoded frames "
                        "and detector outputs; independent tracker states; no GT tracker input"},
           {"parameters",
@@ -542,11 +556,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         {"limitations",
          {"Single MOT15 training sequence using official reencoded preview video, not "
           "challenge leaderboard-comparable scores.",
-          "No HOTA, multi-camera or standalone Re-ID retrieval evaluation; no parameter tuning in this run.",
+          "No multi-camera or standalone Re-ID retrieval evaluation; no parameter tuning in this run.",
           "Tracking throughput includes comparison rendering and is not a live RTSP FPS "
           "guarantee."}}};
     for (const auto &entry : comparisons) {
-        report["tracking"][entry->name] = tracking_report(evaluate_tracking(entry->frames));
+        report["tracking"][entry->name] = tracking_report(entry->frames);
         report["tracking"]["parameters"][entry->name] = {
             {"low", .10},
             {"high", .35},
@@ -590,7 +604,7 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
             "model constructor/load/probe excluded; tracker timing excludes embedding; loop includes both";
         report["limitations"].push_back(
             "Appearance-assisted single-camera association is not full DeepSORT, cross-camera identity "
-            "or proof of who a person is. Development sequences were already inspected; not held-out evaluation.");
+            "or proof of who a person is. Dataset split and prior exposure are documented in data_provenance.");
     }
     return report;
 }
@@ -631,6 +645,43 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
         throw std::invalid_argument("Unknown benchmark kind");
     if (kind=="images" && (config.compare_kalman || config.compare_kalman_center || config.appearance_embedder))
         throw std::invalid_argument("Kalman comparison requires a video manifest");
+    if (manifest.contains("evaluation_protocol")) {
+        const auto& protocol = manifest.at("evaluation_protocol");
+        if (kind != "video" || protocol.at("version") != 1 ||
+            protocol.at("protocol") != "tracking-transfer-v1" ||
+            !config.compare_kalman || !config.compare_kalman_center || !config.appearance_embedder ||
+            protocol.at("trackers") != Json::array({"iou", "two_stage", "kalman", "kalman_center", "kalman_reid"}))
+            throw std::invalid_argument("Frozen transfer protocol requires the five selected trackers");
+        const auto& provenance = config.provenance;
+        if (provenance.value("model_sha256", "") != protocol.at("model_sha256").get<std::string>() ||
+            provenance.value("config_sha256", "") != protocol.at("detector_config_sha256").get<std::string>() ||
+            !provenance.contains("appearance") ||
+            provenance.at("appearance").value("model_sha256", "") != protocol.at("appearance_model_sha256").get<std::string>())
+            throw std::invalid_argument("Models/config differ from frozen transfer protocol");
+        const KalmanTrackerConfig defaults;
+        const std::map<std::string, double> actual = {
+            {"low", defaults.low_threshold}, {"high", defaults.high_threshold},
+            {"new", defaults.new_track_threshold}, {"match_iou", defaults.match_iou},
+            {"max_missed_frames", defaults.max_missed_frames}, {"full_box_gate", kalman_box_gate99},
+            {"center_gate", kalman_center_gate99}, {"max_cosine_distance", defaults.max_cosine_distance},
+            {"appearance_weight", defaults.appearance_weight}, {"appearance_momentum", defaults.appearance_momentum}};
+        const auto& parameters = protocol.at("parameters");
+        if (!parameters.is_object() || parameters.size() != actual.size())
+            throw std::invalid_argument("Frozen transfer parameter set differs");
+        for (const auto& [key, value] : actual) {
+            const auto& declared = parameters.at(key);
+            if (!declared.is_number() || !std::isfinite(declared.get<double>()) ||
+                std::abs(declared.get<double>() - value) > 1e-6)
+                throw std::invalid_argument("Tracker defaults differ from frozen transfer protocol");
+        }
+        const auto split = manifest.at("project_split").get<std::string>();
+        if (split != "validation" && split != "test")
+            throw std::invalid_argument("Invalid transfer split");
+        bool selected_sequence = false;
+        for (const auto& sequence : protocol.at(split + "_sequences"))
+            if (manifest.at("video") == sequence.get<std::string>() + "-raw.mp4") selected_sequence = true;
+        if (!selected_sequence) throw std::invalid_argument("Sequence differs from frozen transfer split");
+    }
     const auto digest = quality_file_sha256(manifest_path);
     const auto base = fs::canonical(manifest_path).parent_path();
     fs::create_directories(output);

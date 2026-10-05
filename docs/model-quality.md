@@ -81,7 +81,8 @@ iki aşamalı: low ≥0.10, high ≥0.35, new track ≥0.50. Her ikisi match IoU
 Re-ID sistemi değildir.
 
 Değerlendirme IoU 0.5'te CLEAR TP/FP/FN, ID switch, MOTA/MOTP ve global identity
-eşleştirmesiyle IDTP/IDFP/IDFN, IDF1 raporlar. Bu kapsam HOTA içermez. Global
+eşleştirmesiyle IDTP/IDFP/IDFN, IDF1 raporlar. Bu ilk ölçüm HOTA içermez;
+2026-10-05 eklemesi için [HOTA ve transfer protokolü](tracking-transfer.md). Global
 identity eşleştirmesi yalnızca CLEAR seçilmiş eşleşmelerinden hesaplanmaz;
 eşik üstündeki bütün olası GT/prediction örtüşmeleri kullanılır. Reference
 TrackEval `CLEAR` ve `Identity` uygulamalarının hesaplarıyla ayrıca doğrulanır.
@@ -465,9 +466,10 @@ python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-tud/qual
 python scripts/verify_quality_reference.py mot artifacts/datasets/mot15-campus/quality-manifest.json outputs/quality-campus-reid
 ```
 
-Var olan sonuçları korumak için yeni dizin seçin. Ayrı validation/test verisi,
-HOTA, mesafe/görünüş ağırlığı kalibrasyonu ve appearance ablation sonraki iş;
-bu iki sekansa bakıp eşiği değiştirerek aynı veriyi bağımsız test diye sunmayın.
+Var olan sonuçları korumak için yeni dizin seçin. Ayrı validation/test verisi ve
+HOTA, [2026-10-05 protokolünde](tracking-transfer.md) eklendi. Mesafe/görünüş
+ağırlığı kalibrasyonu ve appearance ablation sonraki iş; bu iki sekansa bakıp
+eşiği değiştirerek aynı veriyi bağımsız test diye sunmayın.
 
 ## Protokol kaynakları
 

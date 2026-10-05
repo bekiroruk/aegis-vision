@@ -10,7 +10,7 @@ import unittest
 
 from verify_quality_reference import (base_inputs, checked_objects, compare_count,
     compare_number, finite, integer, manifest_file, read_json, tracking_frame_inputs,
-    write_success)
+    write_success, compare_hota)
 
 
 def f32(value):
@@ -18,6 +18,25 @@ def f32(value):
 
 
 class QualityReferenceTests(unittest.TestCase):
+    def test_hota_all_thresholds_counts_means_and_grid(self):
+        reference = {name: [value] * 19 for name, value in {
+            "HOTA_TP": 2, "HOTA_FP": 0, "HOTA_FN": 0,
+            "HOTA": 1, "DetA": 1, "AssA": 1, "LocA": 1}.items()}
+        cpp = {"mean": 1, "det_a": 1, "ass_a": 1, "loc_a": 1, "thresholds": [
+            {"alpha": .05 + .05 * i, "tp": 2, "fp": 0, "fn": 0,
+             "hota": 1, "det_a": 1, "ass_a": 1, "loc_a": 1} for i in range(19)]}
+        self.assertEqual(len(compare_hota(cpp, reference, True)["thresholds"]), 19)
+        for change in ("grid", "count", "score", "mean", "missing"):
+            bad = deepcopy(cpp)
+            if change == "grid": bad["thresholds"][3]["alpha"] = .5
+            elif change == "count": bad["thresholds"][5]["fp"] = 1
+            elif change == "score": bad["thresholds"][8]["ass_a"] = .99
+            elif change == "mean": bad["mean"] = .8
+            else: bad["thresholds"].pop()
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                compare_hota(bad, reference, True)
+        for key in ("mean", "det_a", "ass_a", "loc_a"): cpp[key] = None
+        self.assertIsNone(compare_hota(cpp, reference, False)["means"]["mean"]["cpp"])
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

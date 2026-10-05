@@ -308,6 +308,46 @@ int main() {
         }
         five_video.release();
         require(five_count == 3, "Five-panel comparison lost frames");
+        require(five["tracking"]["kalman_reid"]["hota"]["mean"] == 1.0 &&
+                five["tracking"]["kalman_reid"]["hota"]["thresholds"].size() == 19,
+                "Native HOTA did not reach benchmark JSON");
+        auto transfer_movie = movie;
+        transfer_movie["video"] = "fixture-raw.mp4";
+        fs::copy_file(video, root / "fixture-raw.mp4");
+        transfer_movie["project_split"] = "validation";
+        transfer_movie["evaluation_protocol"] = {
+            {"version", 1}, {"protocol", "tracking-transfer-v1"},
+            {"trackers", {"iou", "two_stage", "kalman", "kalman_center", "kalman_reid"}},
+            {"validation_sequences", {"fixture"}}, {"test_sequences", Json::array()},
+            {"model_sha256", "detector"}, {"detector_config_sha256", "config"},
+            {"appearance_model_sha256", "appearance"},
+            {"parameters", {{"low", .1}, {"high", .35}, {"new", .5}, {"match_iou", .3},
+                {"max_missed_frames", 20}, {"full_box_gate", 13.2767}, {"center_gate", 9.2103},
+                {"max_cosine_distance", .2}, {"appearance_weight", .5}, {"appearance_momentum", .9}}}};
+        aegisvision::evaluation::QualityRunConfig frozen{0,
+            {{"model_sha256", "detector"}, {"config_sha256", "config"},
+             {"appearance", {{"model_sha256", "appearance"}}}}, true, true, &appearance};
+        save(root / "transfer.json", transfer_movie);
+        const auto transferred = aegisvision::evaluation::run_quality_benchmark(
+            root / "transfer.json", root / "transfer", five_detector, frozen);
+        require(transferred["data_provenance"]["project_split"] == "validation",
+            "Transfer protocol was not retained in results");
+        for (int change = 0; change < 5; ++change) {
+            auto config = frozen;
+            auto input = transfer_movie;
+            if (change == 0) config.compare_kalman = false;
+            if (change == 1) config.provenance["model_sha256"] = "changed";
+            if (change == 2) config.provenance["appearance"]["model_sha256"] = "changed";
+            if (change == 3) input["evaluation_protocol"]["parameters"]["max_cosine_distance"] = .3;
+            if (change == 4) input["project_split"] = "test";
+            save(root / "bad-transfer.json", input);
+            const auto calls_before = five_detector.calls;
+            rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
+                root / "bad-transfer.json", root / "bad-transfer", five_detector, config); },
+                "Transfer protocol drift was accepted");
+            require(five_detector.calls == calls_before && !fs::exists(root / "bad-transfer"),
+                "Transfer drift was rejected after inference/output creation");
+        }
         rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
             root / "manifest.json", root / "reid-images", detector,
             {0, Json::object(), false, false, &appearance}); }, "Images accepted appearance comparison");

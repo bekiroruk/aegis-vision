@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-02. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+Güncelleme: 2026-10-05. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -41,6 +41,8 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 - Gerçek eğitimli OSNet x0.25 ile 512-boyut kişi görünüşü, native C++ ONNX inference,
   sınırlı high-score EMA prototipi ve isteğe bağlı Kalman association;
   [sözleşme, test ve kullanım](person-appearance.md). Canlı/çoklu kamera/global kimlik yoktur.
+- Native C++ HOTA, 19 IoU eşiği ve resmi TrackEval kontrolü; model/config/eşik
+  sabitlemeli proje düzeyinde validation/test ayrımı; [protokol](tracking-transfer.md).
 
 ## Kalan işler — önerilen sıra
 
@@ -53,8 +55,10 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 
 2. **Model ve tracking kalitesini geliştirme.** Küçük etiketli başlangıç ölçümü,
    AP/CLEAR/IDF1/ID switch ve CPU p50/p95 tamamlandı; [kapsam ve sonuçlar](model-quality.md).
-   Sonraki iş, bağımsız ve daha geniş veriyle sabit train/validation/test ayrımı,
-   HOTA ve hata analizi. Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
+   HOTA ve iki yeni sekans için sabit validation/test protokolü eklendi.
+   Sonraki iş, daha geniş veri, hata analizi ve yalnız geliştirme/validation üzerinde
+   kalibrasyondur; yeni ayarlar için dokunulmamış test verisi gerekir.
+   Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
    İhtiyaca göre
    fine-tuning, metric learning, tam ByteTrack ve appearance ablation/kalibrasyonunu genişlet. Mevcut
    Kalman backend resmi ByteTrack değildir; canlıda zaman-adımı desteği de gerekir. Çoklu kamera için

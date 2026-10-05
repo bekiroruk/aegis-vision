@@ -28,6 +28,11 @@ MOT_GT_ENTRY = "MOT15Labels/train/TUD-Stadtmitte/gt/gt.txt"
 MOT_INFO_ENTRY = "MOT15Labels/train/TUD-Stadtmitte/seqinfo.ini"
 MOT_CAMPUS_VIDEO_SIZE = 936_958
 MOT_CAMPUS_VIDEO_SHA256 = "95590324a7fcd27c6a5babf7e69f763be5709f788ac1a32c986a4431aee14eae"
+# Fixed before inference, 2026-10-05. Full sequences, no selected subclips.
+TRANSFER_SEQUENCES = {
+    "ETH-Sunnyday": (8750726, "1323d5c68c19a4f8acebcce9b6dcce58467d8a84bcec59e9c376930150499a17", 354, 640, 480, 14, "validation"),
+    "PETS09-S2L1": (21357352, "e03a8d3ae953c640a2eb26bdeff8502111e8c5ac11e529f4dc67931dd548557e", 795, 768, 576, 7, "test"),
+}
 JSON_LIMIT = 64 * 1024 * 1024
 
 
@@ -231,13 +236,16 @@ def parse_mot_gt(raw: bytes, frame_count: int) -> tuple[list[dict], int]:
 
 
 def prepare_mot(output_dir: Path, download: bool = False, sequence: str = "TUD-Stadtmitte") -> dict:
-    if sequence not in ("TUD-Stadtmitte", "TUD-Campus"):
-        raise ValueError("Only the two pinned MOT15 sequences are supported")
+    if sequence not in ("TUD-Stadtmitte", "TUD-Campus", *TRANSFER_SEQUENCES):
+        raise ValueError("Only pinned MOT15 sequences are supported")
     campus = sequence == "TUD-Campus"
     video_url = f"https://motchallenge.net/sequenceVideos/{sequence}-raw.mp4"
     video_size = MOT_CAMPUS_VIDEO_SIZE if campus else MOT_VIDEO_SIZE
     video_sha = MOT_CAMPUS_VIDEO_SHA256 if campus else MOT_VIDEO_SHA256
     frame_count = 71 if campus else 179
+    width, height, fps = 640, 480, 25
+    if sequence in TRANSFER_SEQUENCES:
+        video_size, video_sha, frame_count, width, height, fps, split = TRANSFER_SEQUENCES[sequence]
     gt_entry = f"MOT15Labels/train/{sequence}/gt/gt.txt"
     info_entry = f"MOT15Labels/train/{sequence}/seqinfo.ini"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -257,14 +265,14 @@ def prepare_mot(output_dir: Path, download: bool = False, sequence: str = "TUD-S
             raise ValueError("Duplicate ZIP entry names")
         info = zipped.getinfo(gt_entry)
         seq = zipped.getinfo(info_entry)
-        if not 0 < info.file_size <= 100_000 or not 0 < seq.file_size <= 4096:
+        if not 0 < info.file_size <= 512_000 or not 0 < seq.file_size <= 4096:
             raise ValueError("Unexpected MOT15 label entry size")
         gt_raw, seq_raw = zipped.read(info), zipped.read(seq)
     metadata = configparser.ConfigParser()
     metadata.read_string(seq_raw.decode("utf-8-sig"))
     section = metadata["Sequence"]
     if (section.get("name"), section.getint("seqLength"), section.getint("imWidth"),
-            section.getint("imHeight"), section.getint("frameRate")) != (sequence, frame_count, 640, 480, 25):
+            section.getint("imHeight"), section.getint("frameRate")) != (sequence, frame_count, width, height, fps):
         raise ValueError("MOT15 sequence metadata differs from the pinned sequence")
     gt, ignored = parse_mot_gt(gt_raw, frame_count)
     if not gt:
@@ -277,12 +285,23 @@ def prepare_mot(output_dir: Path, download: bool = False, sequence: str = "TUD-S
         "video": video.name, "video_sha256": sha256(video_raw), "labels_zip_sha256": sha256(archive_raw),
         "ground_truth_file": "gt.txt", "ground_truth_sha256": sha256(gt_raw), "seqinfo_sha256": sha256(seq_raw),
         "coordinate_basis": "0-based xyxy, converted from MOT15 1-based xywh by subtracting 1 from x/y only; no clipping",
-        "source_fps": 25, "width": 640, "height": 480, "frames": frame_count, "classes": ["person"],
+        "source_fps": fps, "width": width, "height": height, "frames": frame_count, "classes": ["person"],
         "ignored_gt_rows": ignored, "ground_truth": gt,
         "limitations": ["Official reencoded preview MP4, not the original challenge JPEG sequence.",
             "MOT15 training sequence used only for an exploratory baseline; not held-out test evaluation.",
             "Column 7 controls GT inclusion; world coordinates in columns 8..10 are not class or visibility.",
             "MOT materials historically publish CC BY-NC-SA 3.0; confirm current terms and attribution before reuse."]}
+    if sequence in TRANSFER_SEQUENCES:
+        protocol_path = Path(__file__).resolve().parent.parent / "configs/tracking-transfer-v1.json"
+        protocol_raw = bounded_bytes(protocol_path, 64 * 1024)
+        protocol = json.loads(protocol_raw)
+        if (protocol.get("version") != 1 or protocol.get("protocol") != "tracking-transfer-v1"
+                or sequence not in protocol.get(f"{split}_sequences", [])):
+            raise ValueError("Sequence split disagrees with the frozen transfer protocol")
+        manifest["project_split"] = split
+        manifest["evaluation_protocol"] = protocol
+        manifest["evaluation_protocol_sha256"] = sha256(protocol_raw)
+        manifest["limitations"][1] = "Project-level unseen sequence; public MOT15 training data, not the official hidden test. No guarantee against pretrained data overlap."
     save_manifest(output_dir / "quality-manifest.json", manifest)
     return manifest
 
@@ -297,7 +316,7 @@ def main() -> None:
     mot = commands.add_parser("mot", help="Prepare a bounded, checksum-pinned MOT15 sequence")
     mot.add_argument("output_dir", type=Path)
     mot.add_argument("--download", action="store_true", help="Download the two pinned official HTTPS assets")
-    mot.add_argument("--sequence", choices=("TUD-Stadtmitte", "TUD-Campus"), default="TUD-Stadtmitte")
+    mot.add_argument("--sequence", choices=("TUD-Stadtmitte", "TUD-Campus", *TRANSFER_SEQUENCES), default="TUD-Stadtmitte")
     args = parser.parse_args()
     if args.command == "coco":
         manifest = prepare_coco(args.annotations, args.crop_manifest, args.output)

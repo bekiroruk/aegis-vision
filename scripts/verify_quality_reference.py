@@ -392,6 +392,27 @@ def tracking_data(frames: list[dict], tracker: str, np: Any) -> dict:
     return data
 
 
+def compare_hota(cpp: dict, reference: dict, has_gt: bool) -> dict:
+    if not isinstance(cpp, dict) or not isinstance(cpp.get("thresholds"), list) or len(cpp["thresholds"]) != 19:
+        raise ValueError("HOTA requires all 19 alpha levels")
+    metrics = {"hota": "HOTA", "det_a": "DetA", "ass_a": "AssA", "loc_a": "LocA"}
+    levels = []
+    for index, row in enumerate(cpp["thresholds"]):
+        expected_alpha = .05 + .05 * index
+        if abs(finite(row["alpha"], "HOTA alpha") - expected_alpha) > 1e-12:
+            raise ValueError("HOTA alpha grid differs")
+        checks = {name: compare_count(row[name], reference[field][index], f"HOTA {index} {name}")
+                  for name, field in (("tp", "HOTA_TP"), ("fp", "HOTA_FP"), ("fn", "HOTA_FN"))}
+        checks.update({name: compare_number(row[name], float(reference[field][index]), f"HOTA {index} {name}")
+                       for name, field in metrics.items()})
+        levels.append({"alpha": expected_alpha, "checks": checks})
+    means = {"mean" if name == "hota" else name:
+             compare_number(cpp["mean" if name == "hota" else name],
+                            sum(map(float, reference[field])) / 19 if has_gt else None,
+                            f"HOTA mean {name}") for name, field in metrics.items()}
+    return {"means": means, "thresholds": levels}
+
+
 def mot_validation(manifest_path: Path, result_dir: Path, reference_root: Path) -> tuple[dict, dict]:
     import numpy as np
 
@@ -401,13 +422,19 @@ def mot_validation(manifest_path: Path, result_dir: Path, reference_root: Path) 
         # Restoring its original Python-int alias does not change metric logic.
         np.int = int
         compatibility.append("np.int = int: upstream Identity astype compatibility with NumPy >= 1.24")
-    from trackeval.metrics import CLEAR, Identity
+    from trackeval.metrics import CLEAR, Identity, HOTA
 
     manifest, report, hashes = base_inputs(manifest_path, result_dir, "video")
     frames_path = result_dir / "tracking-frames.json"
     frames = read_json(frames_path)
     hashes[str(frames_path.resolve())] = sha256(frames_path)
     trackers = tracking_frame_inputs(manifest, report, frames)
+    has_hota = any("hota" in report["tracking"][tracker] for tracker in trackers)
+    if has_hota and not all("hota" in report["tracking"][tracker] for tracker in trackers):
+        raise ValueError("HOTA must be reported for every selected tracker")
+    if has_hota and "float" not in np.__dict__:
+        np.float = float
+        compatibility.append("np.float = float: upstream HOTA dtype compatibility with NumPy >= 1.24")
     check_original_mot_gt(manifest_path, manifest, hashes)
     checks: dict[str, Any] = {}
     for tracker in trackers:
@@ -429,6 +456,8 @@ def mot_validation(manifest_path: Path, result_dir: Path, reference_root: Path) 
                   "motp": float(clear["MOTP"]) if has_tp else None,
                   "idf1": float(identity["IDF1"]) if has_gt else None}
         tracker_checks.update({key: compare_number(cpp[key], value, f"{tracker} {key}") for key, value in scores.items()})
+        if has_hota:
+            tracker_checks["hota"] = compare_hota(cpp["hota"], HOTA().eval_sequence(data), has_gt)
         checks[tracker] = tracker_checks
     repo = reference_root / "TrackEval"
     commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
@@ -436,8 +465,8 @@ def mot_validation(manifest_path: Path, result_dir: Path, reference_root: Path) 
                              capture_output=True, text=True).stdout.strip()
     if changed:
         raise ValueError("Reference TrackEval checkout has tracked changes; cannot attest official source")
-    return {"reference": "official TrackEval CLEAR and Identity", "trackeval_commit": commit,
-            "protocol": "IoU .5; unmodified metric algorithms; complete normalized MOT15 GT; contiguous ID remapping",
+    return {"reference": "official TrackEval CLEAR and Identity" + (" and HOTA" if has_hota else ""), "trackeval_commit": commit,
+            "protocol": "CLEAR/Identity IoU .5; HOTA alpha .05:.05:.95 when emitted; unmodified algorithms; complete normalized MOT15 GT; contiguous ID remapping",
             "numpy_compatibility": compatibility, "numpy_version": np.__version__, "checks": checks}, hashes
 
 

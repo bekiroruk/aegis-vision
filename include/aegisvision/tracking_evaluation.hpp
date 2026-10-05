@@ -3,6 +3,7 @@
 #include "aegisvision/domain.hpp"
 
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -69,5 +70,20 @@ struct TrackingReport {
 // protocol (dataset-specific ignore-region/class filtering belongs upstream).
 [[nodiscard]] TrackingReport evaluate_tracking(const std::vector<TrackingFrame> &frames,
                                                double iou_threshold = 0.5);
+
+struct HotaThreshold {
+    double alpha{};
+    std::uint64_t true_positives{}, false_positives{}, false_negatives{};
+    double hota{}, detection_accuracy{}, association_accuracy{}, localization_accuracy{1.0};
+};
+struct HotaReport {
+    std::array<HotaThreshold, 19> thresholds{};
+    // Arithmetic means over alpha=.05:.05:.95; undefined without GT.
+    std::optional<double> hota, detection_accuracy, association_accuracy, localization_accuracy;
+};
+// Independent sequence-wide alignment + per-frame assignment, then threshold
+// filtering. Does not reuse CLEAR matches or run a new assignment per alpha.
+// Same bounded inputs as evaluate_tracking; <=19 million association counters.
+[[nodiscard]] HotaReport evaluate_hota(const std::vector<TrackingFrame>& frames);
 
 } // namespace aegisvision::evaluation

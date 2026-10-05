@@ -112,6 +112,34 @@ class QualityDataTests(unittest.TestCase):
             prepare_mot(output,sequence="../unexpected")
         self.assertFalse(output.exists())
 
+    def test_transfer_sequence_metadata_split_and_complete_gt(self):
+        import prepare_quality_data as prep
+        for name, frames, width, height, fps, split in (
+            ("ETH-Sunnyday", 354, 640, 480, 14, "validation"),
+            ("PETS09-S2L1", 795, 768, 576, 7, "test")):
+            output = self.base / name
+            output.mkdir()
+            video = b"transfer-video-fixture"
+            (output / f"{name}-raw.mp4").write_bytes(video)
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as archive:
+                archive.writestr(f"MOT15Labels/train/{name}/gt/gt.txt", f"{frames},2,1,1,10,20,1,-1,-1,-1\n")
+                archive.writestr(f"MOT15Labels/train/{name}/seqinfo.ini",
+                    f"[Sequence]\nname={name}\nseqLength={frames}\nimWidth={width}\nimHeight={height}\nframeRate={fps}\n")
+            labels = buffer.getvalue()
+            (output / "MOT15Labels.zip").write_bytes(labels)
+            with patch.dict(prep.TRANSFER_SEQUENCES, {name: (len(video), hashlib.sha256(video).hexdigest(), frames, width, height, fps, split)}), \
+                 patch.object(prep, "MOT_LABELS_SIZE", len(labels)), \
+                 patch.object(prep, "MOT_LABELS_SHA256", hashlib.sha256(labels).hexdigest()):
+                result = prepare_mot(output, sequence=name)
+                self.assertEqual(prepare_mot(output, sequence=name), result)
+            self.assertEqual((result["frames"], result["width"], result["height"], result["source_fps"]),
+                             (frames, width, height, fps))
+            self.assertEqual(result["ground_truth"][0]["frame_index"], frames)
+            self.assertEqual(result["project_split"], split)
+            self.assertIn(name, result["evaluation_protocol"][f"{split}_sequences"])
+            self.assertEqual(len(result["evaluation_protocol_sha256"]), 64)
+
     def test_mot15_invalid_rows_rejected(self):
         for raw in (b"1,2,1,1,10,20,1,-1,-1\n", b"0,2,1,1,10,20,1,-1,-1,-1\n",
                     b"1,2.5,1,1,10,20,1,-1,-1,-1\n", b"1,2,1,1,0,20,1,-1,-1,-1\n",

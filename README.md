@@ -27,8 +27,9 @@ içinde birleştirmektir.
 - OpenCV ile dosyadan görsel yükleme, kırpma ve verilen kutuları çizme
 - C++/OpenCV DNN ile YOLOv8 ONNX nesne tespiti, kutulu görsel ve JSON/TSV çıktısı
 - Videoda YOLO + IoU veya iki aşamalı takip, ID etiketli AVI ve kare bazlı CSV raporu
-- Etiketli tam görüntülerde C++ bbox AP; gerçek yaya videosunda CLEAR/IDF1,
-  aynı tespitlerle iki tracker karşılaştırması ve bağımsız referans doğrulaması
+- Etiketli tam görüntülerde C++ bbox AP; gerçek yaya videosunda CLEAR/IDF1/HOTA,
+  aynı tespitlerle beş tracker karşılaştırması ve bağımsız referans doğrulaması;
+  [sabit ayarlı yeni sekans değerlendirmesi](docs/tracking-transfer.md)
 - RTSP/FFmpeg canlı kaynak: timeout, reconnect, sınırlı drop-oldest kuyruğu ve oturum bazlı takip
 - Tarayıcıdan süre sınırlı canlı analiz başlatma/durdurma, kutulu JPEG önizleme ve kesinti sayaçları
 - İsteğe bağlı canlı analiz arşivi: kısa MP4 parçaları, disk/parça kotası, SQLite ile
@@ -91,8 +92,9 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
 5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
-6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1 ve CPU p50/p95;
-   OSNet görünüşü eşleştirmesi eklendi; bağımsız test kümesi, HOTA, tam ByteTrack ve çoklu kamera bekliyor
+6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1/HOTA ve CPU p50/p95;
+   OSNet görünüşü ve sabit validation/test protokolü eklendi; geniş veri, kalibrasyon,
+   tam ByteTrack ve çoklu kamera bekliyor
 7. [Yerel servis, RTSP CLI, canlı ekran ve sınırlı arşiv tamamlandı] C++ HTTP API,
    SQLite kurtarma, canlı/video arama, önizleme ve RTSP reconnect/backpressure;
    kamera PTS, tam FPS/sesli canlı kayıt ve Redis bekliyor

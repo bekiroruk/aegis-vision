@@ -205,4 +205,125 @@ TrackingReport evaluate_tracking(const std::vector<TrackingFrame> &frames, doubl
     return report;
 }
 
+HotaReport evaluate_hota(const std::vector<TrackingFrame>& frames) {
+    if (frames.size() > TrackingEvaluationLimits::max_frames)
+        throw std::invalid_argument("HOTA exceeds the frame limit");
+    IdMap ground_ids, predicted_ids;
+    std::size_t total_gt = 0, total_predictions = 0, pair_work = 0;
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        const auto& frame = frames[i];
+        if (frame.frame_index != static_cast<int>(i + 1))
+            throw std::invalid_argument("HOTA frames must be contiguous and one-based");
+        validate_objects(frame.ground_truth, ground_ids);
+        validate_objects(frame.predictions, predicted_ids);
+        total_gt += frame.ground_truth.size();
+        total_predictions += frame.predictions.size();
+        pair_work += frame.ground_truth.size() * frame.predictions.size();
+        if (total_gt + total_predictions > TrackingEvaluationLimits::max_total_detections ||
+            pair_work > TrackingEvaluationLimits::max_frame_pair_comparisons)
+            throw std::invalid_argument("HOTA exceeds the detection/pair-work limit");
+    }
+    const auto cells = ground_ids.size() * predicted_ids.size();
+    if (cells > TrackingEvaluationLimits::max_identity_pair_cells)
+        throw std::invalid_argument("HOTA exceeds the identity matrix limit");
+    number_identities(ground_ids);
+    number_identities(predicted_ids);
+    HotaReport result;
+    for (std::size_t a = 0; a < result.thresholds.size(); ++a) {
+        auto& row = result.thresholds[a];
+        row.alpha = .05 + .05 * static_cast<double>(a);
+        row.false_negatives = total_gt;
+        row.false_positives = total_predictions;
+    }
+    std::vector<std::size_t> gt_frequency(ground_ids.size()), pred_frequency(predicted_ids.size());
+    std::vector<double> alignment(cells);
+    const auto cell = [&](std::uint64_t gt, std::uint64_t pred) {
+        return ground_ids.at(gt) * predicted_ids.size() + predicted_ids.at(pred);
+    };
+    const auto similarities = [](const TrackingFrame& frame) {
+        std::vector<std::vector<double>> values(frame.ground_truth.size(),
+                                               std::vector<double>(frame.predictions.size()));
+        for (std::size_t g = 0; g < frame.ground_truth.size(); ++g)
+            for (std::size_t p = 0; p < frame.predictions.size(); ++p)
+                values[g][p] = box_iou(frame.ground_truth[g].bbox, frame.predictions[p].bbox);
+        return values;
+    };
+    // Soft overlap evidence is normalized within each frame before accumulating
+    // sequence-wide identity alignment. No alpha or CLEAR continuity enters it.
+    constexpr double epsilon = std::numeric_limits<double>::epsilon();
+    for (const auto& frame : frames) {
+        for (const auto& gt : frame.ground_truth) ++gt_frequency[ground_ids.at(gt.id)];
+        for (const auto& pred : frame.predictions) ++pred_frequency[predicted_ids.at(pred.id)];
+        const auto overlaps = similarities(frame);
+        std::vector<double> row_sum(frame.ground_truth.size()), col_sum(frame.predictions.size());
+        for (std::size_t g = 0; g < row_sum.size(); ++g)
+            for (std::size_t p = 0; p < col_sum.size(); ++p) {
+                row_sum[g] += overlaps[g][p];
+                col_sum[p] += overlaps[g][p];
+            }
+        for (std::size_t g = 0; g < row_sum.size(); ++g)
+            for (std::size_t p = 0; p < col_sum.size(); ++p) {
+                const auto denominator = row_sum[g] + col_sum[p] - overlaps[g][p];
+                if (denominator > epsilon)
+                    alignment[cell(frame.ground_truth[g].id, frame.predictions[p].id)] += overlaps[g][p] / denominator;
+            }
+    }
+    for (std::size_t g = 0; g < gt_frequency.size(); ++g)
+        for (std::size_t p = 0; p < pred_frequency.size(); ++p) {
+            auto& value = alignment[g * predicted_ids.size() + p];
+            value = std::clamp(value / (gt_frequency[g] + pred_frequency[p] - value), 0.0, 1.0);
+        }
+    // uint32 is safe: a pair can match at most max_frames=10,000 times.
+    std::array<std::vector<std::uint32_t>, 19> matched;
+    for (auto& counts : matched) counts.resize(cells);
+    std::array<double, 19> localization_sum{};
+    for (const auto& frame : frames) {
+        if (frame.ground_truth.empty() || frame.predictions.empty()) continue;
+        const auto overlaps = similarities(frame);
+        auto rewards = overlaps;
+        for (std::size_t g = 0; g < frame.ground_truth.size(); ++g)
+            for (std::size_t p = 0; p < frame.predictions.size(); ++p)
+                rewards[g][p] *= alignment[cell(frame.ground_truth[g].id, frame.predictions[p].id)];
+        // Zero-reward pairs have zero overlap and cannot pass any positive alpha.
+        // Our bounded solver omits those pairs; positive rewards maximize the
+        // same frame objective as a full rectangular assignment.
+        for (const auto& [g, p] : assign_max_weight(rewards)) {
+            const auto index = cell(frame.ground_truth[g].id, frame.predictions[p].id);
+            for (std::size_t a = 0; a < result.thresholds.size(); ++a) {
+                auto& row = result.thresholds[a];
+                if (overlaps[g][p] < row.alpha - epsilon) continue;
+                ++row.true_positives;
+                --row.false_positives;
+                --row.false_negatives;
+                ++matched[a][index];
+                localization_sum[a] += overlaps[g][p];
+            }
+        }
+    }
+    double hota_sum = 0, det_sum = 0, ass_sum = 0, loc_sum = 0;
+    for (std::size_t a = 0; a < result.thresholds.size(); ++a) {
+        auto& row = result.thresholds[a];
+        double association_sum = 0;
+        for (std::size_t g = 0; g < gt_frequency.size(); ++g)
+            for (std::size_t p = 0; p < pred_frequency.size(); ++p) {
+                const double count = matched[a][g * predicted_ids.size() + p];
+                association_sum += count * count / std::max(1.0, gt_frequency[g] + pred_frequency[p] - count);
+            }
+        row.association_accuracy = association_sum / std::max<std::uint64_t>(1, row.true_positives);
+        row.detection_accuracy = static_cast<double>(row.true_positives) /
+            std::max<std::uint64_t>(1, row.true_positives + row.false_positives + row.false_negatives);
+        row.localization_accuracy = row.true_positives ? localization_sum[a] / row.true_positives : 1.0;
+        row.hota = std::sqrt(row.detection_accuracy * row.association_accuracy);
+        hota_sum += row.hota; det_sum += row.detection_accuracy;
+        ass_sum += row.association_accuracy; loc_sum += row.localization_accuracy;
+    }
+    if (total_gt) {
+        result.hota = hota_sum / 19;
+        result.detection_accuracy = det_sum / 19;
+        result.association_accuracy = ass_sum / 19;
+        result.localization_accuracy = loc_sum / 19;
+    }
+    return result;
+}
+
 } // namespace aegisvision::evaluation

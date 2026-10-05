@@ -245,6 +245,44 @@ void validation_and_limits() {
     rejects([&] { (void)evaluate_tracking(too_many_detections); },
             "Total detection budget ignored");
 }
+void hota_protocol() {
+    const auto perfect = evaluate_hota({{1, {object(1)}, {object(9)}}, {2, {object(1)}, {object(9)}}});
+    near(perfect.hota, 1, "Perfect HOTA differs");
+    near(perfect.detection_accuracy, 1, "Perfect DetA differs");
+    near(perfect.association_accuracy, 1, "Perfect AssA differs");
+    require(perfect.thresholds.size() == 19 && perfect.thresholds[18].true_positives == 2,
+            "HOTA threshold grid/counts differ");
+    const auto split = evaluate_hota({{1, {object(1)}, {object(9)}},
+        {2, {object(1)}, {object(10)}}, {3, {object(1)}, {object(10)}}});
+    near(split.hota, std::sqrt(5.0 / 9.0), "HOTA identity fragmentation formula differs");
+    near(split.association_accuracy, 5.0 / 9.0, "AssA must weight identity Jaccard by matched detections");
+    std::vector<TrackingFrame> global{{1, {object(1), object(2, 4)}, {object(9, 4), object(10)}}};
+    for (int i = 2; i <= 11; ++i)
+        global.push_back({i, {object(1), object(2, 4)}, {object(9), object(10, 4)}});
+    const auto alignment = evaluate_hota(global);
+    near(alignment.hota, 103.0 / 114.0, "HOTA did not use sequence-wide soft alignment");
+    require(alignment.thresholds[9].true_positives == 20,
+        "HOTA reassigned below-alpha pairs instead of filtering the single global-aligned assignment");
+    const auto partial = evaluate_hota({{1, {object(1)}, {{9, {0, 0, 20, 10}}}}});
+    near(partial.hota, 10.0 / 19.0, "HOTA must mean per-alpha scores and include threshold equality");
+    require(partial.thresholds[9].true_positives == 1 && partial.thresholds[10].false_negatives == 1 &&
+        partial.thresholds[10].false_positives == 1, "HOTA threshold counts differ");
+    const auto misses = evaluate_hota({{1, {object(1)}, {}}, {2, {}, {object(9)}}});
+    near(misses.hota, 0, "Unmatched HOTA differs");
+    near(misses.localization_accuracy, 1, "No-TP LocA convention differs");
+    require(!evaluate_hota({}).hota && !evaluate_hota({{1, {}, {object(9)}}}).hota,
+        "No-GT HOTA must be undefined");
+    near(evaluate_hota({{1, {object(1)}, {}}}).hota, 0, "Empty predictions must produce zero HOTA");
+    rejects([] { (void)evaluate_hota({{2, {object(1)}, {}}}); }, "HOTA accepted noncontiguous frames");
+    rejects([] { (void)evaluate_hota({{1, {object(1), object(1)}, {}}}); }, "HOTA accepted duplicate IDs");
+    rejects([] { (void)evaluate_hota({{1, identities(501), {}}}); }, "HOTA ignored per-frame cap");
+    auto invalid = object(1); invalid.bbox.x1 = std::numeric_limits<float>::quiet_NaN();
+    rejects([&] { (void)evaluate_hota({{1, {invalid}, {}}}); }, "HOTA accepted NaN boxes");
+    const auto large = identities(500);
+    std::vector<TrackingFrame> excess;
+    for (int i = 1; i <= 101; ++i) excess.push_back({i, large, large});
+    rejects([&] { (void)evaluate_hota(excess); }, "HOTA ignored work budget before allocation/assignment");
+}
 } // namespace
 
 int main() {
@@ -254,6 +292,7 @@ int main() {
         gaps_and_switch_history();
         undefined_scores();
         validation_and_limits();
+        hota_protocol();
         std::cout << "CLEAR continuity, global identity, gap and bounded-input tests passed\n";
         return 0;
     } catch (const std::exception &error) {
