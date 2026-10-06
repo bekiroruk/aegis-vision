@@ -26,7 +26,7 @@ from typing import Any
 TOLERANCE = 1e-6
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REFERENCE_ROOT = PROJECT_ROOT / "artifacts/deps/quality-reference"
-TRACKERS = ("iou", "two_stage", "kalman", "kalman_center", "kalman_reid")
+TRACKERS = ("iou", "two_stage", "kalman", "kalman_center", "kalman_reid", "kalman_reid_active")
 REQUIRED_TRACKERS = frozenset(("iou", "two_stage"))
 TRACKING_METADATA = frozenset(("parameters", "protocol"))
 FRAME_METADATA = frozenset(("frame_index", "ground_truth", "raw_detections"))

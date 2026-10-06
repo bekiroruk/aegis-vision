@@ -34,6 +34,8 @@ içinde birleştirmektir.
   [bulgular ve kullanım](docs/tracking-switch-audit.md)
 - İsteğe bağlı aday eşleştirme izi: ilk reddeden kapı, mesafeler, assignment ve
   doğum ilişkisi; [gerçek hata nedenleri](docs/association-trace.md)
+- Altıncı takipçiyle aktif appearance kapısı ablation'ı: ortak tespit/embedding,
+  resmi metrik kontrolü ve karışık sonuçlar; [deney](docs/active-appearance-ablation.md)
 - RTSP/FFmpeg canlı kaynak: timeout, reconnect, sınırlı drop-oldest kuyruğu ve oturum bazlı takip
 - Tarayıcıdan süre sınırlı canlı analiz başlatma/durdurma, kutulu JPEG önizleme ve kesinti sayaçları
 - İsteğe bağlı canlı analiz arşivi: kısa MP4 parçaları, disk/parça kotası, SQLite ile

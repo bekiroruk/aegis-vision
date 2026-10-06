@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-05. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+Güncelleme: 2026-10-06. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -47,6 +47,9 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
   ayrımı ve eski rapora karşı kontrol; [hata analizi](tracking-switch-audit.md).
 - İsteğe bağlı sınırlı Kalman aday karar kaydı; IoU/hareket/appearance reddi ile
   assignment kaybını ayırma; [geliştirme sahnesi bulguları](association-trace.md).
+- Aktif appearance kapısını kaldıran opt-in altıncı takipçi ve iki geliştirme
+  sahnesinde resmi kontrollü ablation; [sonuçlar](active-appearance-ablation.md).
+  Ardışık kopmalar azalırken FP artışı görüldü; varsayılan yapılmadı.
 
 ## Kalan işler — önerilen sıra
 

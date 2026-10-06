@@ -11,6 +11,7 @@ struct QualityRunConfig {
     bool compare_kalman_center{false}; // Independent opt-in, same detections as the old backend.
     IEmbedder *appearance_embedder{nullptr}; // Optional person model; caller retains ownership.
     bool trace_association{false}; // Bounded JSONL diagnostic export, not a speed benchmark.
+    bool active_appearance_ablation{false}; // Sixth tracker; shares existing embeddings.
 };
 // Local immutable manifest, bounded images/video, new/empty output directory.
 // Model loading is outside this function. Ground truth NEVER enters a tracker.

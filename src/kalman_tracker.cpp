@@ -260,9 +260,10 @@ void update_appearance(std::vector<double>& prototype, const std::vector<double>
         prototype[i] = momentum * prototype[i] + (1.0 - momentum) * observed[i];
         squared_norm += prototype[i] * prototype[i];
     }
-    // Accepted prototypes are not antipodal (cosine distance <= 1), so a
-    // convex EMA with momentum in [0,1) always has a finite nonzero norm.
-    if (!std::isfinite(squared_norm) || squared_norm <= 0.0) {
+    // The active-gate ablation can admit antipodal features. At momentum .5
+    // exact cancellation has no direction; retain the current observation.
+    if (squared_norm == 0.0) { prototype = observed; return; }
+    if (!std::isfinite(squared_norm)) {
         throw std::runtime_error("Kalman appearance prototype normalization failed");
     }
     const double norm = std::sqrt(squared_norm);
@@ -271,6 +272,8 @@ void update_appearance(std::vector<double>& prototype, const std::vector<double>
 }  // namespace
 
 KalmanTracker::KalmanTracker(KalmanTrackerConfig config) : config_(config) {
+    if (config.relax_active_appearance && !config.use_appearance)
+        throw std::invalid_argument("Active appearance ablation requires appearance");
     for (float value : {config.low_threshold, config.high_threshold, config.new_track_threshold, config.match_iou}) {
         if (!std::isfinite(value) || value <= 0.0F || value > 1.0F) {
             throw std::invalid_argument("Kalman tracker thresholds must be finite and in (0,1]");
@@ -376,14 +379,17 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
                     const double similarity = cosine_similarity(state.appearance, appearance[indices[j]]);
                     if (event) { event->outcome = "appearance"; if (std::isfinite(similarity)) event->cosine_distance = 1.0 - similarity; }
                     // Exact-match mode allows only rounding-sized norm error.
-                    // For other thresholds the bound remains exact, keeping
-                    // every admitted similarity nonnegative and fusion in [0,1].
+                    // Other hard-gated thresholds remain exact. The opt-in
+                    // active ablation can admit negative cosine; nonpositive
+                    // fused rewards are left unmatched by the solver.
                     const double tolerance = config_.max_cosine_distance == 0.0 ? 1e-12 : 0.0;
-                    if (!std::isfinite(similarity) || 1.0 - similarity > config_.max_cosine_distance + tolerance) {
+                    const bool hard_gate = !config_.relax_active_appearance || state.track.missed_frames > 0;
+                    if (!std::isfinite(similarity) || (hard_gate &&
+                        1.0 - similarity > config_.max_cosine_distance + tolerance)) {
                         ++statistics.appearance_rejections;
                         continue;
                     }
-                    weights[i][j] = (1.0 - config_.appearance_weight) * overlap + config_.appearance_weight * similarity;
+                    weights[i][j] = std::max(0.0, (1.0 - config_.appearance_weight) * overlap + config_.appearance_weight * similarity);
                 } else {
                     weights[i][j] = overlap;
                 }

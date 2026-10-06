@@ -109,3 +109,6 @@ Kontrollü takip eden deney için öncelik: aktif eşleşmedeki appearance hard-
 tek başına kaldırıp mevcut fusion'ı koruyan opt-in varyant; sonra fusion için
 ayrı ablation. Varsayılanı değiştirmeden FP/FN, IDF1 ve HOTA beraber incelenmeli.
 Yeni ayar seçilirse başka, dokunulmamış sekansla değerlendirilmelidir.
+
+2026-10-06: [aktif kapı ablation'ı](active-appearance-ablation.md) tamamlandı.
+Ardışık kopmalar azalırken FP arttı; varsayılan değiştirilmedi.

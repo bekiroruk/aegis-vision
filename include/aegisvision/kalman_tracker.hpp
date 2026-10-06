@@ -34,6 +34,9 @@ struct KalmanTrackerConfig {
     double appearance_weight{0.50};
     double appearance_momentum{0.90};
     bool trace_association{false}; // Diagnostic only; no change to matching.
+    // Experimental ablation: retain cosine hard gate for lost tracks only.
+    // Active high/low still use unchanged geometry gates and fused reward.
+    bool relax_active_appearance{false};
 };
 
 struct AssociationTrace {

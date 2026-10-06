@@ -10,7 +10,7 @@ int run(const std::vector<std::filesystem::path> &args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
             std::cout << "Usage: aegisvision_quality CONFIG.toml MANIFEST.json NEW_OUTPUT_DIR "
-                         "[WARMUP_ITERATIONS] [--kalman] [--kalman-center] [--reid BUNDLE] [--trace]\n"
+                         "[WARMUP_ITERATIONS] [--kalman] [--kalman-center] [--reid BUNDLE] [--trace] [--active-appearance-ablation]\n"
                       << "CPU/FP32 YOLO quality baseline; images=COCO-style AP, "
                          "video=IoU/two-stage CLEAR+IDF1.\n"
                       << "One OpenCV thread. Default five unmeasured warmup calls; same detector "
@@ -25,7 +25,7 @@ int run(const std::vector<std::filesystem::path> &args) {
             std::cout << "Tracking switch audit completed: " << result.at("dataset") << '\n';
             return 0;
         }
-        if (args.size() < 4 || args.size() > 10)
+        if (args.size() < 4 || args.size() > 11)
             throw std::invalid_argument("Use --help for quality benchmark arguments");
         const auto settings = aegisvision::vision::load_application_settings(args[1]);
         if (settings.mode != aegisvision::vision::ApplicationMode::Image)
@@ -34,6 +34,11 @@ int run(const std::vector<std::filesystem::path> &args) {
         std::filesystem::path reid_bundle;
         bool saw_warmup = false;
         for (std::size_t i = 4; i < args.size(); ++i) {
+            if (args[i] == "--active-appearance-ablation") {
+                if (config.active_appearance_ablation) throw std::invalid_argument("Duplicate ablation flag");
+                config.active_appearance_ablation = true;
+                continue;
+            }
             if (args[i] == "--trace") {
                 if (config.trace_association) throw std::invalid_argument("Duplicate --trace");
                 config.trace_association = true;

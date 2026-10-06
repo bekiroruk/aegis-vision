@@ -64,6 +64,15 @@ class QualityReferenceTests(unittest.TestCase):
         self.assertEqual(tracking_frame_inputs(*inputs), ("iou", "two_stage"))
         self.assertEqual(inputs, before)
 
+    def test_active_ablation_sixth_tracker_is_checked(self):
+        inputs = self.fixture(motion=True, center=True, reid=True)
+        inputs[1]["tracking"]["kalman_reid_active"] = {"idf1": None}
+        for frame in inputs[2]: frame["kalman_reid_active"] = []
+        self.assertEqual(tracking_frame_inputs(*inputs),
+            ("iou", "two_stage", "kalman", "kalman_center", "kalman_reid", "kalman_reid_active"))
+        del inputs[2][1]["kalman_reid_active"]
+        with self.assertRaises(ValueError): tracking_frame_inputs(*inputs)
+
     def test_reid_optional_and_five_tracker_report_unchanged(self):
         for motion, center in ((False, False), (True, True)):
             inputs = self.fixture(motion=motion, center=center, reid=True)

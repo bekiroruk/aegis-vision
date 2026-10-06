@@ -520,6 +520,39 @@ void appearance_validation_and_bounds() {
                 "Valid appearance dimension boundary was rejected");
     }
 }
+void active_appearance_ablation() {
+    auto config = appearance_config(); config.relax_active_appearance = true;
+    KalmanTracker active(config), low(config), lost(config);
+    const auto original = described(0, {1,0});
+    const auto changed = described(0, {0,1});
+    const auto id = active.update({original}).front().track_id;
+    require(active.update({changed}).front().track_id == id && active.stats().appearance_updates == 1,
+        "Ablation did not retain geometry-valid active high match/update");
+    (void)low.update({original});
+    require(low.update({described(0, {0,1}, .2F)}).front().track_id == 1 &&
+        low.stats().appearance_updates == 0 && low.stats().low_confidence_matches == 1,
+        "Active low ablation changed prototype update policy");
+    (void)lost.update({original}); (void)lost.update({});
+    require(lost.update({changed}).front().track_id != 1 && lost.stats().appearance_rejections == 1,
+        "Ablation removed lost-track appearance gate");
+    KalmanTracker legacy(appearance_config()); (void)legacy.update({original});
+    require(legacy.update({changed}).front().track_id != 1, "Default active appearance gate changed");
+    config.trace_association = true;
+    KalmanTracker geometry(config); (void)geometry.update({original});
+    (void)geometry.update({described(100, {1,0})});
+    require(std::string(geometry.last_trace()[0].outcome) == "iou", "Ablation bypassed geometry");
+    config.appearance_weight = 0; config.appearance_momentum = .5;
+    KalmanTracker antipodal(config); (void)antipodal.update({original});
+    require(antipodal.update({described(0, {-1,0})}).front().track_id == 1 &&
+        antipodal.update({described(0, {-1,0})}).front().track_id == 1,
+        "Antipodal EMA cancellation corrupted state");
+    config.appearance_weight = 1;
+    KalmanTracker negative(config); (void)negative.update({original});
+    require(negative.update({described(0, {-1,0})}).front().track_id != 1,
+        "Nonpositive fused reward matched");
+    config.use_appearance = false;
+    rejects([&] { KalmanTracker invalid(config); }, "Ablation without appearance accepted");
+}
 void association_trace() {
     auto config = appearance_config(); config.trace_association = true;
     KalmanTracker traced(config);
@@ -573,6 +606,7 @@ int main() {
         appearance_ambiguous_assignment(); appearance_hard_gates_and_lifecycle(); appearance_high_only_ema();
         appearance_validation_and_bounds();
         association_trace();
+        active_appearance_ablation();
         std::cout << "Kalman motion, active priority, full-box/center gating, appearance association/EMA, recovery and bounded-state tests passed\n";
         return 0;
     } catch (const std::exception& error) {
