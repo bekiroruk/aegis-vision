@@ -73,6 +73,9 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract
         run: ctest --test-dir build --output-on-failure
+      - name: Repeat live archive concurrency contract
+        timeout-minutes: 3
+        run: ctest --test-dir build -R '^aegisvision_archive_service$' --repeat until-fail:20 --output-on-failure
       - name: Tokenizer golden references
         run: ./build/aegisvision_search_tests --tokenizer /tmp/clip-tokenizer.json tests/fixtures/clip_tokens.json
       - name: Qdrant upsert and query
