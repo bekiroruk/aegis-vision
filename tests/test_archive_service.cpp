@@ -147,6 +147,11 @@ std::string http_checks(const fs::path& root, InMemoryVectorStore& store) {
     Json archive;
     until([&] {
         archive = json(client.Get("/api/live/archive"));
+        const auto live = json(client.Get("/api/live")).at("session");
+        const auto recording = live.at("archive");
+        if (recording.at("state") == "error" ||
+            (archive.at("segments").size() != 2 && !live.at("active").get<bool>()))
+            throw std::runtime_error("Archive recording incomplete: " + live.dump() + " catalog=" + archive.dump());
         for (const auto& segment : archive.at("segments"))
             if (segment.at("index_state") == "failed")
                 throw std::runtime_error("Archive indexing failed: " + segment.dump());
