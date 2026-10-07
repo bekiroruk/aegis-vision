@@ -328,6 +328,21 @@ void integrity_checks(const fs::path& root, InMemoryVectorStore& store) {
     for (const auto& segment : restored)
         require(segment.at("index_state") == "succeeded" && !segment.at("media_path").is_null(),
             "Restored immutable fixture did not recover catalog status");
+    // Pause publication between the manifest and the atomic seal marker.
+    // A concurrent catalog read must not mislabel an uncommitted clip as corrupt.
+    const auto publishing = root / "media/live-archive/live-1234567890-98/segment-0001";
+    fs::create_directories(publishing);
+    { std::ofstream file(publishing / "manifest.json"); file << "{}"; }
+    require(json(client.Get("/api/live/archive")).at("segments").size() == 2,
+        "Catalog exposed a manifest before its seal was published");
+    { std::ofstream file(publishing / "sealed.json"); file << "{}"; }
+    const auto committed = json(client.Get("/api/live/archive")).at("segments");
+    require(committed.size() == 3,"Catalog hid a damaged committed slot");
+    bool damaged_commit = false;
+    for (const auto& segment : committed)
+        if (segment.at("session_id") == "live-1234567890-98")
+            damaged_commit = segment.at("index_state") == "failed" && segment.at("media_path").is_null();
+    require(damaged_commit,"Invalid sealed slot was not reported as failed");
     // Merely having the approved filename does not make an arbitrary MP4 an
     // owned, verified archive. This new path belongs only to this scratch test.
     const auto unowned_relative = fs::path("live-archive/live-1234567890-99/segment-0001/clip.mp4");

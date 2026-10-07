@@ -45,6 +45,10 @@ zamanıyla karıştırılmamalı.
   içeriğini de kontrol eder. Aynı boyut/mtime ile değiştirilen MP4 sunulmaz.
   Bu kontrol yerel dosyaları işlem sırasında değiştirmeme gereğini veya filesystem
   erişim kontrolünü ortadan kaldırmaz; harici yazıcılara karşı atomik snapshot değildir.
+  Katalog kabul noktası atomik yayımlanan `sealed.json` dosyasıdır; ondan önce
+  yazılan `manifest.json` tek başına bir parçayı görünür yapmaz. Böylece kayıt
+  sürerken HTTP okuması henüz mühürlenmemiş parçayı bozuk olarak etiketlemez.
+  Mühür mevcutken bozuk/eksik manifest yine başarısız parça olarak görünür.
 - Arama payload'ındaki `origin: live_archive` ve live session/source metadata'sı
   ayrı canlı kapsam filtresi sağlar. Sabit parça/kare/model ID'leri yeniden
   indekslemede kayıtları günceller. Genel `index_video` arşiv alt ağacına kabul

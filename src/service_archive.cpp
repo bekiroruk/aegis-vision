@@ -164,16 +164,17 @@ LocalService::Json LocalService::archive_list() const {
         {"config",{{"segment_seconds",config.segment_seconds},{"max_segments_per_session",config.max_segments_per_session},
             {"max_total_segments",config.max_total_segments},{"max_bytes",config.max_bytes}}}};
     if (!config.enabled || !fs::exists(config.root)) return result;
-    // Catalog is the bounded immutable manifest set, not a second unbounded job queue.
+    // sealed.json is the atomic publication marker. manifest.json is written
+    // first, so listing it can expose a still-being-committed clip as corrupt.
     std::vector<std::pair<std::string,int>> keys;
     std::size_t entries=0;
     for (fs::recursive_directory_iterator it(config.root),end;it!=end;++it) {
         if (++entries>4096) throw std::runtime_error("Archive catalog scan limit"); owned(config.root,it->path());
-        if (it->path().filename()!="manifest.json" || !it->is_regular_file()) continue;
+        if (it->path().filename()!="sealed.json" || !it->is_regular_file()) continue;
         const auto relative=it->path().lexically_relative(config.root);
         auto part=relative.begin(); if (part==relative.end()) continue; const auto session=part->string();
         if (++part==relative.end()) continue; const auto segment_name=part->string();
-        if (++part==relative.end() || *part!="manifest.json" || ++part!=relative.end() ||
+        if (++part==relative.end() || *part!="sealed.json" || ++part!=relative.end() ||
             !std::regex_match(session,std::regex("live-[0-9]+-[0-9]+")) ||
             !std::regex_match(segment_name,std::regex("segment-000[1-8]"))) continue;
         keys.emplace_back(session,std::stoi(segment_name.substr(8)));
