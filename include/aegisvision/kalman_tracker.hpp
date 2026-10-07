@@ -12,6 +12,7 @@ enum class KalmanGateMode { FullBox, CenterOnly };
 
 inline constexpr double kalman_box_gate99 = 13.2767;
 inline constexpr double kalman_center_gate99 = 9.2103;
+inline constexpr double guarded_appearance_iou = 0.70;
 
 struct KalmanTrackerConfig {
     float low_threshold{0.10F};
@@ -37,6 +38,9 @@ struct KalmanTrackerConfig {
     // Experimental ablation: retain cosine hard gate for lost tracks only.
     // Active high/low still use unchanged geometry gates and fused reward.
     bool relax_active_appearance{false};
+    // Mutually exclusive alternative: active/high with score >= birth threshold,
+    // IoU >= .70 and one-to-one geometry among ALL live states/eligible inputs.
+    bool guard_active_appearance{false};
 };
 
 struct AssociationTrace {
@@ -61,6 +65,7 @@ struct KalmanTrackingStats {
     std::uint64_t appearance_matches{};
     // Renormalized high-confidence matched EMA updates, excluding low/births.
     std::uint64_t appearance_updates{};
+    std::uint64_t guarded_appearance_bypasses{}; // Candidate pairs, not matches.
 };
 
 // Bounded, class-aware constant-velocity Kalman matching. The eight states are

@@ -329,7 +329,7 @@ struct KalmanComparison {
 };
 Json video_run(const Json &manifest, const fs::path &base, const fs::path &output,
                IDetector &detector, int iterations, bool compare_kalman, bool compare_center,
-               IEmbedder *appearance, bool trace_association, bool active_ablation) {
+               IEmbedder *appearance, bool trace_association, bool active_ablation, bool guarded_ablation) {
     if (manifest.at("classes") != Json::array({"person"}))
         throw std::invalid_argument("Tracking baseline evaluates person only");
     const auto input = local_file(base, text(manifest, "video"));
@@ -388,10 +388,16 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         reid.trace_association = trace_association;
         comparisons.push_back(std::make_unique<KalmanComparison>(
             "kalman_reid", "Kalman + OSNet appearance", reid));
-        if (active_ablation) {
+        if (active_ablation || guarded_ablation) {
             reid.relax_active_appearance = true;
             comparisons.push_back(std::make_unique<KalmanComparison>(
                 "kalman_reid_active", "OSNet active gate ablation", reid));
+        }
+        if (guarded_ablation) {
+            reid.relax_active_appearance = false;
+            reid.guard_active_appearance = true;
+            comparisons.push_back(std::make_unique<KalmanComparison>(
+                "kalman_reid_guarded", "OSNet guarded continuity", reid));
         }
     }
     std::vector<TrackingFrame> iou_frames, two_frames;
@@ -411,7 +417,8 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
         timings << ',' << entry->name << "_ms";
         const auto filename = entry->name == "kalman" ? "kalman-mot.txt"
             : entry->name == "kalman_center" ? "kalman-center-mot.txt"
-            : entry->name == "kalman_reid" ? "kalman-reid-mot.txt" : "kalman-reid-active-mot.txt";
+            : entry->name == "kalman_reid" ? "kalman-reid-mot.txt"
+            : entry->name == "kalman_reid_active" ? "kalman-reid-active-mot.txt" : "kalman-reid-guarded-mot.txt";
         entry->rows.open(output / filename);
         entry->rows << std::setprecision(9);
         if (!entry->rows) throw std::runtime_error("Cannot open Kalman MOT export");
@@ -631,6 +638,11 @@ Json video_run(const Json &manifest, const fs::path &base, const fs::path &outpu
             diagnostics["appearance_matches"] = s.appearance_matches;
             diagnostics["appearance_rejections"] = s.appearance_rejections;
             diagnostics["appearance_updates"] = s.appearance_updates;
+            if (entry->config.guard_active_appearance) {
+                report["tracking"]["parameters"][entry->name]["appearance"]["hard_gates"] =
+                    "cosine gate except active-high, score>=new, IoU>=.70, unique geometry in both directions across all live states and eligible detections";
+                diagnostics["guarded_appearance_bypasses"] = s.guarded_appearance_bypasses;
+            }
         }
     }
     if (appearance) {
@@ -703,7 +715,7 @@ Json audit_tracking_output(const fs::path& source, const fs::path& output) {
         {"trackers", Json::object()}};
     std::ostringstream csv;
     csv << "tracker,frame,gt_id,old_id,new_id,previous_match_frame,unmatched_frames,gt_absent_frames,new_id_first_seen,old_id_visible,match_iou\n";
-    const std::set<std::string> supported{"iou", "two_stage", "kalman", "kalman_center", "kalman_reid", "kalman_reid_active"};
+    const std::set<std::string> supported{"iou", "two_stage", "kalman", "kalman_center", "kalman_reid", "kalman_reid_active", "kalman_reid_guarded"};
     std::size_t selected = 0;
     for (const auto& name : supported) {
         if (!original.at("tracking").contains(name)) continue;
@@ -778,7 +790,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
     const auto kind = text(manifest, "kind"), dataset = text(manifest, "dataset");
     if (kind != "images" && kind != "video")
         throw std::invalid_argument("Unknown benchmark kind");
-    if (config.active_appearance_ablation && (kind != "video" || !config.appearance_embedder ||
+    if ((config.active_appearance_ablation || config.guarded_appearance_ablation) && (kind != "video" || !config.appearance_embedder ||
         manifest.contains("evaluation_protocol")))
         throw std::invalid_argument("Ablation requires appearance video and must not alter frozen transfer protocol");
     if (config.trace_association && (kind != "video" ||
@@ -830,7 +842,7 @@ Json run_quality_benchmark(const fs::path &manifest_path, const fs::path &output
                       ? image_run(manifest, base, output, detector, config.warmup_iterations)
                       : video_run(manifest, base, output, detector, config.warmup_iterations,
                                   config.compare_kalman, config.compare_kalman_center, config.appearance_embedder,
-                                  config.trace_association, config.active_appearance_ablation);
+                                  config.trace_association, config.active_appearance_ablation, config.guarded_appearance_ablation);
     if (quality_file_sha256(manifest_path) != digest)
         throw std::runtime_error("Manifest changed during evaluation");
     report["version"] = 1;

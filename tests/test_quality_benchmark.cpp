@@ -323,6 +323,21 @@ int main() {
         }
         require(aegisvision::evaluation::audit_tracking_output(root / "six", root / "six-audit")
                     ["trackers"].size() == 6, "Audit omitted sixth tracker");
+        Detector seven_detector; Appearance seven_appearance;
+        const auto seven = aegisvision::evaluation::run_quality_benchmark(
+            root / "movie.json", root / "seven", seven_detector,
+            {0, Json::object(), true, true, &seven_appearance, false, false, true});
+        require(seven_detector.calls == 3 && seven_appearance.calls == 3 &&
+            seven["tracking"]["kalman_reid_guarded"]["hota"]["mean"] == 1 &&
+            fs::exists(root / "seven/kalman-reid-guarded-mot.txt"), "Guarded comparison duplicated inference or omitted output");
+        const auto seven_frames = load(root / "seven/tracking-frames.json");
+        for (const auto* name : {"iou", "two_stage", "kalman", "kalman_center", "kalman_reid", "kalman_reid_active"}) {
+            require(seven["tracking"][name] == six["tracking"][name], "Guarded comparison changed earlier metrics");
+            for (std::size_t i = 0; i < seven_frames.size(); ++i)
+                require(seven_frames[i][name] == six_frames[i][name], "Guarded comparison changed earlier outputs");
+        }
+        require(aegisvision::evaluation::audit_tracking_output(root / "seven", root / "seven-audit")
+                    ["trackers"].size() == 7, "Audit omitted guarded tracker");
         rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
             root / "movie.json", root / "no-reid-ablation", six_detector,
             {0, Json::object(), true, true, nullptr, false, true}); }, "Ablation without encoder accepted");
@@ -397,6 +412,11 @@ int main() {
         rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
             root / "transfer.json", root / "transfer-ablation", five_detector, forbidden_ablation); },
             "Ablation silently altered frozen evaluation protocol");
+        forbidden_ablation.active_appearance_ablation = false;
+        forbidden_ablation.guarded_appearance_ablation = true;
+        rejects([&] { (void)aegisvision::evaluation::run_quality_benchmark(
+            root / "transfer.json", root / "transfer-guarded", five_detector, forbidden_ablation); },
+            "Guarded ablation altered frozen protocol");
         for (int change = 0; change < 5; ++change) {
             auto config = frozen;
             auto input = transfer_movie;

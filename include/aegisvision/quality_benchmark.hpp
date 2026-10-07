@@ -12,6 +12,7 @@ struct QualityRunConfig {
     IEmbedder *appearance_embedder{nullptr}; // Optional person model; caller retains ownership.
     bool trace_association{false}; // Bounded JSONL diagnostic export, not a speed benchmark.
     bool active_appearance_ablation{false}; // Sixth tracker; shares existing embeddings.
+    bool guarded_appearance_ablation{false}; // Add guarded variant; also retain sixth baseline.
 };
 // Local immutable manifest, bounded images/video, new/empty output directory.
 // Model loading is outside this function. Ground truth NEVER enters a tracker.

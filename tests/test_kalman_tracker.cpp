@@ -520,6 +520,38 @@ void appearance_validation_and_bounds() {
                 "Valid appearance dimension boundary was rejected");
     }
 }
+void guarded_appearance_ablation() {
+    auto config = appearance_config(); config.guard_active_appearance = true;
+    const auto original = described(0, {1,0}), changed = described(0, {0,1});
+    KalmanTracker unique(config); (void)unique.update({original});
+    require(unique.update({changed}).front().track_id == 1 && unique.stats().guarded_appearance_bypasses == 1,
+            "Strong unique geometry did not preserve active identity");
+    for (const auto score : {.2F, .4F}) {
+        KalmanTracker weak_score(config); (void)weak_score.update({original});
+        require(weak_score.update({described(0, {0,1}, score)}).empty() &&
+            weak_score.stats().guarded_appearance_bypasses == 0, "Guard bypassed score/low-stage protection");
+    }
+    KalmanTracker weak_box(config); (void)weak_box.update({original});
+    require(weak_box.update({described(5, {0,1})}).front().track_id != 1,
+            "Guard bypassed strong-overlap requirement");
+    KalmanTracker row_ambiguous(config); (void)row_ambiguous.update({original});
+    const auto rivals = row_ambiguous.update({changed, described(1, {0,1}, .2F)});
+    require(rivals.size() == 1 && rivals.front().track_id != 1 &&
+        row_ambiguous.stats().guarded_appearance_bypasses == 0, "Low-score rival hidden from uniqueness");
+    KalmanTracker column_ambiguous(config); (void)column_ambiguous.update({original, original});
+    require(column_ambiguous.update({changed}).front().track_id == 3,
+            "Two old tracks were treated as unique geometry");
+    KalmanTracker lost_rival(config); (void)lost_rival.update({original, original});
+    (void)lost_rival.update({original});
+    require(lost_rival.update({changed}).front().track_id == 3,
+            "Lost rival hidden from active uniqueness");
+    KalmanTracker lost(config); (void)lost.update({original}); (void)lost.update({});
+    require(lost.update({changed}).front().track_id != 1, "Guard bypassed lost appearance gate");
+    config.relax_active_appearance = true;
+    rejects([&] { KalmanTracker invalid(config); }, "Conflicting policies accepted");
+    config.relax_active_appearance = false; config.use_appearance = false;
+    rejects([&] { KalmanTracker invalid(config); }, "Guard without encoder accepted");
+}
 void active_appearance_ablation() {
     auto config = appearance_config(); config.relax_active_appearance = true;
     KalmanTracker active(config), low(config), lost(config);
@@ -607,6 +639,7 @@ int main() {
         appearance_validation_and_bounds();
         association_trace();
         active_appearance_ablation();
+        guarded_appearance_ablation();
         std::cout << "Kalman motion, active priority, full-box/center gating, appearance association/EMA, recovery and bounded-state tests passed\n";
         return 0;
     } catch (const std::exception& error) {

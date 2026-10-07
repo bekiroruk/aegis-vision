@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iterator>
 #include <regex>
+#include <source_location>
 
 namespace {
 using namespace aegisvision;
@@ -18,11 +19,12 @@ using namespace std::chrono_literals;
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
-template<class F> void until(F predicate) {
+template<class F> void until(F predicate, const std::source_location location = std::source_location::current()) {
     const auto deadline = std::chrono::steady_clock::now() + 15s;
     while (!predicate()) {
         if (std::chrono::steady_clock::now() >= deadline)
-            throw std::runtime_error("Archive HTTP test timed out");
+            throw std::runtime_error("Archive HTTP test timed out at " + std::string(location.file_name()) +
+                ":" + std::to_string(location.line()));
         std::this_thread::sleep_for(10ms);
     }
 }
@@ -145,6 +147,9 @@ std::string http_checks(const fs::path& root, InMemoryVectorStore& store) {
     Json archive;
     until([&] {
         archive = json(client.Get("/api/live/archive"));
+        for (const auto& segment : archive.at("segments"))
+            if (segment.at("index_state") == "failed")
+                throw std::runtime_error("Archive indexing failed: " + segment.dump());
         if (archive.at("segments").size() != 2) return false;
         for (const auto& segment : archive.at("segments")) if (segment.at("index_state") != "succeeded") return false;
         return true;

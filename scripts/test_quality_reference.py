@@ -73,6 +73,15 @@ class QualityReferenceTests(unittest.TestCase):
         del inputs[2][1]["kalman_reid_active"]
         with self.assertRaises(ValueError): tracking_frame_inputs(*inputs)
 
+    def test_guarded_seventh_tracker_is_checked(self):
+        inputs = self.fixture(motion=True, center=True, reid=True)
+        for name in ("kalman_reid_active", "kalman_reid_guarded"):
+            inputs[1]["tracking"][name] = {"idf1": None}
+            for frame in inputs[2]: frame[name] = []
+        self.assertEqual(len(tracking_frame_inputs(*inputs)), 7)
+        del inputs[2][0]["kalman_reid_guarded"]
+        with self.assertRaises(ValueError): tracking_frame_inputs(*inputs)
+
     def test_reid_optional_and_five_tracker_report_unchanged(self):
         for motion, center in ((False, False), (True, True)):
             inputs = self.fixture(motion=motion, center=center, reid=True)

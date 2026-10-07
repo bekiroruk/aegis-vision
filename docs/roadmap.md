@@ -53,6 +53,12 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 
 ## Kalan işler — önerilen sıra
 
+Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablation.md).
+250 gerçek karede resmi doğrulama tamamlandı; sonuçlar karışık, varsayılan değişmedi.
+Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Öncelikli bakım işi:
+Linux CI canlı arşiv testindeki aralıklı zaman aşımının kök nedenini yeni tanılama
+çıktısıyla çözmek (yerel tekrarların geçmesi uzak ortamı doğrulamaz).
+
 1. **Arama kalitesini genişlet.** CLIP/Qdrant akışı ve referans testleri için
    [arama kılavuzu](search.md); 64 COCO kırpmalı başlangıç ölçümü için
    [benchmark](search-benchmark.md). Klasör/video akışı için [indeksleme](indexing.md).

@@ -272,8 +272,10 @@ void update_appearance(std::vector<double>& prototype, const std::vector<double>
 }  // namespace
 
 KalmanTracker::KalmanTracker(KalmanTrackerConfig config) : config_(config) {
-    if (config.relax_active_appearance && !config.use_appearance)
+    if ((config.relax_active_appearance || config.guard_active_appearance) && !config.use_appearance)
         throw std::invalid_argument("Active appearance ablation requires appearance");
+    if (config.relax_active_appearance && config.guard_active_appearance)
+        throw std::invalid_argument("Appearance ablation policies are mutually exclusive");
     for (float value : {config.low_threshold, config.high_threshold, config.new_track_threshold, config.match_iou}) {
         if (!std::isfinite(value) || value <= 0.0F || value > 1.0F) {
             throw std::invalid_argument("Kalman tracker thresholds must be finite and in (0,1]");
@@ -338,6 +340,23 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
     }
 
     std::vector<std::size_t> high, low;
+    // Count geometry-valid competition before any assignment. Include lost
+    // states and low-score observations: stage ordering must not hide rivals.
+    std::map<std::uint64_t, std::size_t> geometry_degree;
+    std::vector<std::size_t> observation_degree(config_.guard_active_appearance ? detections.size() : 0);
+    if (config_.guard_active_appearance) {
+        for (const auto& [id, state] : working) {
+            for (std::size_t j = 0; j < detections.size(); ++j) {
+                const auto& d = detections[j];
+                if (d.score < config_.low_threshold || d.label != state.track.label) continue;
+                const auto overlap = predicted.at(id).iou(d.bbox);
+                if (!std::isfinite(overlap) || overlap < config_.match_iou) continue;
+                const auto distance = squared_distance(state.mean, factors.at(id), measurement(d.bbox), config_.gate_mode);
+                if (!std::isfinite(distance) || distance < 0 || distance > config_.gating_threshold) continue;
+                ++geometry_degree[id]; ++observation_degree[j];
+            }
+        }
+    }
     for (std::size_t i = 0; i < detections.size(); ++i) {
         if (detections[i].score >= config_.high_threshold) high.push_back(i);
         else if (detections[i].score >= config_.low_threshold) low.push_back(i);
@@ -383,7 +402,13 @@ std::vector<Track> KalmanTracker::update(const std::vector<Detection>& detection
                     // active ablation can admit negative cosine; nonpositive
                     // fused rewards are left unmatched by the solver.
                     const double tolerance = config_.max_cosine_distance == 0.0 ? 1e-12 : 0.0;
-                    const bool hard_gate = !config_.relax_active_appearance || state.track.missed_frames > 0;
+                    const bool guarded = config_.guard_active_appearance && !low_stage &&
+                        state.track.missed_frames == 0 && detection.score >= config_.new_track_threshold &&
+                        overlap >= guarded_appearance_iou && geometry_degree.at(ids[i]) == 1 &&
+                        observation_degree[indices[j]] == 1;
+                    const bool hard_gate = (!config_.relax_active_appearance || state.track.missed_frames > 0) && !guarded;
+                    if (guarded && 1.0 - similarity > config_.max_cosine_distance + tolerance)
+                        ++statistics.guarded_appearance_bypasses;
                     if (!std::isfinite(similarity) || (hard_gate &&
                         1.0 - similarity > config_.max_cosine_distance + tolerance)) {
                         ++statistics.appearance_rejections;
