@@ -58,6 +58,10 @@ Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablatio
 Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Öncelikli bakım işi:
 Linux CI canlı arşiv testindeki aralıklı zaman aşımının kök nedenini yeni tanılama
 çıktısıyla çözmek (yerel tekrarların geçmesi uzak ortamı doğrulamaz).
+Bu incelemede yerelde ayrıca manifest/mühür yayın yarışı yakalandı ve katalog
+yalnız atomik `sealed.json` sonrasında listeleyecek şekilde düzeltildi; araya
+okuma giren durum için deterministik test eklendi. Bu düzeltme, önceki Linux
+zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
 
 1. **Arama kalitesini genişlet.** CLIP/Qdrant akışı ve referans testleri için
    [arama kılavuzu](search.md); 64 COCO kırpmalı başlangıç ölçümü için
