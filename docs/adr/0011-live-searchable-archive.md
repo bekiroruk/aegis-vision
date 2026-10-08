@@ -71,3 +71,23 @@ Yerel servis kimlik doğrulama/TLS içermez; yalnızca loopback'te kullanılmal�
 Disk rezervasyonu uygulama kabul kontrolüdür, OS filesystem kotası değildir;
 dış süreç yazımları, decoder/model dosyaları ve geçici encoder taşması için mutlak
 disk kullanım garantisi sağlamaz.
+
+## 2026-10-08: Yayın ile kota taraması arasındaki yarış
+
+Linux CI'nin 20 tekrarlı HTTP kontrolü beşinci tekrarda hatayı yakaladı:
+ilk parça indekslenirken ikinci parça açıldı, ardından kayıt durumu
+`archive_unsupported_entry` oldu. Önizleme çalışmayı sürdürdü. Önceki test yalnız
+iki parça beklediği için bu durum genel zaman aşımı olarak görünüyordu.
+
+İndeksleyici geçici dosyayı atomik yeniden adlandırırken dizin taraması eski adı
+görebilir; `symlink_status` bunu `not_found` olarak döndürür veya dosya boyutu
+okuması ENOENT verir. Artık bu durumda **tüm tarama** yeni sayaçlarla yeniden
+başlatılır. Toplam üç deneme ve her denemede mevcut 4096 giriş sınırı korunur.
+İzin, alias, desteklenmeyen gerçek dosya türü ve kota hataları yeniden denenmez.
+Üç deneme de değişen ağaçla karşılaşırsa `archive_scan_unstable` ile kayıt durur;
+eksik sayılmış bir tarama kabul edilmez. Bu dış yazıcılara karşı atomik filesystem
+snapshot garantisi değildir.
+
+Deterministik testler geçici kaybolmadan kurtulma, üç denemelik sınır ve
+izin/kota hatalarını saklamama davranışını kapsar. Linux CI ayrıca gerçek HTTP,
+kayıt, encoder ve indeksleme zincirini ilk hatada durarak 20 kez çalıştırır.

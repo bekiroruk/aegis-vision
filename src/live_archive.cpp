@@ -1,4 +1,5 @@
 #include "aegisvision/live_archive.hpp"
+#include "archive_scan_retry.hpp"
 #include <picosha2.h>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>
@@ -59,7 +60,7 @@ void inside(const fs::path& root, const fs::path& path) {
     no_aliases(path);
 }
 struct DiskUsage { std::uintmax_t bytes{}, slot_bytes{}, reserved_bytes{}; int slots{}; };
-DiskUsage scan(const fs::path& root) {
+DiskUsage scan_once(const fs::path& root) {
     no_aliases(root);
     DiskUsage usage;
     if (!fs::exists(root)) return usage;
@@ -71,6 +72,9 @@ DiskUsage scan(const fs::path& root) {
         const auto path = it->path();
         inside(root, path);
         const auto status = it->symlink_status();
+        if (status.type() == fs::file_type::not_found)
+            throw fs::filesystem_error("Archive entry disappeared during scan", path,
+                std::make_error_code(std::errc::no_such_file_or_directory));
         if (fs::is_directory(status)) {
             if (it.depth() == 1) {
                 ++usage.slots; // Includes incomplete/unrecognized slots.
@@ -98,6 +102,9 @@ DiskUsage scan(const fs::path& root) {
         usage.reserved_bytes += std::max(bytes, reservation);
     }
     return usage;
+}
+DiskUsage scan(const fs::path& root) {
+    return detail::stable_archive_scan([&] { return scan_once(root); });
 }
 // Reserved slot bytes plus everything else. Over-sized/unmanaged slot contents
 // still consume real bytes rather than being hidden behind a reservation.

@@ -55,9 +55,11 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 
 Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablation.md).
 250 gerçek karede resmi doğrulama tamamlandı; sonuçlar karışık, varsayılan değişmedi.
-Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Öncelikli bakım işi:
-Linux CI canlı arşiv testindeki aralıklı zaman aşımının kök nedenini yeni tanılama
-çıktısıyla çözmek (yerel tekrarların geçmesi uzak ortamı doğrulamaz).
+Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Linux arşiv testindeki
+aralıklı durma, 20 tekrarlı CI kontrolünde `archive_unsupported_entry` olarak
+yakalandı: geçici dosya yayını sırasında dizin taramasındaki giriş kaybolabiliyor.
+Kaybolma için tüm kota taramasını en fazla üç kez yeniden başlatan düzeltme
+eklendi; kısmi sayaç kabul edilmiyor. Uzak Linux tekrar testi doğrulaması bekleniyor.
 Bu incelemede yerelde ayrıca manifest/mühür yayın yarışı yakalandı ve katalog
 yalnız atomik `sealed.json` sonrasında listeleyecek şekilde düzeltildi; araya
 okuma giren durum için deterministik test eklendi. Bu düzeltme, önceki Linux

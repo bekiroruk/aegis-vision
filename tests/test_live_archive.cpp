@@ -1,4 +1,5 @@
 #include "aegisvision/live_archive.hpp"
+#include "../src/archive_scan_retry.hpp"
 #include <opencv2/videoio.hpp>
 #include <algorithm>
 #include <cmath>
@@ -14,6 +15,43 @@ using aegisvision::vision::LiveFrame;
 using Json = nlohmann::json;
 void require(bool value, const char* reason) { if (!value) throw std::runtime_error(reason); }
 Json read_json(const fs::path& path) { std::ifstream input(path); Json value; input >> value; return value; }
+void scan_retry_contract(const fs::path& root) {
+    using aegisvision::vision::detail::stable_archive_scan;
+    const auto staging = root / "metadata.json.partial", published = root / "metadata.json";
+    { std::ofstream output(staging); output << "fixture"; }
+    int filesystem_calls = 0;
+    const auto bytes = stable_archive_scan([&] {
+        const auto enumerated = fs::exists(staging) ? staging : published;
+        if (++filesystem_calls == 1) fs::rename(staging,published);
+        return fs::file_size(enumerated); // First enumeration is now stale.
+    });
+    require(filesystem_calls == 2 && bytes == 7,"Real renamed file did not restart scan");
+    int calls = 0;
+    const auto result = stable_archive_scan([&] {
+        if (++calls < 3) throw fs::filesystem_error("renamed staging file",
+            std::make_error_code(std::errc::no_such_file_or_directory));
+        return 42;
+    });
+    require(calls == 3 && result == 42,"Transient scan did not restart to a complete result");
+    calls = 0;
+    bool bounded = false;
+    try { stable_archive_scan([&]() -> int {
+        ++calls; throw fs::filesystem_error("still changing",
+            std::make_error_code(std::errc::no_such_file_or_directory));
+    }); } catch (const std::runtime_error& e) { bounded = std::string(e.what()) == "archive_scan_unstable"; }
+    require(bounded && calls == 3,"Unstable scan must fail closed after three attempts");
+    calls = 0;
+    bool denied = false;
+    try { stable_archive_scan([&]() -> int {
+        ++calls; throw fs::filesystem_error("denied",std::make_error_code(std::errc::permission_denied));
+    }); } catch (const fs::filesystem_error& e) { denied = e.code() == std::errc::permission_denied; }
+    require(denied && calls == 1,"Permission failure must not be retried or ignored");
+    calls = 0;
+    bool quota = false;
+    try { stable_archive_scan([&]() -> int { ++calls; throw std::runtime_error("archive_disk_quota"); }); }
+    catch (const std::runtime_error& e) { quota = std::string(e.what()) == "archive_disk_quota"; }
+    require(quota && calls == 1,"Quota failure must not be retried or ignored");
+}
 LiveFrame frame(std::uint64_t sequence, std::int64_t arrival, std::uint64_t session = 1,
     cv::Size size = {160, 120}) {
     LiveFrame value;
@@ -226,7 +264,7 @@ int main() {
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         fs::create_directory(root);
-        boundaries(root); quotas(root); failures(root);
+        scan_retry_contract(root); boundaries(root); quotas(root); failures(root);
         fs::remove_all(root); // Only this owned, uniquely named test scratch root.
         std::cout << "Live archive finite AVI, mapping, quota and failure tests passed\n";
         return 0;
