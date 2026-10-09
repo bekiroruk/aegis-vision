@@ -22,6 +22,8 @@ ServiceConfig prepare(ServiceConfig config) {
         throw std::invalid_argument("Service requires media/web directories and a detector signature");
     config.media_root = fs::canonical(config.media_root);
     config.web_root = fs::canonical(config.web_root);
+    if (bool(config.segmenter) != !config.segmentation_signature.empty())
+        throw std::invalid_argument("Segmentation requires both model and signature");
     if (config.live.archive.enabled) {
         const auto expected = config.media_root / "live-archive";
         if (!config.live.archive.root.empty() && fs::absolute(config.live.archive.root).lexically_normal() != expected)
@@ -34,6 +36,8 @@ ServiceConfig prepare(ServiceConfig config) {
         if (config.persistence.context.empty()) throw std::invalid_argument("Persistent service requires a model/store context");
         config.persistence.context = Json::array({"local-service-v1", utf8(config.media_root),
             config.detector_signature, config.persistence.context}).dump();
+        if (config.segmenter) config.persistence.context = Json::array({config.persistence.context,
+            "segment-frame-v1", config.segmentation_signature}).dump();
     }
     return config;
 }
@@ -98,18 +102,24 @@ LocalService::Json LocalService::validate(Json request) const {
         throw std::invalid_argument("Expected an object with a string type");
     const auto type = request.at("type").get<std::string>();
     const std::set<std::string> allowed = type == "index_video" ?
-        std::set<std::string>{"type", "path", "stride", "max_frames"} : std::set<std::string>{"type", "query", "limit", "scope"};
+        std::set<std::string>{"type", "path", "stride", "max_frames"} : type == "segment_frame" ?
+        std::set<std::string>{"type", "path", "frame_index"} : std::set<std::string>{"type", "query", "limit", "scope"};
     for (const auto& [key, value] : request.items()) {
         (void)value; if (!allowed.contains(key)) throw std::invalid_argument("Unknown field: " + key);
     }
-    if (type == "index_video") {
+    if (type == "index_video" || type == "segment_frame") {
+        if (type == "segment_frame" && !config_.segmenter)
+            throw std::invalid_argument("Segmentation is not configured");
         const auto path = media_path(request.at("path").get<std::string>());
         if (*path.lexically_relative(config_.media_root).begin() == "live-archive")
             throw std::invalid_argument("Use the archive indexing endpoint for managed live clips");
         request["source_bytes"] = fs::file_size(path);
         request["source_modified"] = std::to_string(fs::last_write_time(path).time_since_epoch().count());
-        request["stride"] = integer(request, "stride", 15, 1, 10000);
-        request["max_frames"] = integer(request, "max_frames", 0, 0, 1000000);
+        if (type == "segment_frame") request["frame_index"] = integer(request,"frame_index",0,0,10000);
+        else {
+            request["stride"] = integer(request, "stride", 15, 1, 10000);
+            request["max_frames"] = integer(request, "max_frames", 0, 0, 1000000);
+        }
     } else if (type == "search") {
         const auto query = request.at("query").get<std::string>();
         if (query.empty() || query.size() > 1024 || query.find_first_not_of(" \r\n\t") == std::string::npos)
@@ -118,8 +128,53 @@ LocalService::Json LocalService::validate(Json request) const {
         const auto scope = request.value("scope",std::string("all"));
         if (scope != "all" && scope != "live") throw std::invalid_argument("scope must be all or live");
         request["scope"] = scope;
-    } else throw std::invalid_argument("type must be index_video or search");
+    } else throw std::invalid_argument("type must be index_video, search or segment_frame");
     return request;
+}
+LocalService::Json LocalService::segment_frame(const Json& request, const JobQueue::Progress& progress,
+    const std::atomic_bool& cancel) {
+    if (!config_.segmenter) throw std::runtime_error("Segmentation is not configured");
+    const auto path=media_path(request.at("path").get<std::string>());
+    const auto unchanged=[&] {
+        if (request.at("source_bytes") != fs::file_size(path) || request.at("source_modified") !=
+            std::to_string(fs::last_write_time(path).time_since_epoch().count()))
+            throw std::runtime_error("Video changed after job acceptance; submit a new job");
+    };
+    unchanged();
+    cv::VideoCapture capture(utf8(path));
+    if (!capture.isOpened()) throw std::runtime_error("Cannot open segmentation video");
+    const int index=request.at("frame_index").get<int>();
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    cv::Mat frame;
+    // Sequential decode avoids backend-dependent random seek/frame-number ambiguity.
+    for (int i=0;i<=index;++i) {
+        if (cancel) throw IndexCancelled();
+        if (std::chrono::steady_clock::now()>deadline) throw std::runtime_error("Frame decode deadline exceeded");
+        if (!capture.read(frame) || frame.empty()) throw std::runtime_error("Requested frame unavailable");
+        if (frame.cols>1920 || frame.rows>1920) throw std::runtime_error("Segmentation frame exceeds 1920 pixels per side");
+        if (i%100==0) progress({{"decoded_frames",i+1},{"stage","decoding"}});
+    }
+    if (cancel) throw IndexCancelled();
+    progress({{"decoded_frames",index+1},{"stage","segmenting"}});
+    vision::SegmentationPipeline pipeline(*config_.segmenter); // One frame; no tracking IDs.
+    const auto instances=pipeline.analyze(frame);
+    if (cancel) throw IndexCancelled();
+    Json masks=Json::array();std::size_t runs=0;
+    for (const auto& instance:instances) {
+        if (cancel) throw IndexCancelled();
+        auto counts=vision::mask_rle(instance,frame.size());runs+=counts.size();
+        if (runs>100000) throw std::runtime_error("Mask RLE result exceeds 100000 runs; no partial result returned");
+        const auto& box=instance.detection.bbox;
+        masks.push_back({{"label",instance.detection.label},{"score",instance.detection.score},
+            {"bbox",{box.x1,box.y1,box.x2,box.y2}}, {"mask_pixels",cv::countNonZero(instance.mask)},
+            {"segmentation",{{"size",{frame.rows,frame.cols}},{"counts",std::move(counts)}}}});
+    }
+    unchanged();
+    Json result{{"path",request.at("path")},{"frame_index",index},{"width",frame.cols},{"height",frame.rows},
+        {"model_signature",config_.segmentation_signature},{"tracking",false},
+        {"mask_format","COCO uncompressed column-major RLE"},{"instances",std::move(masks)}};
+    if (result.dump().size()>1024*1024) throw std::runtime_error("Segmentation result exceeds 1 MiB");
+    return result;
 }
 LocalService::Json LocalService::summary(const IndexSummary& value) const {
     return {{"source_id", value.source_id}, {"decoded_frames", value.decoded_frames},
@@ -128,6 +183,7 @@ LocalService::Json LocalService::summary(const IndexSummary& value) const {
 }
 LocalService::Json LocalService::execute(const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
     if (cancel) throw IndexCancelled();
+    if (request.at("type") == "segment_frame") return segment_frame(request,progress,cancel);
     if (request.at("type") == "index_live_archive") return index_archive(request,progress,cancel);
     if (request.at("type") == "index_video") {
         const auto path = media_path(request.at("path").get<std::string>());
@@ -197,7 +253,7 @@ void LocalService::routes() {
         const auto error = jobs_.storage_error();
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
-            {"storage_error", error}}, error.empty() ? 200 : 503);
+            {"segmentation_enabled", config_.segmenter != nullptr}, {"storage_error", error}}, error.empty() ? 200 : 503);
     });
     http_.Get("/api/live/sources", [this](const auto&, auto& response) { reply(response, live_.sources()); });
     http_.Get("/api/live", [this](const auto&, auto& response) { reply(response, {{"session", live_.current()}}); });

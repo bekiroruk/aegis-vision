@@ -14,7 +14,7 @@ içinde birleştirmektir.
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.
-HTTP/RTSP segmentation entegrasyonu henüz yoktur.
+Kuyruk tabanlı HTTP `segment_frame` işi de vardır; canlı RTSP segmentation henüz yoktur.
 
 - Tür güvenli detection, track, frame ve search veri modelleri
 - Değiştirilebilir model ve altyapı portları

@@ -62,6 +62,21 @@ public:
         if (text == "fail") throw std::runtime_error("fixture model error"); return {1, 0};
     }
 };
+class Segmenter : public vision::ISegmenter {
+public:
+    std::atomic_int mode{0};
+    std::vector<vision::InstanceMask> segment(const cv::Mat& image) override {
+        if (mode==1) throw std::runtime_error("fixture segmentation error");
+        if (mode==2) {
+            cv::Mat mask(image.size(),CV_8UC1);
+            for(int y=0;y<mask.rows;++y) for(int x=0;x<mask.cols;++x) mask.at<unsigned char>(y,x)=y%2?255:0;
+            vision::InstanceMask item{{{0,0,float(image.cols),float(image.rows)},"person",.9F,{},{}},
+                {0,0,image.cols,image.rows},mask};
+            return std::vector<vision::InstanceMask>(6,item);
+        }
+        return {{{{10,10,12,12},"person",.9F,{},{}},{10,10,2,2},cv::Mat(2,2,CV_8UC1,cv::Scalar(255))}};
+    }
+};
 class Store : public IVectorStore {
 public:
     std::map<std::string, SearchResult> records;
@@ -99,9 +114,10 @@ std::string http_checks(const fs::path& root) {
     require(writer.isOpened(), "Video fixture unavailable");
     for (int n = 0; n < 10; ++n) writer.write(cv::Mat(120,160,CV_8UC3,cv::Scalar(10,20,30)));
     writer.release();
-    Detector detector; Embedder embedder; Store store;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
+    config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -109,6 +125,7 @@ std::string http_checks(const fs::path& root) {
     httplib::Client client("127.0.0.1", port); client.set_connection_timeout(2); client.set_read_timeout(10);
     until([&] { const auto result = client.Get("/api/health"); return result && result->status == 200; });
     require(response(client.Get("/api/health")).at("history_persistent") == true, "HTTP persistence disabled");
+    require(response(client.Get("/api/health")).at("segmentation_enabled") == true,"Segmentation capability missing");
     require(response(client.Get("/api/media")).at("videos").size() == 1, "Media listing failed");
     const auto dashboard = client.Get("/");
     status(dashboard, 200);
@@ -121,6 +138,30 @@ std::string http_checks(const fs::path& root) {
     (void)response(client.Post("/api/jobs", R"({"type":"index_video","path":"../outside.avi"})", "application/json"), 400);
     (void)response(client.Post("/api/jobs", R"({"type":"index_video","path":"test.avi","stride":0})", "application/json"), 400);
     (void)response(client.Get("/api/jobs/1-999"), 404);
+    for (const auto& invalid : std::vector<Json>{
+        {{"type","segment_frame"},{"path","../outside.avi"}},
+        {{"type","segment_frame"},{"path","test.avi"},{"frame_index",-1}},
+        {{"type","segment_frame"},{"path","test.avi"},{"frame_index",10001}},
+        {{"type","segment_frame"},{"path","test.avi"},{"frame_index",.5}},
+        {{"type","segment_frame"},{"path","test.avi"},{"track",true}}})
+        (void)response(client.Post("/api/jobs",invalid.dump(),"application/json"),400);
+    const Json segmentation{{"type","segment_frame"},{"path","test.avi"},{"frame_index",2}};
+    const auto segmented=completed(client,segmentation);
+    require(segmented.at("state")=="succeeded","Queued segmentation failed");
+    const auto& masks=segmented.at("result").at("instances");
+    require(masks.size()==1 && masks[0].at("mask_pixels")==4 &&
+        masks[0].at("segmentation").at("counts")==Json::array({1210,2,118,2,17868}),"HTTP mask RLE differs");
+    require(segmented.at("result").at("frame_index")==2 && segmented.at("result").at("tracking")==false,
+        "Single-frame semantics differ");
+    require(completed(client,{{"type","segment_frame"},{"path","test.avi"},{"frame_index",10}}).at("state")=="failed",
+        "Out-of-video frame accepted");
+    segmenter.mode=1;
+    require(completed(client,segmentation).at("state")=="failed","Segmentation model failure hidden");
+    segmenter.mode=2;
+    require(completed(client,segmentation).at("error").get<std::string>().find("100000 runs")!=std::string::npos,
+        "Oversized mask result accepted");
+    segmenter.mode=0;
+    require(completed(client,segmentation).at("state")=="succeeded","Worker did not recover from segmentation failure");
     { std::ofstream outside(root / "outside.avi"); outside << "outside"; }
     std::error_code error;
     fs::create_symlink(root / "outside.avi", root / "media/escape.avi", error);
@@ -146,18 +187,26 @@ std::string http_checks(const fs::path& root) {
     struct Release { Embedder& embedder; ~Release() { embedder.released = true; } } release{embedder};
     (void)response(client.Post("/api/jobs", R"({"type":"search","query":"hold"})", "application/json"), 202);
     until([&] { return embedder.started.load(); });
+    const auto cancelled_mask = response(client.Post("/api/jobs",segmentation.dump(),"application/json"),202).at("id").get<std::string>();
+    (void)response(client.Post("/api/jobs/"+cancelled_mask+"/cancel","{}","application/json"));
+    require(response(client.Get("/api/jobs/"+cancelled_mask)).at("state")=="cancelled","Queued mask cancellation failed");
     const auto changed = response(client.Post("/api/jobs", video.dump(), "application/json"), 202).at("id").get<std::string>();
+    const auto changed_mask = response(client.Post("/api/jobs",segmentation.dump(),"application/json"),202).at("id").get<std::string>();
     fs::last_write_time(path, fs::last_write_time(path) + std::chrono::seconds(1));
     embedder.released = true;
     Json changed_job;
     until([&] { changed_job = response(client.Get("/api/jobs/" + changed)); return changed_job.at("state") == "failed"; });
     require(changed_job.at("error").get<std::string>().find("Video changed") != std::string::npos, "Changed queued input silently replayed");
+    until([&] { return response(client.Get("/api/jobs/"+changed_mask)).at("state")=="failed"; });
+    require(response(client.Get("/api/jobs/"+changed_mask)).at("error").get<std::string>().find("Video changed")!=std::string::npos,
+        "Segmentation read changed queued input");
     return found.at("id").get<std::string>();
 }
 void http_restart(const fs::path& root, const std::string& search_id) {
-    Detector detector; Embedder embedder; Store store;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
+    config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -168,13 +217,34 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     require(restored.at("state") == "succeeded" && restored.at("result").at("results").size() == 4 &&
         restored.at("attempts") == 1, "HTTP completed search lost or rerun after restart");
     status(client.Get("/api/preview/" + search_id + "/0.jpg"), 200);
+    bool restored_mask=false;
+    const auto history=response(client.Get("/api/jobs"));
+    for (const auto& job:history.at("jobs")) {
+        if (job.at("request").at("type")=="segment_frame" && job.at("state")=="succeeded") {
+            require(job.at("attempts")==1 && job.at("result").at("instances")[0].at("mask_pixels")==4,
+                "Completed mask lost or rerun after restart");
+            restored_mask=true;
+        }
+    }
+    require(restored_mask,"Persisted mask job missing");
+}
+void segmentation_disabled(const fs::path& root) {
+    Detector detector; Embedder embedder; Store store;
+    ServiceConfig config{root/"media",fs::path(__FILE__).parent_path().parent_path()/"web","fixture-detector"};
+    LocalService service(detector,embedder,store,config);
+    const int port=service.bind(0);std::thread server([&]{service.listen();});
+    struct Guard {LocalService& s;std::thread& t;~Guard(){s.stop();t.join();}} guard{service,server};
+    httplib::Client client("127.0.0.1",port);
+    until([&]{const auto result=client.Get("/api/health");return result && result->status==200;});
+    require(response(client.Get("/api/health")).at("segmentation_enabled")==false,"Disabled segmentation advertised");
+    (void)response(client.Post("/api/jobs",R"({"type":"segment_frame","path":"test.avi"})","application/json"),400);
 }
 }
 int main() {
     const auto root = fs::temp_directory_path() / ("aegis-service-test-" +
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
-        queue_checks(); const auto search_id = http_checks(root); http_restart(root, search_id);
+        queue_checks(); const auto search_id = http_checks(root); http_restart(root, search_id);segmentation_disabled(root);
         fs::remove_all(root); // This test's unique fixture directory only.
         std::cout << "Async jobs, cancellation, backpressure, history, path confinement, HTTP and video previews passed\n";
         return 0;

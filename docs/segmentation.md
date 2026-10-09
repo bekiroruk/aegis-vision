@@ -4,7 +4,8 @@
 zamanı C++/OpenCV CPU FP32'dir; Python model hazırlığı ve çevrimdışı resmi kalite
 ölçümü içindir, uygulama inference'ında kullanılmaz. Detection/tracking CLI'larının
 varsayılanları değişmez. Ayrı video giriş noktası ve yeniden kullanılabilir
-`SegmentationPipeline` vardır; HTTP, RTSP ve TOML entegrasyonu bu aşamaya dahil değildir.
+`SegmentationPipeline` vardır. HTTP tek-kare işi aşağıdadır; canlı RTSP ve
+segmentation TOML modu bu aşamaya dahil değildir.
 
 ## Model ve çalıştırma
 
@@ -71,6 +72,57 @@ Eski `update` API'si kimlik sıralı çıktısını korur. Renk ve etiket `track
 bağlıdır. Kaçırılmış karede tahmini maske üretilmez; yalnız gerçek tespitler çizilir.
 Giriş boyutu değişirse hata verilir; yeni video yeni pipeline örneği gerektirir.
 Kimlikler video-yereldir; çoklu kamera Re-ID veya video-object-segmentation modeli değildir.
+
+## Kuyruk tabanlı HTTP tek-kare maskesi
+
+[Yerel servis kurulumu](service.md) tamamlandıktan sonra, yeni bir iş veritabanıyla:
+
+```powershell
+./scripts/start_service.ps1 -SegmentationModel artifacts/models/yolov8n-seg/yolov8n-seg.onnx -JobDatabase artifacts/service/segmentation-jobs.sqlite
+./scripts/test_segmentation_service.ps1 -Video pedestrians.mp4 -FrameIndex 0 -OutputDirectory outputs/segmentation-http-v1
+```
+
+Doğrudan sunucu komutunun sonuna `--segment-model MODEL.onnx` eklemek de mümkündür.
+Model sunucuda bir kez yüklenir, tek dosya/arama worker'ından çağrılır. Model yolu
+HTTP isteğinden alınmaz. Seçenek verilmezse eski iş akışı değişmez ve bu iş 400 ile
+reddedilir; `/api/health` içinde `segmentation_enabled` yayınlanır. Model imzası
+kalıcı iş bağlamına katılır; etkinleştirirken veya model değiştirirken ayrı DB seçin.
+
+`POST /api/jobs`, `Content-Type: application/json`:
+
+```json
+{"type":"segment_frame","path":"pedestrians.mp4","frame_index":0}
+```
+
+202 yanıtındaki `id` ile `GET /api/jobs/{id}` izlenir; mevcut cancel uç noktası
+kullanılır. Başarılı `result`, görüntü boyutu, sıfır tabanlı kare numarası, model
+imzası ve `instances` döndürür. Her instance: `label`, `score`, xyxy `bbox`,
+`mask_pixels`, tam görüntü koordinatlarında `segmentation: {size:[h,w],counts:[...]}`.
+Counts, ilk sıfır koşusuyla başlayan COCO column-major RLE'dir; kutu/ROI maskesi
+değildir. Boş tespit başarılı boş listedir. Tek kare bağımsız analiz edildiğinden
+`tracking:false`; CLI'daki video-yerel ID'ler bu uç noktada üretilmez.
+
+Yalnız medya kökündeki yerel videolar kabul edilir; yönetilen canlı arşiv bu işin
+kapsamında değildir. Frame index 0..10000, görüntü kenarı en fazla 1920, en fazla
+100 instance, toplam 100000 RLE koşusu ve 1 MiB result JSON sınırı vardır. Aşımda
+maskeler sessizce kırpılmaz; iş başarısız olur. Decode sırayla yapılır, kareler
+arasında iptal ve 30 saniyelik decode bütçesi kontrol edilir. OpenCV decode/forward
+çağrısı ortasında kesme yoktur; bu bir hard timeout değildir. Model çağrısı dönüşünde
+iptal tekrar kontrol edilir. Kaynak boyutu/mtime kabulde ve işin önce/sonrasında
+kontrol edilir (kriptografik medya bütünlüğü garantisi değildir).
+
+Mevcut bounded queue/backpressure, SQLite durum kaydı, hata sonrası worker'ın
+devamı ve aynı-origin kontrolleri kullanılır. Dashboard maske çizimi, tam video
+HTTP export'u ve canlı RTSP maskeleri henüz dahil değildir. Test betiği gerçek HTTP
+sonucunun RLE kapsamını/alanını denetler ve `job.json` çıktısını bilgisayarda saklar.
+
+2026-10-10 HTTP doğrulaması: Release derlemesi ve 35/35 CTest geçti (40,48 saniye).
+Servis testi gerçek loopback HTTP ve video decode kullanır; segmenter bu testte
+deterministik fixture'dır. RLE içeriği, geçersiz parametreler, olmayan kare,
+model hatası, sonuç kotası, kuyrukta iptal, değiştirilmiş girdi, kapalı yetenek ve
+yeniden başlatma sonrası maskelerin korunması kontrol edildi. Gerçek modelle ayrı
+servis smoke denemesi süreç başlatma politikası nedeniyle çalıştırılamadı; geçmiş
+sayılmaz. Yukarıdaki betik bu kalan doğrulama için hazırdır.
 
 ## Etiketli maske değerlendirmesi
 

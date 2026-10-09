@@ -4,6 +4,7 @@
 #include "aegisvision/live_session.hpp"
 #include "aegisvision/clip_encoder.hpp"
 #include "aegisvision/archive_owner.hpp"
+#include "aegisvision/segmentation.hpp"
 #include <httplib.h>
 #include <filesystem>
 
@@ -17,6 +18,8 @@ struct ServiceConfig {
     JobPersistence persistence;
     LiveServiceConfig live;
     vision::ArchiveEncodeConfig archive_encoder;
+    vision::ISegmenter* segmenter{}; // Optional; must outlive service, queue-worker access only.
+    std::string segmentation_signature;
 };
 class ArchiveJobBusy : public std::runtime_error {
 public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an active indexing job") {}
@@ -36,6 +39,7 @@ private:
     std::filesystem::path media_path(const std::string& relative) const;
     Json validate(Json request) const;
     Json execute(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
+    Json segment_frame(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json summary(const IndexSummary&) const;
     Json archive_segment(const std::string& session, int index) const;
     void verify_archive_media(const std::filesystem::path& path) const;

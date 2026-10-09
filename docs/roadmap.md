@@ -89,7 +89,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    Gerçek YOLOv8n-seg modeliyle yerel video inference, takip-ID bağlama ve yeniden
    kullanılabilir segmentation pipeline tamamlandı. Önceden görülmüş 64 COCO
    görüntüsünde resmi maske değerlendirmesi yapıldı (AP %45,47); kör test değildir.
-   Sırada dokunulmamış daha geniş veri ve HTTP/RTSP entegrasyonu; ardından OCR metin-kutu çıktısı ve ayrı VLM
+   Sınırlı tek-kare HTTP `segment_frame` işi mevcut kuyruğa bağlandı; dashboard
+   maske gösterimi ve canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
+   veri ve canlı entegrasyon; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.

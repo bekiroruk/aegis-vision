@@ -49,6 +49,11 @@ CLIP ve YOLO başlangıçta bir kez yüklenir. `service-search.toml` ayrı
 `aegis_service` koleksiyonunu kullanır; yoksa oluşturur, mevcut verileri sıfırlamaz.
 İngilizce sorgularla başlayın: `a person walking on the street`.
 
+İsteğe bağlı `-SegmentationModel MODEL.onnx` seçeneği aynı kuyrukta tek-kare
+`segment_frame` işini açar. Yeni bir `-JobDatabase` seçin; kullanım, piksel maskesi
+şeması ve sınırlar [segmentation HTTP kılavuzunda](segmentation.md#kuyruk-tabanlı-http-tek-kare-maskesi).
+Bu seçenek dashboard'a maske çizimi veya canlı segmentation eklemez.
+
 ## Süre sınırlı canlı önizleme ve aranabilir arşiv
 
 `./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians` canlı paneli

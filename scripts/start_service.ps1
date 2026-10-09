@@ -4,7 +4,8 @@ param(
     [string]$JobDatabase = "artifacts/service/jobs.sqlite",
     [string]$LiveUrl = "",
     [string]$LiveConfig = "configs/live-preview.toml",
-    [string]$Ffmpeg = "ffmpeg"
+    [string]$Ffmpeg = "ffmpeg",
+    [string]$SegmentationModel = ""
 )
 $ErrorActionPreference = "Stop"
 $repoDirectory = Split-Path $PSScriptRoot -Parent
@@ -22,6 +23,10 @@ try {
     catch { throw "Qdrant calismiyor. Ayri terminalde artifacts/deps/qdrant/qdrant.exe --config-path configs/qdrant-local.yaml komutunu baslatin." }
     $serverArguments = @('configs/service-search.toml','configs/image.toml',$MediaDirectory,'web',$Port,$JobDatabase)
     if ($LiveUrl) { $serverArguments += @($LiveConfig,$LiveUrl,$Ffmpeg) }
+    if ($SegmentationModel) {
+        if (-not (Test-Path -LiteralPath $SegmentationModel -PathType Leaf)) { throw "Segmentation modeli bulunamadi: $SegmentationModel" }
+        $serverArguments += @('--segment-model',$SegmentationModel)
+    }
     & ./build/search/Release/aegisvision_server.exe @serverArguments
     if ($LASTEXITCODE -ne 0) { throw "Video servisi hata koduyla kapandi: $LASTEXITCODE" }
 }
