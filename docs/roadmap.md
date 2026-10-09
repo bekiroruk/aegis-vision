@@ -84,8 +84,11 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 
-3. **Segmentation, OCR ve VLM.** Önce maskeler ve sonuç sözleşmesi/testleri, ardından
-   OCR metin-kutu çıktısı ve ayrı VLM adaptörü ekle. Bunlar mevcut sistemde yoktur.
+3. **Segmentation, OCR ve VLM.** İlk C++ segmentation adaptörü, ayrı video CLI'ı
+   ve ROI maske sözleşmesi eklendi; [durum ve kullanım](segmentation.md).
+   Gerçek YOLOv8n-seg modeliyle yerel video inference çalıştı. Sırada bağımsız
+   etiketli veride maske IoU ve pipeline entegrasyonu var; ardından OCR metin-kutu çıktısı ve ayrı VLM
+   adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 

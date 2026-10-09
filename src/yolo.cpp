@@ -75,7 +75,7 @@ Letterbox prepare_yolo(const cv::Mat& bgr, int input_size) {
 }
 
 std::vector<Detection> decode_yolo(const cv::Mat& output, const Letterbox& transform,
-    const std::vector<std::string>& labels, const YoloConfig& config) {
+    const std::vector<std::string>& labels, const YoloConfig& config, bool include_anchor_index) {
     validate(config);
     if (labels.empty() || labels.size() > 10000 ||
         std::any_of(labels.begin(), labels.end(), [](const auto& label) { return label.empty(); })) {
@@ -116,6 +116,7 @@ std::vector<Detection> decode_yolo(const cv::Mat& output, const Letterbox& trans
         BoundingBox box(map_x(cx - w / 2), map_y(cy - h / 2), map_x(cx + w / 2), map_y(cy + h / 2));
         if (box.area() <= 0) continue;
         candidates.push_back({{box, labels[class_id], score, {}, {{"class_id", std::to_string(class_id)}}}, class_id});
+        if (include_anchor_index) candidates.back().detection.attributes["anchor_index"] = std::to_string(i);
     }
     std::stable_sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
         return a.detection.score > b.detection.score;

@@ -30,7 +30,8 @@ struct Letterbox {
 // Only YOLOv8 detect export: [1, 4+classes, anchors], xywh pixels + class probabilities.
 // No objectness channel, embedded NMS, segmentation or end-to-end output support.
 [[nodiscard]] std::vector<Detection> decode_yolo(const cv::Mat& output,
-    const Letterbox& transform, const std::vector<std::string>& labels, const YoloConfig& config);
+    const Letterbox& transform, const std::vector<std::string>& labels, const YoloConfig& config,
+    bool include_anchor_index = false);
 
 // Each instance owns a mutable OpenCV network; use one instance per worker.
 class YoloDetector final : public IDetector {
