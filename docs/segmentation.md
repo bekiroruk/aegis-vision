@@ -1,9 +1,10 @@
 # C++ instance segmentation — ilk uygulama
 
 `aegisvision_segment`, yerel videoyu YOLOv8n-seg ONNX modeliyle işler. Çalışma
-zamanı C++/OpenCV CPU FP32'dir; Python yalnız bir defalık model hazırlığında kullanılır.
-Detection/tracking CLI'larının varsayılanları değişmez. Bu ilk sürüm ayrı bir
-video giriş noktasıdır; HTTP, RTSP, TOML ve takip-ID entegrasyonu henüz yoktur.
+zamanı C++/OpenCV CPU FP32'dir; Python model hazırlığı ve çevrimdışı resmi kalite
+ölçümü içindir, uygulama inference'ında kullanılmaz. Detection/tracking CLI'larının
+varsayılanları değişmez. Ayrı video giriş noktası ve yeniden kullanılabilir
+`SegmentationPipeline` vardır; HTTP, RTSP ve TOML entegrasyonu bu aşamaya dahil değildir.
 
 ## Model ve çalıştırma
 
@@ -31,6 +32,8 @@ Model manifesti kaynak adresi, sürüm ve SHA256 değerlerini kaydeder.
 - `instances.csv`: sıfır tabanlı kare/instance, COCO sınıf numarası, confidence,
   ROI x/y/genişlik/yükseklik ve pozitif maske piksel sayısı. Instance sıra numarası
   kareler arasında takip kimliği değildir. Boş maskeler sıfır alanla korunur.
+  Yeni sürümde son sütun `track_id` eklendi: takip kapalıysa 0; `--track` ile
+  tracker'ın kimliği. Eski CSV sütunları ve sırası korunur.
 - `summary.json`: tamamlanan kare/instance sayıları ve çalışma ayarları.
 
 Hedef dizin önceden var olmamalı. Hata halinde kısmi çıktı korunur; başarıyla
@@ -54,6 +57,48 @@ Confidence .35, NMS IoU .45, maske eşiği .5. Aynı segmenter örneği eşzaman
 worker'lar arasında paylaşılmaz. Bu CPU başlangıç sürümüdür; gerçek zamanlı hız
 veya GPU optimizasyonu iddiası yoktur.
 
+## Maske + takip kimliği
+
+```powershell
+build/search/Release/aegisvision_segment.exe artifacts/models/yolov8n-seg/yolov8n-seg.onnx artifacts/datasets/mot15-tud/TUD-Stadtmitte-raw.mp4 outputs/segmentation-tracked-tud-v1 179 --track
+```
+
+Sınıf duyarlı mevcut IoU tracker kullanılır: eşik .30, en fazla 20 kaçırılmış
+kare. Yeni `update_indexed` sözleşmesi her tespit için aynı giriş sırasında
+kimlik döndürür; kutu benzerliğiyle ikinci bir maske eşleştirmesi yapılmaz.
+Bu, aynı kutulu veya confidence sırası değişen tespitlerin karışmasını önler.
+Eski `update` API'si kimlik sıralı çıktısını korur. Renk ve etiket `track_id`'ye
+bağlıdır. Kaçırılmış karede tahmini maske üretilmez; yalnız gerçek tespitler çizilir.
+Giriş boyutu değişirse hata verilir; yeni video yeni pipeline örneği gerektirir.
+Kimlikler video-yereldir; çoklu kamera Re-ID veya video-object-segmentation modeli değildir.
+
+## Etiketli maske değerlendirmesi
+
+Mevcut, önceden seçilmiş 64 COCO validation görüntüsü ve 8 kategori kullanılır.
+Bu görüntüler daha önce detection/arama geliştirmesinde görüldü; yeni kör test
+veya tam COCO sonucu değildir. Eşikler demo ile aynıdır, sonuç sonrası ayarlanmaz.
+İlk adım native C++ inference ve tam görüntü koordinatlı column-major COCO RLE
+export'udur. İkinci adım resmi `pycocotools==2.0.11` ile çevrimdışı ölçümdür:
+
+```powershell
+cmake --build build/search --config Release --target aegisvision_segment_quality --parallel 2
+build/search/Release/aegisvision_segment_quality.exe artifacts/models/yolov8n-seg/yolov8n-seg.onnx artifacts/datasets/coco-search/quality-manifest.json outputs/segmentation-quality-coco-v1
+work/yolo-export/Scripts/python.exe scripts/evaluate_segmentation.py artifacts/datasets/coco-search/quality-manifest.json artifacts/datasets/coco-search/annotations/instances_val2017.json artifacts/models/yolov8n-seg/yolov8n-seg.onnx outputs/segmentation-quality-coco-v1/mask-predictions.json outputs/segmentation-quality-coco-v1/metrics.json
+```
+
+Kalite CLI'ı search build'indeki mevcut JSON/hash altyapısını kullanır. Referans
+paketi varsayılan olarak `artifacts/deps/quality-reference` içindedir; başka bir
+kurulum için `--reference-root` verilebilir. Tüm seçilmiş görüntüler, model,
+manifest ve annotation SHA256 kontrol edilir; eksik kare/görüntü, değişen veri,
+hatalı RLE veya yanlış sınıf eşlemesi kabul edilmez. Ground truth inference'a girmez.
+
+Ölçüm [resmi COCOeval segmentation protokolünü](https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocotools/cocoeval.py)
+kullanır: IoU .50:.05:.95, maxDets 1/10/100, crowd/ignore kuralları. Modelin .35
+confidence sınırı korunur; bu yüzden üretici benchmark'ıyla karşılaştırılabilir
+bir düşük-eşik AP iddiası değildir. TP/FP/FN, IoU .50'de ayrıca raporlanır.
+Eşleşmiş maskelerin ortalama IoU'su yalnız TP'leri kapsar; kaçırılan ve yanlış
+nesneleri gizlememek için AP ve TP/FP/FN ile birlikte okunmalıdır.
+
 ## Doğrulama durumu
 
 Sentetik tensör testleri NMS sonrası katsayı eşleşmesini, padding geri dönüşünü,
@@ -64,8 +109,8 @@ doğrulamasını kapsar. Bunlar etiketli veride model doğruluğu ölçümü de�
 ONNX export/checker kontrolü geçti. C++ uygulaması gerçek TUD-Stadtmitte videosunun
 179 karesini işledi; toplam 1110 kare-içi instance üretti. Bu sayı benzersiz kişi
 sayısı veya doğruluk metriği değildir. İlk karede altı kişi maskesi görsel olarak
-kontrol edildi. Etiketli maske IoU değerlendirmesi **henüz yapılmadı**; MOT kutu
-etiketleri piksel maskesi doğruluğunu ölçmek için yeterli değildir.
+kontrol edildi. MOT kutu etiketleri piksel maskesi doğruluğunu ölçmek için yeterli
+değildir; aşağıdaki ayrı COCO ölçümü gerçek piksel etiketlerini kullanır.
 
 Yerel demo `outputs/segmentation-tud-v1/segmented.mp4`: 1280×480, 25 FPS,
 179 kare, 7,16 saniye; solda orijinal, sağda C++ model maskeleri. İlk kare ROI
@@ -84,3 +129,36 @@ Kaynak/sürüm manifesti `artifacts/models/yolov8n-seg/manifest.json` içindedir
 yedi servis/arşiv/arama testi erişim veya bağlantı hatası vermişti. Bu işler
 segmentation kapsamında değiştirilmedi. 2026-10-09 erişim kısıtı olmayan oturumda
 Release derlemesi ve **34/34 yerel CTest** geçti (39,83 saniye).
+
+2026-10-10: Native kalite CLI'ı 64 görüntüde 242 maske üretti; seçili 8 sınıfa
+ait 109 tahmin resmi `pycocotools 2.0.11` ile değerlendirildi. Sonuçlar:
+
+| Ölçüm | Sonuç |
+| --- | ---: |
+| Maske AP (.50:.95) | %45,47 |
+| AP50 / AP75 | %66,73 / %50,88 |
+| IoU .50: TP / FP / FN | 97 / 11 / 62 |
+| Ignore edilen tahmin | 1 |
+| Yalnız eşleşen TP maskelerinde ortalama IoU | %80,87 |
+
+Küçük nesne AP'si %0; bu başlangıç modelinin bu veri ve sabit .35 confidence
+eşiğindeki zayıflığıdır. Sonuç sonrası eşik ayarı yapılmadı. Tam rapor ve girdilerin
+SHA256 değerleri `outputs/segmentation-quality-coco-v1/metrics.json` içindedir.
+Bu, daha önce görülmüş geliştirme seçkisidir; bağımsız genelleme kanıtı değildir.
+
+Takipli demo `outputs/segmentation-tracked-tud-v1/segmented.mp4`:
+179 kare, 1110 kare-içi instance. CSV'nin önceki dokuz sütununun tamamı takip
+kapalı demo ile birebir aynı; ID eklenmesi kutuları, skorları veya maske alanını
+değiştirmedi. Her karede ID'ler pozitif ve benzersiz; aynı ID sınıf değiştirmiyor.
+İlk kare maskeleri ve kimlik etiketleri görsel olarak kontrol edildi. Bunlar
+ilişkilendirme tutarlılık kontrolleridir, ground-truth ID doğruluğu ölçümü değildir;
+özellikle örtüşmelerde basit IoU tracker kimlik değiştirebilir.
+
+2026-10-10 doğrulaması: Release derlemesi, **35/35 CTest** (44,50 saniye) ve
+**9/9 değerlendirme sözleşme testi** geçti. Maske testleri sıra değişimi,
+aynı kutulu farklı instance'lar, kısa kayıp/kimlik sonlandırma, takip kapalı modu
+ve tam görüntü column-major RLE sözleşmesini de kapsar.
+
+```powershell
+ffmpeg -n -i outputs/segmentation-tracked-tud-v1/segmented.avi -an -c:v libx264 -threads 2 -crf 20 -pix_fmt yuv420p -movflags +faststart outputs/segmentation-tracked-tud-v1/segmented.mp4
+```

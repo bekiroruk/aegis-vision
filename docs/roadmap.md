@@ -86,8 +86,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
 
 3. **Segmentation, OCR ve VLM.** İlk C++ segmentation adaptörü, ayrı video CLI'ı
    ve ROI maske sözleşmesi eklendi; [durum ve kullanım](segmentation.md).
-   Gerçek YOLOv8n-seg modeliyle yerel video inference çalıştı. Sırada bağımsız
-   etiketli veride maske IoU ve pipeline entegrasyonu var; ardından OCR metin-kutu çıktısı ve ayrı VLM
+   Gerçek YOLOv8n-seg modeliyle yerel video inference, takip-ID bağlama ve yeniden
+   kullanılabilir segmentation pipeline tamamlandı. Önceden görülmüş 64 COCO
+   görüntüsünde resmi maske değerlendirmesi yapıldı (AP %45,47); kör test değildir.
+   Sırada dokunulmamış daha geniş veri ve HTTP/RTSP entegrasyonu; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.

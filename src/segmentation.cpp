@@ -6,6 +6,58 @@
 #include <stdexcept>
 
 namespace aegisvision::vision {
+namespace {
+void validate_mask(const InstanceMask& item,cv::Size size) {
+    if (size.width<1 || size.height<1 || size.width>1920 || size.height>1920 ||
+        item.mask.type()!=CV_8UC1 || item.mask.size()!=item.region.size() || item.region.empty() ||
+        (item.region & cv::Rect(0,0,size.width,size.height))!=item.region)
+        throw std::invalid_argument("Invalid ROI mask");
+    for (int y=0;y<item.mask.rows;++y) for (int x=0;x<item.mask.cols;++x) {
+        const auto value=item.mask.at<unsigned char>(y,x);
+        if (value!=0 && value!=255) throw std::invalid_argument("Mask must contain only 0/255");
+    }
+}
+}
+std::vector<InstanceMask> SegmentationPipeline::analyze(const cv::Mat& bgr) {
+    if (bgr.empty() || bgr.type()!=CV_8UC3 || bgr.cols>1920 || bgr.rows>1920 ||
+        (!size_.empty() && bgr.size()!=size_)) throw std::invalid_argument("Invalid or changing pipeline frame size");
+    auto instances=segmenter_.segment(bgr);
+    if (instances.size()>100) throw std::invalid_argument("Too many segmentation instances");
+    std::vector<Detection> detections;
+    for (auto& item:instances) {
+        validate_mask(item,bgr.size());
+        const auto& d=item.detection;
+        if (!std::isfinite(d.score) || d.score<0 || d.score>1 || d.label.empty() ||
+            !std::isfinite(d.bbox.area()) || d.bbox.area()<=0)
+            throw std::invalid_argument("Invalid segmentation detection");
+        const auto& b=d.bbox;
+        for (const float coordinate:{b.x1,b.y1,b.x2,b.y2})
+            if (!std::isfinite(coordinate)) throw std::invalid_argument("Nonfinite segmentation box");
+        if (b.x1<0 || b.y1<0 || b.x2>bgr.cols || b.y2>bgr.rows ||
+            item.region!=cv::Rect(static_cast<int>(std::ceil(b.x1)),static_cast<int>(std::ceil(b.y1)),
+                static_cast<int>(std::ceil(b.x2))-static_cast<int>(std::ceil(b.x1)),
+                static_cast<int>(std::ceil(b.y2))-static_cast<int>(std::ceil(b.y1))))
+            throw std::invalid_argument("Mask ROI does not match its detection box");
+        item.track_id=0;detections.push_back(d);
+    }
+    if (track_) {
+        const auto tracks=tracker_.update_indexed(detections);
+        for (std::size_t i=0;i<instances.size();++i) instances[i].track_id=tracks[i].track_id;
+    }
+    size_=bgr.size();return instances;
+}
+std::vector<std::uint32_t> mask_rle(const InstanceMask& instance,cv::Size image_size) {
+    validate_mask(instance,image_size);
+    std::vector<std::uint32_t> counts;
+    bool previous=false;std::uint32_t run=0;
+    for (int x=0;x<image_size.width;++x) for (int y=0;y<image_size.height;++y) {
+        const bool value=instance.region.contains(cv::Point(x,y)) &&
+            instance.mask.at<unsigned char>(y-instance.region.y,x-instance.region.x)!=0;
+        if (value!=previous) {counts.push_back(run);run=0;previous=value;}
+        ++run;
+    }
+    counts.push_back(run);return counts;
+}
 std::vector<InstanceMask> decode_segmentation(const cv::Mat& predictions, const cv::Mat& prototypes,
     const Letterbox& transform, const std::vector<std::string>& labels, const YoloConfig& config) {
     const int channels = static_cast<int>(labels.size()) + 4;
@@ -71,14 +123,16 @@ cv::Mat paint_masks(const cv::Mat& bgr,const std::vector<InstanceMask>& instance
         if (item.mask.type()!=CV_8UC1 || item.mask.size()!=item.region.size() || item.region.empty() ||
             (item.region & cv::Rect(0,0,bgr.cols,bgr.rows))!=item.region)
             throw std::invalid_argument("Invalid ROI mask");
-        const cv::Scalar color(static_cast<double>(60+(i*73)%180),
-            static_cast<double>(70+(i*131)%170),static_cast<double>(70+(i*47)%170));
+        const auto color_id=item.track_id ? item.track_id : i;
+        const cv::Scalar color(static_cast<double>(60+(color_id*73)%180),
+            static_cast<double>(70+(color_id*131)%170),static_cast<double>(70+(color_id*47)%170));
         auto roi=output(item.region);
         cv::Mat blended;
         cv::addWeighted(roi,.55,cv::Mat(roi.size(),CV_8UC3,color),.45,0,blended);
         blended.copyTo(roi,item.mask);
         cv::rectangle(output,item.region,color,1);
-        cv::putText(output,item.detection.label, {item.region.x,std::max(14,item.region.y-3)},
+        const auto label=item.detection.label+(item.track_id ? " #"+std::to_string(item.track_id) : "");
+        cv::putText(output,label, {item.region.x,std::max(14,item.region.y-3)},
             cv::FONT_HERSHEY_SIMPLEX,.45,color,1,cv::LINE_AA);
     }
     return output;

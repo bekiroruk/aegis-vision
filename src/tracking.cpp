@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
+#include <numeric>
 
 namespace aegisvision {
 
@@ -17,9 +18,16 @@ IoUTracker::IoUTracker(const float iou_threshold, const std::uint32_t max_missed
 }
 
 std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) {
-    auto ordered = detections;
-    std::stable_sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) {
-        return a.score > b.score;
+    auto output = update_indexed(detections);
+    std::ranges::sort(output, std::less{}, &Track::track_id);
+    return output;
+}
+
+std::vector<Track> IoUTracker::update_indexed(const std::vector<Detection>& detections) {
+    std::vector<std::size_t> ordered(detections.size());
+    std::iota(ordered.begin(), ordered.end(), 0);
+    std::stable_sort(ordered.begin(), ordered.end(), [&](auto a, auto b) {
+        return detections[a].score > detections[b].score;
     });
 
     std::unordered_set<std::uint64_t> unmatched;
@@ -28,9 +36,9 @@ std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) 
         unmatched.insert(track_id);
     }
 
-    std::vector<Track> output;
-    output.reserve(ordered.size());
-    for (const auto& detection : ordered) {
+    std::vector<Track> output(ordered.size());
+    for (const auto index : ordered) {
+        const auto& detection = detections[index];
         std::uint64_t best_id = 0;
         float best_iou = 0.0F;
         for (const auto track_id : unmatched) {
@@ -53,7 +61,7 @@ std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) 
             track = Track{next_id_++, detection.bbox, detection.label, detection.score, 1, 0};
         }
         tracks_.insert_or_assign(track.track_id, track);
-        output.push_back(std::move(track));
+        output[index] = std::move(track);
     }
 
     for (const auto track_id : unmatched) {
@@ -64,7 +72,6 @@ std::vector<Track> IoUTracker::update(const std::vector<Detection>& detections) 
     std::erase_if(tracks_, [this](const auto& entry) {
         return entry.second.missed_frames > max_missed_frames_;
     });
-    std::ranges::sort(output, std::less{}, &Track::track_id);
     return output;
 }
 

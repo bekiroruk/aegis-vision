@@ -12,6 +12,9 @@ class IoUTracker final : public ITracker {
 public:
     explicit IoUTracker(float iou_threshold = 0.30F, std::uint32_t max_missed_frames = 20);
     [[nodiscard]] std::vector<Track> update(const std::vector<Detection>& detections) override;
+    // One current track per detection, in input order. No second geometric
+    // matching is needed to attach masks (including identical boxes).
+    [[nodiscard]] std::vector<Track> update_indexed(const std::vector<Detection>& detections);
 
 private:
     float iou_threshold_;
