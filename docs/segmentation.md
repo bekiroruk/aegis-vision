@@ -6,6 +6,8 @@ zamanı C++/OpenCV CPU FP32'dir; Python model hazırlığı ve çevrimdışı re
 varsayılanları değişmez. Ayrı video giriş noktası ve yeniden kullanılabilir
 `SegmentationPipeline` vardır. HTTP tek-kare işi aşağıdadır;
 [canlı RTSP maske modu](live-video.md#canlı-piksel-maskeleri) da eklenmiştir.
+Gerçek modelle RTSP kopma/yeniden bağlantı, maske önizlemesi ve stop doğrulaması
+[2026-10-10'da geçti](live-mask-validation.md).
 Segmentation için ayrı TOML modu henüz yoktur.
 
 ## Model ve çalıştırma

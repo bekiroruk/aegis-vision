@@ -92,7 +92,8 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    Sınırlı tek-kare HTTP `segment_frame` işi mevcut kuyruğa bağlandı; dashboard
    kare seçimi ve maske gösterimi eklendi; gerçek model/tarayıcı smoke testi geçti.
    Canlı RTSP için ayrı model/pipeline, IoU maske kimlikleri ve epoch sıfırlama
-   eklendi. Gerçek RTSP+maske uçtan uca doğrulaması ayrıca bekliyor. Sırada dokunulmamış daha geniş
+   eklendi. Gerçek RTSP+maske, kopma/yeniden bağlantı ve stop uçtan uca doğrulaması
+   [geçti](live-mask-validation.md). Sırada dokunulmamış daha geniş
    veri; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve

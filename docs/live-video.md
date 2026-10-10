@@ -97,7 +97,8 @@ Bu betik yeni çıktı dizini ister; başlangıç/yeniden bağlantı JPEG'lerini
 raporunu kaydeder. Deterministik HTTP testleri iki analiz modunda model izolasyonunu,
 maskenin iç piksellerinin boyandığını, reconnect/çözünürlük değişiminde epoch
 yenilendiğini, eski görüntünün temizlenmesini, arama eşzamanlılığını ve hatadan
-sonra yeniden başlatmayı doğrular. Gerçek RTSP+maske ölçümü ayrıca raporlanmalıdır.
+sonra yeniden başlatmayı doğrular. Gerçek RTSP+maske testi de 2026-10-10'da geçti;
+[koşullar, ölçümler ve tekrar çalıştırma](live-mask-validation.md).
 
 2026-10-10 yerel doğrulama: ayrı `build/live-seg` Release derlemesi başarılı;
 `ctest --test-dir build/live-seg -C Release --output-on-failure` **35/35** geçti
@@ -105,7 +106,9 @@ sonra yeniden başlatmayı doğrular. Gerçek RTSP+maske ölçümü ayrıca rapo
 6,92 sn'de geçti. `node tests/test_web_state.cjs` başarılı. Bu sonuçlar gerçek
 YOLOv8-seg modelinin RTSP üzerinde uçtan uca denendiği anlamına gelmez; canlı HTTP
 testi kontrollü capture/model kullanır. Açık eski sunucu bu derlemeyle otomatik
-değiştirilmez; yeni executable ile yeniden başlatılmalıdır.
+değiştirilmez; yeni executable ile yeniden başlatılmalıdır. Bu deterministik
+paketten sonra ayrı portta gerçek RTSP smoke yapıldı: kopma/yeniden bağlantı,
+maskeli JPEG, eşzamanlı arama ve stop sonrası HTTP 204 doğrulandı.
 
 ## Canlı yayını kaydet ve arşivde ara
 

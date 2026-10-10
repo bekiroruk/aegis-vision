@@ -64,10 +64,18 @@ try {
         if ($search.state -eq 'failed' -or [DateTime]::UtcNow -gt $end) { throw 'Concurrent semantic search failed' }
         Start-Sleep -Milliseconds 100
     } while ($true)
-    @{before=$first;disconnected=$disconnected;recovered=$recovered;search_job=$search.id;search_results=$search.result.results.Count} |
+    Invoke-RestMethod "$base/api/live/$sessionId/stop" -Method Post -ContentType application/json -Body '{}' | Out-Null
+    $stopped = WaitSession { param($s) $s -and -not $s.active -and $s.state -eq 'stopped' -and -not $s.has_preview }
+    $empty = Invoke-WebRequest "$base/api/live/$sessionId/preview.jpg"
+    if ($empty.StatusCode -ne 204) { throw 'Stopped preview still served an image' }
+    $sessionId = ''
+    @{before=$first;disconnected=$disconnected;recovered=$recovered;stopped=$stopped;search_job=$search.id;search_results=$search.result.results.Count} |
         ConvertTo-Json -Depth 8 | Out-File -LiteralPath (Join-Path $destination 'report.json') -Encoding utf8
-    Write-Host "PASS: live HTTP decoded/recovered, stale JPEG removed, epoch reset, search ran concurrently; results: $destination"
+    Write-Host "PASS: live HTTP decoded/recovered, stale JPEG removed, epoch reset, search ran concurrently, stop completed; results: $destination"
 } finally {
-    if ($sessionId) { Invoke-RestMethod "$base/api/live/$sessionId/stop" -Method Post -ContentType application/json -Body '{}' | Out-Null }
-    foreach ($child in $children) { if (-not $child.HasExited) { $child.Kill(); $child.WaitForExit() } }
+    try {
+        if ($sessionId) { Invoke-RestMethod "$base/api/live/$sessionId/stop" -Method Post -ContentType application/json -Body '{}' | Out-Null }
+    } finally {
+        foreach ($child in $children) { if (-not $child.HasExited) { $child.Kill(); $child.WaitForExit() } }
+    }
 }
