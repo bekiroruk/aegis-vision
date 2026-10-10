@@ -53,6 +53,12 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 
 ## Kalan işler — önerilen sıra
 
+**Aktif sıra:** canlı segmentasyonun gerçek RTSP doğrulaması tamamlandı.
+Yeni işlev olarak PP-OCRv3 + CRNN EN C++ adaptörü/CLI'ı ve gerçek fotoğraf smoke
+testi eklendi; [OCR kapsamı](ocr.md). Sıradaki somut geliştirme `ocr_frame` işinin
+sınırlı HTTP kuyruğuna ve web paneline bağlanmasıdır. Daha geniş bağımsız kalite
+verisi, Türkçe/multilingual model ve aşağıdaki altyapı işleri ayrı açık başlıklardır.
+
 Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablation.md).
 250 gerçek karede resmi doğrulama tamamlandı; sonuçlar karışık, varsayılan değişmedi.
 Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Linux arşiv testindeki
@@ -93,9 +99,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    kare seçimi ve maske gösterimi eklendi; gerçek model/tarayıcı smoke testi geçti.
    Canlı RTSP için ayrı model/pipeline, IoU maske kimlikleri ve epoch sıfırlama
    eklendi. Gerçek RTSP+maske, kopma/yeniden bağlantı ve stop uçtan uca doğrulaması
-   [geçti](live-mask-validation.md). Sırada dokunulmamış daha geniş
-   veri; ardından OCR metin-kutu çıktısı ve ayrı VLM
-   adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
+   [geçti](live-mask-validation.md). C++ OCR metin/polygon/skor adaptörü ve CLI
+   [eklendi](ocr.md); gerçek fotoğrafta Canon kelimesi doğrulandı. OCR'ın HTTP/web
+   entegrasyonu, Türkçe desteği ve geniş kalite ölçümü bekliyor. Dokunulmamış daha
+   geniş segmentation/OCR verisi ve ayrı VLM adaptörü ekle; VLM mevcut değildir.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 

@@ -16,6 +16,10 @@ Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videos
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.
 Kuyruk tabanlı HTTP `segment_frame` işi ve isteğe bağlı [canlı RTSP maskeleri](docs/live-video.md#canlı-piksel-maskeleri) vardır.
 
+Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
+kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce
+harf/rakamlarla sınırlıdır; OCR web entegrasyonu ve VLM henüz yoktur.
+
 - Tür güvenli detection, track, frame ve search veri modelleri
 - Değiştirilebilir model ve altyapı portları
 - Sınıf duyarlı IoU tracker
@@ -83,7 +87,8 @@ ctest --test-dir build --output-on-failure
 Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden inference yapar;
 eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
 ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. C++ uygulamaları
-`configs/*.toml` dosyalarını okuyabilir; RTSP kayıt/analiz CLI'ı hazırdır, OCR ve Redis entegrasyonları planlanmıştır.
+`configs/*.toml` dosyalarını okuyabilir; RTSP kayıt/analiz ve ayrı OCR CLI'ı hazırdır.
+OCR'ın HTTP/TOML ve Redis entegrasyonları planlanmıştır.
 
 ```text
 RTSP / Image
@@ -104,7 +109,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
-5. [Konfigürasyon tamamlandı] Segmentation ve OCR/VLM adaptörleri
+5. [Segmentation ve ilk OCR CLI tamamlandı] OCR servis/panel entegrasyonu ve VLM bekliyor
 6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1/HOTA ve CPU p50/p95;
    OSNet görünüşü ve sabit validation/test protokolü eklendi; geniş veri, kalibrasyon,
    tam ByteTrack ve çoklu kamera bekliyor
