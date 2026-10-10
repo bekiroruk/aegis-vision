@@ -102,7 +102,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    eklendi. Gerçek RTSP+maske, kopma/yeniden bağlantı ve stop uçtan uca doğrulaması
    [geçti](live-mask-validation.md). C++ OCR metin/polygon/skor adaptörü ve CLI
    [eklendi](ocr.md); gerçek fotoğrafta Canon kelimesi doğrulandı. OCR HTTP/web
-   entegrasyonu eklendi; Türkçe desteği ve geniş kalite ölçümü bekliyor. Dokunulmamış daha
+   entegrasyonu ve [C++ etiketli veri değerlendirme aracı](ocr-evaluation.md) eklendi;
+   iki örneklik kontrolde küçük Welcome kırpımı kaçırıldı. Türkçe desteği ve geniş
+   bağımsız kalite ölçümü bekliyor. Dokunulmamış daha
    geniş segmentation/OCR verisi ve ayrı VLM adaptörü ekle; VLM mevcut değildir.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.

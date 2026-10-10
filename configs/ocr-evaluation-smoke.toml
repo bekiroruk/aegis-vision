@@ -1,0 +1,18 @@
+# Two previously inspected upstream examples, NOT a held-out benchmark.
+# Manually approximated word boxes, x,y,width,height. Canon was already used in development.
+# Welcome is an upstream recognition crop; this evaluates the full detector + recognizer.
+schema_version = 1
+
+[[samples]]
+id = "canon-scene"
+image = "../artifacts/media/ocr/text_det_test2.jpg"
+width = 1296
+height = 864
+regions = [{text = "canon", box = [500, 378, 300, 70]}]
+
+[[samples]]
+id = "welcome-crop"
+image = "../artifacts/media/ocr/text_rec_test.png"
+width = 66
+height = 18
+regions = [{text = "welcome", box = [3, 3, 59, 14]}]

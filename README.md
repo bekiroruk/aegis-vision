@@ -19,6 +19,9 @@ Kuyruk tabanlı HTTP `segment_frame` işi ve isteğe bağlı [canlı RTSP maskel
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce
 harf/rakamlarla sınırlıdır; kalıcı `ocr_frame` işi ve web paneli vardır. VLM henüz yoktur.
+[C++ OCR değerlendirme aracı](docs/ocr-evaluation.md), etiketli görüntülerde
+kaçırılan/fazladan bölgeleri ve karakter hatalarını raporlar; iki örneklik ilk
+kontrol geniş bir doğruluk benchmark'ı değildir.
 
 - Tür güvenli detection, track, frame ve search veri modelleri
 - Değiştirilebilir model ve altyapı portları

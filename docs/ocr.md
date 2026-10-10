@@ -170,6 +170,10 @@ HTTP smoke betiğine dosyanın sunucunun medya köküne göre yolunu verin.
 
 ## Kaynaklar ve lisans
 
+Çoklu görüntü, kaçırılan/fazladan bölge ve karakter hatası raporu için
+[C++ OCR değerlendirme aracını](ocr-evaluation.md) kullanın. İki örneklik kontrol
+genel doğruluk benchmark'ı değildir; küçük Welcome kırpımında tespit başarısızdır.
+
 - [PP-OCRv3 / OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/47534e27c9851bb1128ccc0102f1145e27f23f98/models/text_detection_ppocr)
 - [CRNN EN / OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/47534e27c9851bb1128ccc0102f1145e27f23f98/models/text_recognition_crnn)
 - [OpenCV metin detection/recognition API](https://docs.opencv.org/4.10.0/d4/d43/tutorial_dnn_text_spotting.html)

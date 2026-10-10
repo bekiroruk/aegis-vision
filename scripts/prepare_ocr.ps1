@@ -33,4 +33,11 @@ if ($WithSample) {
         throw 'OCR sample checksum mismatch (not overwritten)'
     }
     Write-Host "Verified upstream Canon test photo: $sample. Evaluation sample only; not redistributed by this repository."
+    $welcome = Join-Path $sampleDirectory 'text_rec_test.png'
+    $welcomeUrl = 'https://raw.githubusercontent.com/opencv/opencv_extra/22b4a7bc7cf5e4ddd3a0426eafc88bae28d3dfc3/testdata/dnn/text_rec_test.png'
+    if (-not (Test-Path -LiteralPath $welcome)) { Invoke-WebRequest $welcomeUrl -OutFile $welcome -TimeoutSec 30 }
+    if ((Get-FileHash -LiteralPath $welcome -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd2f60c7c0423eb4254c2b53cc4da49dabcd244e0b4d3c2d1e6a53d009fb12885') {
+        throw 'OCR Welcome sample checksum mismatch (not overwritten)'
+    }
+    Write-Host "Verified upstream Welcome recognition crop: $welcome. Evaluation sample only; not redistributed by this repository."
 }
