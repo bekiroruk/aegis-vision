@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="tr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/segmentation.css">
 <title>AegisVision · Video arama</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/live.css"><script src="/app.js" defer></script></head>
 <body>
 <header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
@@ -22,6 +23,13 @@
 <p class="hint">Nesneler otomatik bulunur. Arama sonuçlarından birine tıklayarak o ana gidin.</p></section>
 <aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
 </div>
+<section class="panel search-panel" aria-labelledby="segmentation-heading">
+<div class="panel-title"><h2 id="segmentation-heading">Piksel maskesi analizi</h2><span id="segmentation-state" class="badge subtle">Hazırlanıyor…</span></div>
+<form id="segmentation-form" class="index-controls"><div><label for="segmentation-frame">Kare numarası · ilk kare = 0</label><input id="segmentation-frame" type="number" min="0" max="10000" step="1" value="0" required></div><button id="segmentation-button" type="submit" disabled>Seçili kareyi analiz et</button></form>
+<p id="segmentation-source" class="hint">Video seçin.</p><p class="hint">Bağımsız tek-kare analizi; takip kimliği veya canlı RTSP değildir. Aşağıdaki görüntü, modelin analiz ettiği karenin üzerine çizilir; oynatıcının o anki zamanı kullanılmaz.</p>
+<p id="segmentation-status" role="status" aria-live="polite"></p><img id="segmentation-image" alt="Seçilen video karesindeki nesne maskeleri" hidden>
+<div id="segmentation-instances" class="live-metrics"></div>
+</section>
 <section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
 <form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><select id="search-scope" aria-label="Arama kapsamı"><option value="all">Tüm kayıtlar</option><option value="live">Yalnızca canlı arşiv</option></select><button type="submit">Ara</button></form>
 <p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>

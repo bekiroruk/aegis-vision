@@ -36,5 +36,8 @@ foreach ($instance in $result.instances) {
     if ($total -ne $result.width*$result.height -or $positive -ne $instance.mask_pixels) { throw 'RLE coverage/area mismatch' }
 }
 New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
+if (-not $result.preview_data_url.StartsWith('data:image/jpeg;base64,')) { throw 'JPEG preview missing' }
+$previewBytes=[Convert]::FromBase64String($result.preview_data_url.Substring(23))
+[System.IO.File]::WriteAllBytes((Join-Path (Resolve-Path $OutputDirectory) 'preview.jpg'),$previewBytes)
 $job | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'job.json') -Encoding UTF8
 Write-Output "PASS: HTTP job=$($job.id) frame=$FrameIndex masks=$($result.instances.Count) size=$($result.width)x$($result.height)"

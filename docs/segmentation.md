@@ -112,9 +112,33 @@ iptal tekrar kontrol edilir. Kaynak boyutu/mtime kabulde ve işin önce/sonrası
 kontrol edilir (kriptografik medya bütünlüğü garantisi değildir).
 
 Mevcut bounded queue/backpressure, SQLite durum kaydı, hata sonrası worker'ın
-devamı ve aynı-origin kontrolleri kullanılır. Dashboard maske çizimi, tam video
-HTTP export'u ve canlı RTSP maskeleri henüz dahil değildir. Test betiği gerçek HTTP
-sonucunun RLE kapsamını/alanını denetler ve `job.json` çıktısını bilgisayarda saklar.
+devamı ve aynı-origin kontrolleri kullanılır. Tam video HTTP export'u ve canlı
+RTSP maskeleri henüz dahil değildir. Test betiği gerçek HTTP sonucunun RLE
+kapsamını/alanını denetler, `job.json` ve `preview.jpg` çıktısını bilgisayarda saklar.
+
+### Web panelinde kullanım
+
+Yerel video seçin, **Piksel maskesi analizi** bölümünde kare numarasını girip
+**Seçili kareyi analiz et** düğmesine basın. Durum/iptal mevcut İşler panelindedir.
+Tamamlanınca maske görüntüsü, nesne sınıfları, skorlar ve piksel alanları gösterilir.
+Önceki başarılı işlerde **Maskeyi göster** ile saklanan sonuç açılabilir; eski
+önizlemesiz işler için yeniden analiz istenir. Model kapalıysa veya yönetilen
+arşiv seçiliyse gönderim kapalıdır. Kaynak değişince eski önizleme temizlenir;
+geciken gönderim yanıtı yeni kaynağın maskesi olarak gösterilmez.
+
+Worker aynı analiz karesinden C++ `paint_masks` + JPEG üretir. `preview_data_url`
+bu görüntüyü sonuçla birlikte saklar; tarayıcı FPS/zaman tahminiyle başka bir kare
+seçmez ve model yeniden çağrılmaz. Görsel en uzun kenarı 960'a küçültülebilir;
+RLE/alan/koordinatlar orijinal çözünürlükte kalır. JPEG 512 KiB, tüm JSON (JPEG
+dahil) 1 MiB sınırındadır. Önizleme bir gösterimdir; kayıpsız maske RLE'dir.
+Tarayıcı yalnız sınırlı JPEG data URL kabul eder, sınıf/metinleri HTML olarak işlemez.
+
+Panel doğrulaması: Release derlemesi ve 35/35 CTest geçti (36,66 saniye).
+HTTP testindeki base64 JPEG çözülüp gerçek OpenCV decode boyutları doğrulandı.
+`node tests/test_web_state.cjs` gönderim, yetenek kapalı durumu, kaynak değişimi,
+geciken yanıt, model hatası, geçmiş sonuç açma ve güvensiz önizleme URL reddini
+kapsar. Bu DOM durum testidir; gerçek tarayıcı görsel testi veya gerçek modelle
+servis smoke testi yerine geçmez; bu iki doğrulama henüz yapılmadı.
 
 2026-10-10 HTTP doğrulaması: Release derlemesi ve 35/35 CTest geçti (40,48 saniye).
 Servis testi gerçek loopback HTTP ve video decode kullanır; segmenter bu testte

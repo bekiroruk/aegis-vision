@@ -90,7 +90,7 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    kullanılabilir segmentation pipeline tamamlandı. Önceden görülmüş 64 COCO
    görüntüsünde resmi maske değerlendirmesi yapıldı (AP %45,47); kör test değildir.
    Sınırlı tek-kare HTTP `segment_frame` işi mevcut kuyruğa bağlandı; dashboard
-   maske gösterimi ve canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
+   kare seçimi ve maske gösterimi eklendi, canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
    veri ve canlı entegrasyon; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve

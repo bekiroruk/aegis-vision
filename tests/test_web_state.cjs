@@ -53,8 +53,9 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary]} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, delayMask=false} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
+  const maskReply=deferred(), jobs=[];
   const get = id => {
     if (!nodes.has(id)) nodes.set(id,new Node(['media','live-source','search-scope'].includes(id) ? 'select' : 'div'));
     return nodes.get(id);
@@ -65,11 +66,16 @@ function harness({delayMedia = false, videos = [ordinary]} = {}) {
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {};
+    if (pathname === '/api/health') data = {segmentation_enabled:segmentation};
     else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
-    else if (pathname === '/api/jobs') data = {jobs:[]};
+    else if (pathname === '/api/jobs' && options.body) {
+      const request=JSON.parse(options.body);
+      data={id:`1-${jobs.length+1}`,request,state:'queued',progress:{}};jobs.unshift(data);
+      if (delayMask) await maskReply.promise;
+    }
+    else if (pathname === '/api/jobs') data = {jobs};
     else if (pathname === '/api/media') {
       mediaRequested = true;
       if (delayMedia) await media.promise;
@@ -84,9 +90,9 @@ function harness({delayMedia = false, videos = [ordinary]} = {}) {
   const source = fs.readFileSync(path.join(__dirname,'../web/app.js'),'utf8');
   assert.match(source,/start\(\);\s*$/,'App bootstrap must remain visible to the regression harness');
   vm.runInContext(source.replace(/start\(\);\s*$/,'globalThis.started = start();') +
-    ';globalThis.ui = {showArchive,chooseMedia,playAt};',context);
+    ';globalThis.ui = {showArchive,chooseMedia,playAt,refresh};',context);
   return {get,calls,catalog,ui:context.ui,started:context.started,releaseMedia:media.resolve,
-    mediaRequested:() => mediaRequested};
+    mediaRequested:() => mediaRequested,jobs,releaseMask:maskReply.resolve};
 }
 async function waitingForMedia(test) {
   for (let i = 0; i < 20 && !test.mediaRequested(); ++i) await new Promise(resolve => setImmediate(resolve));
@@ -137,7 +143,53 @@ async function archiveOnly() {
   test.ui.showArchive({...test.catalog,segments:[segment(later,'live-300-1'),segment(archived)]});
   consistent(test,archived,true);
 }
+async function segmentationPanel() {
+  const disabled=harness();await disabled.started;
+  assert.equal(disabled.get('segmentation-button').disabled,true);
+  const test=harness({segmentation:true});await test.started;
+  assert.equal(test.get('segmentation-button').disabled,false);
+  test.get('segmentation-frame').value='2';
+  await test.get('segmentation-form').emit('submit',{preventDefault(){}});
+  assert.equal(test.jobs.length,1);assert.equal(test.jobs[0].request.frame_index,2);
+  assert.equal(test.get('segmentation-button').disabled,true);
+  const job=test.jobs[0];job.state='succeeded';
+  job.result={path:ordinary,frame_index:2,width:640,height:480,preview_data_url:'data:image/jpeg;base64,/9j/',
+    instances:[{label:'<script>not markup</script>',score:.9,mask_pixels:123}]};
+  await test.ui.refresh();
+  assert.equal(test.get('segmentation-image').hidden,false);
+  assert.match(test.get('segmentation-status').textContent,/Kare 2/);
+  assert.equal(test.get('segmentation-instances').children.length,1);
+  assert.equal(test.get('segmentation-button').disabled,false);
+  test.ui.chooseMedia(archived,true);
+  assert.equal(test.get('segmentation-image').hidden,true);
+  assert.equal(test.get('segmentation-image').src,'');
+  assert.equal(test.get('segmentation-button').disabled,true);
+  const reopen=test.get('jobs').children[0].children.find(node=>node.textContent==='Maskeyi göster');
+  await reopen.emit('click');
+  assert.equal(test.get('media').value,ordinary);
+  assert.equal(test.get('segmentation-image').hidden,false);
+  test.ui.chooseMedia(ordinary,true);
+  await test.get('segmentation-form').emit('submit',{preventDefault(){}});
+  test.jobs[0].state='failed';test.jobs[0].error='model failure';await test.ui.refresh();
+  assert.equal(test.get('segmentation-image').hidden,true);
+  assert.equal(test.get('segmentation-button').disabled,false);
+  assert.equal(test.get('segmentation-status').textContent,'model failure');
+  await test.get('segmentation-form').emit('submit',{preventDefault(){}});
+  test.jobs[0].state='succeeded';test.jobs[0].result={...job.result,preview_data_url:'https://untrusted/image.jpg'};
+  await test.ui.refresh();assert.equal(test.get('segmentation-image').hidden,true);
+}
+async function staleSegmentationSubmission() {
+  const test=harness({segmentation:true,delayMask:true});await test.started;
+  test.get('segmentation-frame').value='0';
+  const pending=test.get('segmentation-form').emit('submit',{preventDefault(){}});
+  test.ui.chooseMedia(archived,true);test.releaseMask();await pending;
+  test.jobs[0].state='succeeded';test.jobs[0].result={path:ordinary,frame_index:0,preview_data_url:'data:image/jpeg;base64,/9j/',instances:[]};
+  await test.ui.refresh();assert.equal(test.get('segmentation-image').hidden,true);
+  assert.equal(test.get('segmentation-status').textContent,'');
+}
 (async () => {
   await mediaFirst(); await archiveFirst(); await lateInitializationAfterUserChoice(); await archiveOnly();
+  await segmentationPanel();await staleSegmentationSubmission();
+  console.log('Segmentation UI passed: capability, submit, result, source change, failure, unsafe URL, delayed submission.');
   console.log('Web media state passed: media-first, archive-first, preserved user selection, seek and managed-index guards.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

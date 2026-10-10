@@ -1,5 +1,6 @@
 #include "aegisvision/service.hpp"
 #include <opencv2/videoio.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -149,6 +150,18 @@ std::string http_checks(const fs::path& root) {
     const auto segmented=completed(client,segmentation);
     require(segmented.at("state")=="succeeded","Queued segmentation failed");
     const auto& masks=segmented.at("result").at("instances");
+    const auto preview_url=segmented.at("result").at("preview_data_url").get<std::string>();
+    require(preview_url.starts_with("data:image/jpeg;base64,/9j/") && preview_url.size()<750000,"Encoded mask preview missing");
+    std::vector<unsigned char> jpeg;unsigned accumulator=0;int bits=0;
+    const std::string alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (const char c:preview_url.substr(23)) {
+        if (c=='=') break;
+        const auto digit=alphabet.find(c);require(digit!=std::string::npos,"Invalid base64 preview");
+        accumulator=(accumulator<<6)|static_cast<unsigned>(digit);bits+=6;
+        if (bits>=8) {bits-=8;jpeg.push_back(static_cast<unsigned char>((accumulator>>bits)&255));}
+    }
+    const auto decoded=cv::imdecode(jpeg,cv::IMREAD_COLOR);
+    require(decoded.cols==160 && decoded.rows==120,"JPEG preview does not decode to source geometry");
     require(masks.size()==1 && masks[0].at("mask_pixels")==4 &&
         masks[0].at("segmentation").at("counts")==Json::array({1210,2,118,2,17868}),"HTTP mask RLE differs");
     require(segmented.at("result").at("frame_index")==2 && segmented.at("result").at("tracking")==false,

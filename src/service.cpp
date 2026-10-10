@@ -2,6 +2,7 @@
 #include "aegisvision/vision.hpp"
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/videoio.hpp>
+#include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -14,6 +15,25 @@ namespace aegisvision {
 namespace {
 namespace fs = std::filesystem;
 using Json = nlohmann::json;
+std::string jpeg_url(const cv::Mat& image) {
+    cv::Mat preview=image;
+    const double scale=std::min(1.,960./std::max(image.cols,image.rows));
+    if (scale<1.) cv::resize(image,preview,{},scale,scale,cv::INTER_AREA);
+    std::vector<unsigned char> bytes;
+    if (!cv::imencode(".jpg",preview,bytes,{cv::IMWRITE_JPEG_QUALITY,80}) || bytes.size()>512*1024)
+        throw std::runtime_error("Segmentation preview exceeds JPEG limit");
+    constexpr char alphabet[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result="data:image/jpeg;base64,";
+    result.reserve(result.size()+4*((bytes.size()+2)/3));
+    for (std::size_t i=0;i<bytes.size();i+=3) {
+        const unsigned bits=(unsigned(bytes[i])<<16) | (i+1<bytes.size()?unsigned(bytes[i+1])<<8:0) |
+            (i+2<bytes.size()?unsigned(bytes[i+2]):0);
+        result+=alphabet[(bits>>18)&63];result+=alphabet[(bits>>12)&63];
+        result+=i+1<bytes.size()?alphabet[(bits>>6)&63]:'=';
+        result+=i+2<bytes.size()?alphabet[bits&63]:'=';
+    }
+    return result;
+}
 std::string utf8(const fs::path& path) {
     const auto text = path.generic_u8string(); return {text.begin(), text.end()};
 }
@@ -170,9 +190,12 @@ LocalService::Json LocalService::segment_frame(const Json& request, const JobQue
             {"segmentation",{{"size",{frame.rows,frame.cols}},{"counts",std::move(counts)}}}});
     }
     unchanged();
+    const auto preview=jpeg_url(vision::paint_masks(frame,instances));
+    if (cancel) throw IndexCancelled();
     Json result{{"path",request.at("path")},{"frame_index",index},{"width",frame.cols},{"height",frame.rows},
         {"model_signature",config_.segmentation_signature},{"tracking",false},
-        {"mask_format","COCO uncompressed column-major RLE"},{"instances",std::move(masks)}};
+        {"mask_format","COCO uncompressed column-major RLE"},{"instances",std::move(masks)},
+        {"preview_data_url",preview}};
     if (result.dump().size()>1024*1024) throw std::runtime_error("Segmentation result exceeds 1 MiB");
     return result;
 }
