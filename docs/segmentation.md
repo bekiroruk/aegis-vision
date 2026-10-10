@@ -133,20 +133,26 @@ RLE/alan/koordinatlar orijinal çözünürlükte kalır. JPEG 512 KiB, tüm JSON
 dahil) 1 MiB sınırındadır. Önizleme bir gösterimdir; kayıpsız maske RLE'dir.
 Tarayıcı yalnız sınırlı JPEG data URL kabul eder, sınıf/metinleri HTML olarak işlemez.
 
-Panel doğrulaması: Release derlemesi ve 35/35 CTest geçti (36,66 saniye).
+Panel otomasyon doğrulaması: Release derlemesi ve 35/35 CTest geçti (36,66 saniye).
 HTTP testindeki base64 JPEG çözülüp gerçek OpenCV decode boyutları doğrulandı.
 `node tests/test_web_state.cjs` gönderim, yetenek kapalı durumu, kaynak değişimi,
 geciken yanıt, model hatası, geçmiş sonuç açma ve güvensiz önizleme URL reddini
-kapsar. Bu DOM durum testidir; gerçek tarayıcı görsel testi veya gerçek modelle
-servis smoke testi yerine geçmez; bu iki doğrulama henüz yapılmadı.
+kapsar.
 
 2026-10-10 HTTP doğrulaması: Release derlemesi ve 35/35 CTest geçti (40,48 saniye).
 Servis testi gerçek loopback HTTP ve video decode kullanır; segmenter bu testte
 deterministik fixture'dır. RLE içeriği, geçersiz parametreler, olmayan kare,
 model hatası, sonuç kotası, kuyrukta iptal, değiştirilmiş girdi, kapalı yetenek ve
-yeniden başlatma sonrası maskelerin korunması kontrol edildi. Gerçek modelle ayrı
-servis smoke denemesi süreç başlatma politikası nedeniyle çalıştırılamadı; geçmiş
-sayılmaz. Yukarıdaki betik bu kalan doğrulama için hazırdır.
+yeniden başlatma sonrası maskelerin korunması kontrol edildi.
+
+2026-10-10 gerçek servis ve tarayıcı smoke doğrulaması da tamamlandı. Qdrant 1.12.5,
+kalıcı iş kuyruğu ve resmi YOLOv8n-seg modeliyle `pedestrians.mp4` kare 0 işlendi:
+768x576 kaynakta 6 maske (3 person, 2 car, 1 truck) üretildi. Web paneli işi
+tamamlandı gösterdi; maske JPEG'i ve sınıf/skor/alan kartları tarayıcıda görsel
+olarak kontrol edildi. Aynı istek `scripts/test_segmentation_service.ps1` ile
+tekrar doğrulandı; COCO RLE kapsamı/alanı geçti ve yerel, Git dışı
+`outputs/segmentation-http-v1/job.json` ile `preview.jpg` üretildi. Bu smoke testi
+tek video/tek karedir; genel model doğruluğu iddiası değildir.
 
 ## Etiketli maske değerlendirmesi
 

@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-06. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+Güncelleme: 2026-10-10. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -90,7 +90,8 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    kullanılabilir segmentation pipeline tamamlandı. Önceden görülmüş 64 COCO
    görüntüsünde resmi maske değerlendirmesi yapıldı (AP %45,47); kör test değildir.
    Sınırlı tek-kare HTTP `segment_frame` işi mevcut kuyruğa bağlandı; dashboard
-   kare seçimi ve maske gösterimi eklendi, canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
+   kare seçimi ve maske gösterimi eklendi; gerçek model/tarayıcı smoke testi geçti.
+   Canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
    veri ve canlı entegrasyon; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
