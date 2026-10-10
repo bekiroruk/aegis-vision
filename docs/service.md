@@ -272,6 +272,10 @@ sonuç kodlanmış klibin 30. karesi / 3000 ms konumundaydı. Kanıt:
 Bu gerçek kayıt üzerinden yerel sistem kontrolüdür; fiziksel kamera, etiketli
 doğruluk ölçümü veya throughput benchmark'ı değildir.
 
+OCR için `-OcrModels artifacts/models/ocr-en` ve ayrı iş veritabanı ile sunucuyu
+açın. Panelde **Karedeki yazıları oku**, API'de `ocr_frame` işi kullanılır;
+[istek şeması, model/SQLite bağlamı ve sınırlar](ocr.md#http-kuyruğu-ve-web-paneli).
+
 Teknik referanslar: [SQLite WAL](https://sqlite.org/wal.html),
 [SQLite locking mode](https://sqlite.org/pragma.html#pragma_locking_mode),
 [kaynak dağıtımı](https://sqlite.org/download.html).

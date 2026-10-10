@@ -63,6 +63,9 @@ std::string yolo_index_signature(const std::filesystem::path& model, const visio
     return digest(Json::array({"yolov8-opencv-coco80-letterbox-v1", file_hash(model),
         config.input_size, config.confidence_threshold, config.nms_iou_threshold, config.max_detections}));
 }
+std::string ocr_model_signature(const std::filesystem::path& detector,const std::filesystem::path& recognizer) {
+    return digest(Json::array({"ppocrv3-crnn-en-cpu-v1-defaults-64-10000",file_hash(detector),file_hash(recognizer)}));
+}
 
 IndexSummary index_directory(const std::filesystem::path& directory, IEmbedder& embedder,
     IVectorStore& store, const DirectoryIndexConfig& config, const IndexProgress& progress,

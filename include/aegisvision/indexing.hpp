@@ -45,6 +45,7 @@ public:
 [[nodiscard]] IndexSummary index_video(const std::filesystem::path& input,
     IDetector& detector, IEmbedder& embedder, IVectorStore& store,
     const VideoIndexConfig& config, const IndexProgress& progress = {}, const IndexCancellation& cancelled = {});
+[[nodiscard]] std::string ocr_model_signature(const std::filesystem::path& detector, const std::filesystem::path& recognizer);
 [[nodiscard]] std::string yolo_index_signature(const std::filesystem::path& model,
     const vision::YoloConfig& config);
 }

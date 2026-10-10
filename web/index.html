@@ -30,6 +30,13 @@
 <p id="segmentation-status" role="status" aria-live="polite"></p><img id="segmentation-image" alt="Seçilen video karesindeki nesne maskeleri" hidden>
 <div id="segmentation-instances" class="live-metrics"></div>
 </section>
+<section class="panel search-panel" aria-labelledby="ocr-heading">
+<div class="panel-title"><h2 id="ocr-heading">Karedeki yazıları oku</h2><span id="ocr-state" class="badge subtle">Hazırlanıyor…</span></div>
+<form id="ocr-form" class="index-controls"><div><label for="ocr-frame">Kare numarası · ilk kare = 0</label><input id="ocr-frame" type="number" min="0" max="10000" step="1" value="0" required></div><button id="ocr-button" type="submit" disabled>Yazıları oku</button></form>
+<p id="ocr-source" class="hint">Video seçin.</p><p class="hint">İngilizce harfler ve rakamlar · Türkçe karakter desteği yok. Skorlar doğruluk olasılığı değildir. Seçilen kare analiz edilir; oynatıcının o anki zamanı kullanılmaz. İptal için iş listesini kullanın.</p>
+<p id="ocr-status" role="status" aria-live="polite"></p><img id="ocr-image" alt="Seçilen karedeki metin bölgeleri ve okunan yazılar" hidden>
+<div id="ocr-regions" class="live-metrics"></div>
+</section>
 <section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
 <form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><select id="search-scope" aria-label="Arama kapsamı"><option value="all">Tüm kayıtlar</option><option value="live">Yalnızca canlı arşiv</option></select><button type="submit">Ara</button></form>
 <p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>

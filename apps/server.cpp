@@ -13,16 +13,23 @@ int run(std::vector<std::filesystem::path> args) {
                 "   Live: append STREAM.toml RTSP_URL [FFMPEG] after PORT JOB_DB to enable preset local-pedestrians and opt-in archive.\n"
                 "   Segmentation: append --segment-model MODEL.onnx at the end to enable queued segment_frame jobs.\n"
                 "   Add --live-segmentation with live arguments and --segment-model to draw tracked live masks.\n"
+                "   OCR: --ocr-models BUNDLE_DIR enables queued ocr_frame (PP-OCRv3 + CRNN EN).\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
-        std::filesystem::path segmentation_model;
+        std::filesystem::path segmentation_model,ocr_bundle;
         bool live_segmentation=false;
         const auto live_flag=std::find(args.begin(),args.end(),std::filesystem::path("--live-segmentation"));
         if (live_flag!=args.end()) {live_segmentation=true;args.erase(live_flag);}
-        if (args.size()>=3 && args[args.size()-2]=="--segment-model") {
-            segmentation_model=args.back();args.resize(args.size()-2);
-        }
+        const auto take_path=[&](const char* flag) {
+            const auto it=std::find(args.begin()+1,args.end(),std::filesystem::path(flag));
+            if(it==args.end()) return std::filesystem::path{};
+            if(it+1==args.end() || (it+1)->string().starts_with("--")) throw std::invalid_argument("Missing model option value");
+            auto value=*(it+1);args.erase(it,it+2);
+            if(std::find(args.begin()+1,args.end(),std::filesystem::path(flag))!=args.end()) throw std::invalid_argument("Duplicate model option");
+            return value;
+        };
+        segmentation_model=take_path("--segment-model");ocr_bundle=take_path("--ocr-models");
         if ((args.size() < 5 || args.size() > 7) && args.size() != 9 && args.size()!=10) throw std::invalid_argument("Missing arguments; run --help");
         if (live_segmentation && (segmentation_model.empty() || args.size()<9))
             throw std::invalid_argument("Live segmentation requires live source arguments and --segment-model");
@@ -45,6 +52,13 @@ int run(std::vector<std::filesystem::path> args) {
         aegisvision::ServiceConfig config{args[3], args[4],
             aegisvision::yolo_index_signature(detection.detector_model, detection.detector)};
         std::unique_ptr<aegisvision::vision::YoloSegmenter> segmenter;
+        std::unique_ptr<aegisvision::vision::PpocrCrnn> ocr;
+        if(!ocr_bundle.empty()) {
+            const auto detection_model=ocr_bundle/"text_detection_en_ppocrv3_2023may.onnx";
+            const auto recognition_model=ocr_bundle/"text_recognition_CRNN_EN_2021sep.onnx";
+            ocr=std::make_unique<aegisvision::vision::PpocrCrnn>(detection_model,recognition_model);
+            config.ocr=ocr.get();config.ocr_signature=aegisvision::ocr_model_signature(detection_model,recognition_model);
+        }
         if (!segmentation_model.empty()) {
             const aegisvision::vision::YoloConfig mask_config{640,.35F,.45F,100};
             segmenter=std::make_unique<aegisvision::vision::YoloSegmenter>(segmentation_model,mask_config);

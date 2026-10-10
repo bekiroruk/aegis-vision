@@ -78,6 +78,20 @@ public:
         return {{{{10,10,12,12},"person",.9F,{},{}},{10,10,2,2},cv::Mat(2,2,CV_8UC1,cv::Scalar(255))}};
     }
 };
+class Ocr : public vision::IOcr {
+public:
+    std::atomic_int mode{0};std::atomic_bool started{false};
+    std::vector<vision::TextRegion> read(const cv::Mat& image,const std::atomic_bool* cancel) override {
+        require(image.cols==160 && image.rows==120,"OCR frame missing");
+        if(mode==1) throw std::runtime_error("fixture OCR model error");
+        if(mode==2) return {};
+        if(mode==4) {started=true;until([&]{return cancel && cancel->load();});throw std::runtime_error("OCR cancelled");}
+        vision::TextRegion text{{cv::Point2f{10,50},{10,10},{90,10},{90,50}},.9F,{"canon",.8F}};
+        if(mode==3) text.recognition.text="<script>";
+        if(mode==5) return std::vector<vision::TextRegion>(65,text);
+        return {text};
+    }
+};
 class Store : public IVectorStore {
 public:
     std::map<std::string, SearchResult> records;
@@ -115,10 +129,11 @@ std::string http_checks(const fs::path& root) {
     require(writer.isOpened(), "Video fixture unavailable");
     for (int n = 0; n < 10; ++n) writer.write(cv::Mat(120,160,CV_8UC3,cv::Scalar(10,20,30)));
     writer.release();
-    Detector detector; Embedder embedder; Store store; Segmenter segmenter;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
     config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
+    config.ocr=&ocr;config.ocr_signature="fixture-ocr-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -127,6 +142,7 @@ std::string http_checks(const fs::path& root) {
     until([&] { const auto result = client.Get("/api/health"); return result && result->status == 200; });
     require(response(client.Get("/api/health")).at("history_persistent") == true, "HTTP persistence disabled");
     require(response(client.Get("/api/health")).at("segmentation_enabled") == true,"Segmentation capability missing");
+    require(response(client.Get("/api/health")).at("ocr_enabled")==true,"OCR capability missing");
     require(response(client.Get("/api/media")).at("videos").size() == 1, "Media listing failed");
     const auto dashboard = client.Get("/");
     status(dashboard, 200);
@@ -175,6 +191,28 @@ std::string http_checks(const fs::path& root) {
         "Oversized mask result accepted");
     segmenter.mode=0;
     require(completed(client,segmentation).at("state")=="succeeded","Worker did not recover from segmentation failure");
+    const Json text_request{{"type","ocr_frame"},{"path","test.avi"},{"frame_index",2}};
+    for(const auto& invalid:std::vector<Json>{
+        {{"type","ocr_frame"},{"path","../outside.avi"}},
+        {{"type","ocr_frame"},{"path","test.avi"},{"frame_index",-1}},
+        {{"type","ocr_frame"},{"path","test.avi"},{"frame_index",10001}},
+        {{"type","ocr_frame"},{"path","test.avi"},{"frame_index",.5}},
+        {{"type","ocr_frame"},{"path","test.avi"},{"language","tr"}}})
+        (void)response(client.Post("/api/jobs",invalid.dump(),"application/json"),400);
+    const auto text_job=completed(client,text_request);
+    require(text_job.at("state")=="succeeded" && text_job.at("result").at("regions")[0].at("text")=="canon" &&
+        text_job.at("result").at("frame_index")==2,"OCR result missing");
+    require(text_job.at("result").at("preview_data_url").get<std::string>().starts_with("data:image/jpeg;base64,/9j/"),"OCR JPEG missing");
+    require(completed(client,{{"type","ocr_frame"},{"path","test.avi"},{"frame_index",10}}).at("state")=="failed","OCR out-of-video accepted");
+    for(int mode:{1,3,5}) {ocr.mode=mode;const auto failed=completed(client,text_request);
+        require(failed.at("state")=="failed" && failed.at("result").is_null(),"OCR invalid output/model failure hidden");}
+    ocr.mode=2;require(completed(client,text_request).at("result").at("regions").empty(),"Empty OCR result invalid");
+    ocr.mode=4;const auto running_text=response(client.Post("/api/jobs",text_request.dump(),"application/json"),202).at("id").get<std::string>();
+    until([&]{return ocr.started.load();});
+    (void)response(client.Post("/api/jobs/"+running_text+"/cancel","{}","application/json"));
+    until([&]{return response(client.Get("/api/jobs/"+running_text)).at("state")=="cancelled";});
+    require(response(client.Get("/api/jobs/"+running_text)).at("result").is_null(),"Cancelled OCR published result");
+    ocr.mode=0;require(completed(client,text_request).at("state")=="succeeded","OCR worker recovery failed");
     { std::ofstream outside(root / "outside.avi"); outside << "outside"; }
     std::error_code error;
     fs::create_symlink(root / "outside.avi", root / "media/escape.avi", error);
@@ -200,6 +238,10 @@ std::string http_checks(const fs::path& root) {
     struct Release { Embedder& embedder; ~Release() { embedder.released = true; } } release{embedder};
     (void)response(client.Post("/api/jobs", R"({"type":"search","query":"hold"})", "application/json"), 202);
     until([&] { return embedder.started.load(); });
+    const auto queued_text=response(client.Post("/api/jobs",text_request.dump(),"application/json"),202).at("id").get<std::string>();
+    (void)response(client.Post("/api/jobs/"+queued_text+"/cancel","{}","application/json"));
+    require(response(client.Get("/api/jobs/"+queued_text)).at("state")=="cancelled","Queued OCR cancellation failed");
+    const auto changed_text=response(client.Post("/api/jobs",text_request.dump(),"application/json"),202).at("id").get<std::string>();
     const auto cancelled_mask = response(client.Post("/api/jobs",segmentation.dump(),"application/json"),202).at("id").get<std::string>();
     (void)response(client.Post("/api/jobs/"+cancelled_mask+"/cancel","{}","application/json"));
     require(response(client.Get("/api/jobs/"+cancelled_mask)).at("state")=="cancelled","Queued mask cancellation failed");
@@ -211,15 +253,18 @@ std::string http_checks(const fs::path& root) {
     until([&] { changed_job = response(client.Get("/api/jobs/" + changed)); return changed_job.at("state") == "failed"; });
     require(changed_job.at("error").get<std::string>().find("Video changed") != std::string::npos, "Changed queued input silently replayed");
     until([&] { return response(client.Get("/api/jobs/"+changed_mask)).at("state")=="failed"; });
+    until([&] {return response(client.Get("/api/jobs/"+changed_text)).at("state")=="failed";});
+    require(response(client.Get("/api/jobs/"+changed_text)).at("error").get<std::string>().find("Video changed")!=std::string::npos,"OCR source mutation ignored");
     require(response(client.Get("/api/jobs/"+changed_mask)).at("error").get<std::string>().find("Video changed")!=std::string::npos,
         "Segmentation read changed queued input");
     return found.at("id").get<std::string>();
 }
 void http_restart(const fs::path& root, const std::string& search_id) {
-    Detector detector; Embedder embedder; Store store; Segmenter segmenter;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
     config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
+    config.ocr=&ocr;config.ocr_signature="fixture-ocr-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -230,9 +275,12 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     require(restored.at("state") == "succeeded" && restored.at("result").at("results").size() == 4 &&
         restored.at("attempts") == 1, "HTTP completed search lost or rerun after restart");
     status(client.Get("/api/preview/" + search_id + "/0.jpg"), 200);
-    bool restored_mask=false;
+    bool restored_mask=false,restored_text=false;
     const auto history=response(client.Get("/api/jobs"));
     for (const auto& job:history.at("jobs")) {
+        if(job.at("request").at("type")=="ocr_frame" && job.at("state")=="succeeded" && !job.at("result").at("regions").empty()) {
+            require(job.at("attempts")==1 && job.at("result").at("regions")[0].at("text")=="canon","Persisted OCR result differs");restored_text=true;
+        }
         if (job.at("request").at("type")=="segment_frame" && job.at("state")=="succeeded") {
             require(job.at("attempts")==1 && job.at("result").at("instances")[0].at("mask_pixels")==4,
                 "Completed mask lost or rerun after restart");
@@ -240,6 +288,7 @@ void http_restart(const fs::path& root, const std::string& search_id) {
         }
     }
     require(restored_mask,"Persisted mask job missing");
+    require(restored_text,"Persisted OCR job missing");
 }
 void segmentation_disabled(const fs::path& root) {
     Detector detector; Embedder embedder; Store store;
@@ -250,6 +299,8 @@ void segmentation_disabled(const fs::path& root) {
     httplib::Client client("127.0.0.1",port);
     until([&]{const auto result=client.Get("/api/health");return result && result->status==200;});
     require(response(client.Get("/api/health")).at("segmentation_enabled")==false,"Disabled segmentation advertised");
+    require(response(client.Get("/api/health")).at("ocr_enabled")==false,"Disabled OCR advertised");
+    (void)response(client.Post("/api/jobs",R"({"type":"ocr_frame","path":"test.avi"})","application/json"),400);
     (void)response(client.Post("/api/jobs",R"({"type":"segment_frame","path":"test.avi"})","application/json"),400);
 }
 }

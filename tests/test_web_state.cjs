@@ -53,7 +53,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, delayMask=false} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, delayMask=false} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[];
   const get = id => {
@@ -66,7 +66,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, d
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {segmentation_enabled:segmentation};
+    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr};
     else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
@@ -187,9 +187,41 @@ async function staleSegmentationSubmission() {
   await test.ui.refresh();assert.equal(test.get('segmentation-image').hidden,true);
   assert.equal(test.get('segmentation-status').textContent,'');
 }
+async function ocrPanel() {
+  const disabled=harness();await disabled.started;assert.equal(disabled.get('ocr-button').disabled,true);
+  const test=harness({ocr:true});await test.started;
+  assert.equal(test.get('ocr-button').disabled,false);test.get('ocr-frame').value='2';
+  await test.get('ocr-form').emit('submit',{preventDefault(){}});
+  assert.equal(test.jobs[0].request.type,'ocr_frame');assert.equal(test.jobs[0].request.frame_index,2);
+  assert.equal(test.get('ocr-button').disabled,true);
+  const job=test.jobs[0];job.state='succeeded';job.result={path:ordinary,frame_index:2,width:640,height:480,
+    preview_data_url:'data:image/jpeg;base64,/9j/',regions:[{text:'<script>plain text</script>',detection_confidence:.9,recognition_confidence:.8}]};
+  await test.ui.refresh();assert.equal(test.get('ocr-image').hidden,false);
+  assert.equal(test.get('ocr-regions').children[0].children[0].textContent,'<script>plain text</script>');
+  assert.equal(test.get('ocr-button').disabled,false);
+  test.ui.chooseMedia(archived,true);assert.equal(test.get('ocr-image').hidden,true);assert.equal(test.get('ocr-button').disabled,true);
+  const reopen=test.get('jobs').children[0].children.find(node=>node.textContent==='Yazıları göster');await reopen.emit('click');
+  assert.equal(test.get('media').value,ordinary);assert.equal(test.get('ocr-image').hidden,false);
+  for (const state of ['failed','cancelled']) {
+    await test.get('ocr-form').emit('submit',{preventDefault(){}});test.jobs[0].state=state;
+    await test.ui.refresh();assert.equal(test.get('ocr-image').hidden,true);assert.equal(test.get('ocr-button').disabled,false);
+  }
+  await test.get('ocr-form').emit('submit',{preventDefault(){}});test.jobs[0].state='succeeded';
+  test.jobs[0].result={...job.result,regions:[]};await test.ui.refresh();
+  assert.match(test.get('ocr-regions').children[0].textContent,/metin bulunamadı/);
+  await test.get('ocr-form').emit('submit',{preventDefault(){}});test.jobs[0].state='succeeded';
+  test.jobs[0].result={...job.result,preview_data_url:'https://untrusted/image.jpg'};
+  await test.ui.refresh();assert.equal(test.get('ocr-image').hidden,true);
+  const delayed=harness({ocr:true,delayMask:true});await delayed.started;delayed.get('ocr-frame').value='0';
+  const pending=delayed.get('ocr-form').emit('submit',{preventDefault(){}});
+  delayed.ui.chooseMedia(archived,true);delayed.releaseMask();await pending;
+  delayed.jobs[0].state='succeeded';delayed.jobs[0].result=job.result;
+  await delayed.ui.refresh();assert.equal(delayed.get('ocr-image').hidden,true);assert.equal(delayed.get('ocr-status').textContent,'');
+}
 (async () => {
   await mediaFirst(); await archiveFirst(); await lateInitializationAfterUserChoice(); await archiveOnly();
   await segmentationPanel();await staleSegmentationSubmission();
+  await ocrPanel();console.log('OCR UI passed: capability, request, safe text/URL, source change, history, empty, failure, cancellation, stale reply.');
   console.log('Segmentation UI passed: capability, submit, result, source change, failure, unsafe URL, delayed submission.');
   console.log('Web media state passed: media-first, archive-first, preserved user selection, seek and managed-index guards.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

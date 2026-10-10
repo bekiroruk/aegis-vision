@@ -6,6 +6,7 @@ param(
     [string]$LiveConfig = "configs/live-preview.toml",
     [string]$Ffmpeg = "ffmpeg",
     [string]$SegmentationModel = "",
+    [string]$OcrModels = "",
     [switch]$LiveSegmentation,
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
@@ -31,6 +32,12 @@ try {
         $serverArguments += @('--segment-model',$SegmentationModel)
     }
     if ($LiveSegmentation) { $serverArguments += '--live-segmentation' }
+    if ($OcrModels) {
+        foreach ($name in @('text_detection_en_ppocrv3_2023may.onnx','text_recognition_CRNN_EN_2021sep.onnx')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $OcrModels $name) -PathType Leaf)) { throw "OCR modeli bulunamadi: $name" }
+        }
+        $serverArguments += @('--ocr-models',$OcrModels)
+    }
     & $ServerExecutable @serverArguments
     if ($LASTEXITCODE -ne 0) { throw "Video servisi hata koduyla kapandi: $LASTEXITCODE" }
 }

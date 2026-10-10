@@ -1,4 +1,8 @@
 #segmentation-image { width:100%; max-height:600px; object-fit:contain; border-radius:9px; background:#050b11; }
 #segmentation-source, #segmentation-status { overflow-wrap:anywhere; }
+#ocr-image { width:100%; max-height:600px; object-fit:contain; border-radius:9px; background:#050b11; }
+#ocr-source, #ocr-status, #ocr-regions { overflow-wrap:anywhere; }
+#ocr-form { grid-template-columns:minmax(120px,240px) auto; justify-content:start; }
+@media(max-width:540px) { #ocr-form { grid-template-columns:1fr; } #ocr-form button { grid-column:auto; white-space:normal; } }
 #segmentation-form { grid-template-columns:minmax(120px,240px) auto; justify-content:start; }
 @media(max-width:540px) { #segmentation-form { grid-template-columns:1fr; } #segmentation-form button { grid-column:auto; white-space:normal; } }

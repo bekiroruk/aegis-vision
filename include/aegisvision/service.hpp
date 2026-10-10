@@ -5,6 +5,7 @@
 #include "aegisvision/clip_encoder.hpp"
 #include "aegisvision/archive_owner.hpp"
 #include "aegisvision/segmentation.hpp"
+#include "aegisvision/ocr.hpp"
 #include <httplib.h>
 #include <filesystem>
 
@@ -20,6 +21,8 @@ struct ServiceConfig {
     vision::ArchiveEncodeConfig archive_encoder;
     vision::ISegmenter* segmenter{}; // Optional; must outlive service, queue-worker access only.
     std::string segmentation_signature;
+    vision::IOcr* ocr{}; // Optional; worker-owned use, must outlive service.
+    std::string ocr_signature;
 };
 class ArchiveJobBusy : public std::runtime_error {
 public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an active indexing job") {}

@@ -5,10 +5,10 @@
 düzeltmesinden sonra CRNN EN modeli yazıyı okur. Inference tamamen C++/OpenCV DNN
 CPU FP32'dir. Python, Tesseract servisi veya harici OCR API'si kullanılmaz.
 
-Bu adım **yerel görüntü CLI'ıdır**. Henüz HTTP iş kuyruğu, web paneli, RTSP OCR,
-TOML seçimi veya `AnalysisPipeline` içindeki `ITextExtractor` portuna bağlanmadı.
-`IOcr` ayrık metin/kutu/skor sözleşmesini korur; sonraki adım sınırlı `ocr_frame`
-işi ve panel entegrasyonudur. VLM mevcut değildir.
+Yerel görüntü CLI'ına ek olarak **`ocr_frame` HTTP işi ve web paneli** vardır.
+`IOcr` ayrık metin/kutu/skor sözleşmesini korur. RTSP OCR, TOML seçimi ve
+`AnalysisPipeline` içindeki `ITextExtractor` portuna bağlantı henüz yoktur.
+VLM mevcut değildir.
 
 ## Çalıştırma
 
@@ -93,7 +93,80 @@ Gerçek model testi için CMake'e `AEGISVISION_OCR_BUNDLE` ve
 
 Bu çalışma ağacında Release derlemesi ve gerçek OCR/CLIP referanslarını içeren
 **38/38 CTest** geçti. Ayrı OCR veri kümesi, Türkçe/multilingual model, video
-kareleri ve HTTP/panel entegrasyonu henüz tamamlanmadı.
+karelerinden geniş kalite ölçümü henüz tamamlanmadı.
+
+## HTTP kuyruğu ve web paneli
+
+Qdrant açıkken, proje kökünden yeni derlemeyi OCR modelleriyle başlatın:
+
+```powershell
+./scripts/start_service.ps1 -ServerExecutable build/live-seg/Release/aegisvision_server.exe -OcrModels artifacts/models/ocr-en -JobDatabase artifacts/service/ocr-jobs.sqlite
+```
+
+8090'da başka sunucu varsa önce kendi terminalinde Ctrl+C ile durdurun veya
+`-Port 8091` kullanın. Mevcut SQLite dosyalarını silmeyin: OCR'ın açılıp kapanması
+veya model içeriklerinin değişmesi persistence bağlamını değiştirir; eski işlerin
+farklı modelle sessizce yürütülmesi reddedilir. Ayrı veritabanı bu nedenle önerilir.
+`-SegmentationModel` ve `-LiveSegmentation` seçenekleriyle birlikte kullanılabilir.
+
+Panelde video seçin, **Karedeki yazıları oku** bölümünde 0 tabanlı kare numarası
+girin ve **Yazıları oku** düğmesine basın. Metin listesi ile kutulu JPEG gösterilir.
+İş listesinden iptal edilebilir; tamamlanan işe **Yazıları göster** ile dönülür.
+Video değişince eski önizleme temizlenir. Modeller kapalıysa düğme devre dışıdır.
+
+API isteği:
+
+```json
+{"type":"ocr_frame","path":"ocr-canon.mp4","frame_index":0}
+```
+
+`POST /api/jobs` 202 döner; `GET /api/jobs/{id}` ile izlenir.
+`POST /api/jobs/{id}/cancel` iptal ister. Model ve sonuçlar tek kuyruk worker'ında
+çalışır; SQLite tamamlanmış metin/polygon/önizlemeyi saklar. Canlı ayrı worker'a
+OCR eklenmez. `GET /api/health` içindeki `ocr_enabled` yeteneği bildirir.
+
+- Yalnız medya kökündeki yerel video; yol kaçışı ve yönetilen canlı arşiv reddedilir.
+  HTTP üzerinden keyfî resim yolu, model veya dil seçimi kabul edilmez.
+- Kare 0–10000; doğru indeks için baştan ardışık decode. Decode 30 saniye kooperatif
+  deadline; modelin ayrıca 10 saniyelik kooperatif limiti vardır. Decode/inference
+  çağrısı zorla kesilemez. İptalde kısmi sonuç yayımlanmaz.
+- Kabul anındaki dosya boyutu/mtime, işlem başı ve sonuç öncesi yeniden kontrol
+  edilir. Bu içerik hash'i veya kötü niyetli eşzamanlı dosya değişimine karşı
+  atomik snapshot garantisi değildir.
+- En fazla 64 bölge; metin/finite skor/konveks geometri doğrulanır. Preview en
+  fazla 960 piksel kenar ve 512 KiB JPEG; JSON sonuç en fazla 1 MiB'dir.
+- HTTP sonucundaki polygon orijinal kare koordinatıdır; küçültülmüş JPEG'e
+  çizim sunucuda yapılır. Metinler tarayıcıda HTML olarak yorumlanmaz.
+
+Tekrar üretilebilir HTTP kontrolü:
+
+```powershell
+./scripts/test_ocr_service.ps1 -Port 8091 -Video ocr-canon.mp4 -ExpectedText canon -Output outputs/ocr-http-new
+```
+
+Bu komut sunucunun medya kökünde `ocr-canon.mp4` ister; yalnız kendi OCR işini
+oluşturur. Beklenen kelime denetimi isteğe bağlıdır. İş JSON'u ve JPEG yerelde
+kaydedilir; hazır sunucuları başlatmaz veya durdurmaz.
+
+### 10 Ekim 2026 uçtan uca doğrulaması
+
+Release derlemesi, **38/38 CTest (57,17 saniye)** ve web durum testleri geçti.
+OCR ile segmentation aynı sunucuda açılarak 8091 portunda gerçek HTTP işi
+çalıştırıldı. Canon örneğinden üretilen bir saniyelik, 10 FPS videonun ilk
+karesinde `canon` bulundu: detection **0,993406**, recognition **0,999435**.
+Yerel kanıtlar `outputs/ocr-http-20261010/smoke/job.json` ve `preview.jpg`.
+Tarayıcıdaki **Yazıları oku** düğmesiyle ayrıca yeni bir iş gönderildi;
+tamamlanan iş, metin listesi ve kutulu önizleme panelde doğrulandı.
+
+Test videosu sabit fotoğrafın tekrarıdır; doğal video veya genel OCR kalite
+benchmark'ı değildir. Örnek hazırsa, sunucunun medya kökünde henüz bulunmayan
+bir hedef dosyaya şu komutla benzer bir fixture oluşturulabilir:
+
+```powershell
+ffmpeg -hide_banner -loglevel error -n -loop 1 -i artifacts/media/ocr/text_det_test2.jpg -t 1 -r 10 -an -c:v libx264 -threads 2 -pix_fmt yuv420p artifacts/media/ocr-canon.mp4
+```
+
+HTTP smoke betiğine dosyanın sunucunun medya köküne göre yolunu verin.
 
 ## Kaynaklar ve lisans
 
