@@ -75,6 +75,7 @@ function showLive(session) {
   const reconnecting = active && session.connection_state === 'reconnecting';
   $('live-state').textContent = reconnecting ? 'Yeniden bağlanıyor…' : liveStateText[session.state] || session.state;
   const entries = [
+    ['Analiz',session.analysis_mode === 'segmentation' ? 'Piksel maskesi + takip' : 'Nesne tespiti + takip'],
     ['Analiz edilen',session.processed_frames],['Okunan',session.decoded_frames],['Atlanan',session.dropped_frames],
     ['Bağlantı oturumu',session.sessions],['Kuyruk tepe / sınır',`${session.queue_high_watermark} / ${session.queue_capacity}`],
     ['Ortalama analiz',`${Number(session.mean_analysis_ms).toFixed(0)} ms`],
@@ -316,6 +317,7 @@ async function start() {
     const live = await api('/api/live/sources');
     live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
     liveEnabled = live.sources.length > 0;
+    $('live-heading').textContent=live.analysis_mode === 'segmentation' ? 'Canlı RTSP maskeleri' : 'Canlı RTSP analizi';
     archiveAvailable = !!live.archive_available;
     $('live-archive').checked = archiveAvailable;
     $('archive-help').textContent = archiveAvailable ? archiveLimits(live.archive_config) : 'Canlı arşiv bu sunucuda etkin değil. Önizleme tek başına kullanılabilir.';

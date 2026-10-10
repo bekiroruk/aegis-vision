@@ -91,8 +91,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    görüntüsünde resmi maske değerlendirmesi yapıldı (AP %45,47); kör test değildir.
    Sınırlı tek-kare HTTP `segment_frame` işi mevcut kuyruğa bağlandı; dashboard
    kare seçimi ve maske gösterimi eklendi; gerçek model/tarayıcı smoke testi geçti.
-   Canlı RTSP henüz dahil değil. Sırada dokunulmamış daha geniş
-   veri ve canlı entegrasyon; ardından OCR metin-kutu çıktısı ve ayrı VLM
+   Canlı RTSP için ayrı model/pipeline, IoU maske kimlikleri ve epoch sıfırlama
+   eklendi. Gerçek RTSP+maske uçtan uca doğrulaması ayrıca bekliyor. Sırada dokunulmamış daha geniş
+   veri; ardından OCR metin-kutu çıktısı ve ayrı VLM
    adaptörü ekle. OCR/VLM mevcut sistemde yoktur.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.

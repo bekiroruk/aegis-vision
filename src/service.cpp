@@ -80,14 +80,14 @@ int integer(const Json& value, const char* key, int fallback, int minimum, int m
 }
 }
 LocalService::LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config,
-    LiveDetectorFactory live_detector, vision::LiveCaptureFactory live_capture)
+    LiveDetectorFactory live_detector, vision::LiveCaptureFactory live_capture,LiveSegmenterFactory live_segmenter)
     : detector_(detector), embedder_(embedder), store_(store), config_(prepare(std::move(config))),
       archive_owner_(config_.live.archive.enabled ? std::make_unique<vision::ArchiveOwner>(config_.live.archive.root) : nullptr),
       jobs_([this](const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
           return execute(request, progress, cancel);
       }, config_.max_pending, config_.max_retained, config_.persistence),
       live_(config_.live, std::move(live_detector), std::move(live_capture),
-        [this](const vision::ArchivedSegment& clip) { (void)archive_submit(clip.session_id,clip.index); }) {
+        [this](const vision::ArchivedSegment& clip) { (void)archive_submit(clip.session_id,clip.index); },std::move(live_segmenter)) {
     routes();
 }
 LocalService::~LocalService() { stop(); }

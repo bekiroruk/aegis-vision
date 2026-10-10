@@ -4,8 +4,9 @@
 zamanı C++/OpenCV CPU FP32'dir; Python model hazırlığı ve çevrimdışı resmi kalite
 ölçümü içindir, uygulama inference'ında kullanılmaz. Detection/tracking CLI'larının
 varsayılanları değişmez. Ayrı video giriş noktası ve yeniden kullanılabilir
-`SegmentationPipeline` vardır. HTTP tek-kare işi aşağıdadır; canlı RTSP ve
-segmentation TOML modu bu aşamaya dahil değildir.
+`SegmentationPipeline` vardır. HTTP tek-kare işi aşağıdadır;
+[canlı RTSP maske modu](live-video.md#canlı-piksel-maskeleri) da eklenmiştir.
+Segmentation için ayrı TOML modu henüz yoktur.
 
 ## Model ve çalıştırma
 
@@ -112,8 +113,8 @@ iptal tekrar kontrol edilir. Kaynak boyutu/mtime kabulde ve işin önce/sonrası
 kontrol edilir (kriptografik medya bütünlüğü garantisi değildir).
 
 Mevcut bounded queue/backpressure, SQLite durum kaydı, hata sonrası worker'ın
-devamı ve aynı-origin kontrolleri kullanılır. Tam video HTTP export'u ve canlı
-RTSP maskeleri henüz dahil değildir. Test betiği gerçek HTTP sonucunun RLE
+devamı ve aynı-origin kontrolleri kullanılır. Tam video HTTP export'u henüz
+dahil değildir. Canlı RTSP maskeleri ayrı canlı worker'da çalışır. Test betiği gerçek HTTP sonucunun RLE
 kapsamını/alanını denetler, `job.json` ve `preview.jpg` çıktısını bilgisayarda saklar.
 
 ### Web panelinde kullanım

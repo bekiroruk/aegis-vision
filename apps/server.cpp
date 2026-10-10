@@ -2,6 +2,7 @@
 #include "aegisvision/clip.hpp"
 #include "aegisvision/service.hpp"
 #include <charconv>
+#include <algorithm>
 #include <iostream>
 
 namespace {
@@ -11,14 +12,20 @@ int run(std::vector<std::filesystem::path> args) {
             std::cout << "Usage: aegisvision_server SEARCH.toml DETECTOR.toml MEDIA_DIR WEB_DIR [PORT [JOB_DB]]\n"
                 "   Live: append STREAM.toml RTSP_URL [FFMPEG] after PORT JOB_DB to enable preset local-pedestrians and opt-in archive.\n"
                 "   Segmentation: append --segment-model MODEL.onnx at the end to enable queued segment_frame jobs.\n"
+                "   Add --live-segmentation with live arguments and --segment-model to draw tracked live masks.\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
         std::filesystem::path segmentation_model;
+        bool live_segmentation=false;
+        const auto live_flag=std::find(args.begin(),args.end(),std::filesystem::path("--live-segmentation"));
+        if (live_flag!=args.end()) {live_segmentation=true;args.erase(live_flag);}
         if (args.size()>=3 && args[args.size()-2]=="--segment-model") {
             segmentation_model=args.back();args.resize(args.size()-2);
         }
         if ((args.size() < 5 || args.size() > 7) && args.size() != 9 && args.size()!=10) throw std::invalid_argument("Missing arguments; run --help");
+        if (live_segmentation && (segmentation_model.empty() || args.size()<9))
+            throw std::invalid_argument("Live segmentation requires live source arguments and --segment-model");
         int port = 8090;
         if (args.size() >= 6) {
             const auto text = args[5].string();
@@ -49,6 +56,7 @@ int run(std::vector<std::filesystem::path> args) {
         config.persistence.context = nlohmann::json::array({"clip-qdrant-v1", clip.space_id(),
             search.qdrant.host, search.qdrant.port, search.qdrant.collection, search.qdrant.dimension}).dump();
         aegisvision::LiveDetectorFactory live_detector;
+        aegisvision::LiveSegmenterFactory live_segmenter;
         if (args.size() >= 9) {
             auto live = aegisvision::vision::load_application_settings(args[7]);
             if (live.mode != aegisvision::vision::ApplicationMode::Stream)
@@ -60,8 +68,11 @@ int run(std::vector<std::filesystem::path> args) {
             config.live.archive.enabled=true;
             if (args.size()==10) config.archive_encoder.executable=args[9];
             live_detector = [live] { return aegisvision::vision::make_configured_detector(live); };
+            if (live_segmentation) live_segmenter=[segmentation_model] {
+                return std::make_unique<aegisvision::vision::YoloSegmenter>(segmentation_model);
+            };
         }
-        aegisvision::LocalService service(*detector, clip, store, config, std::move(live_detector));
+        aegisvision::LocalService service(*detector, clip, store, config, std::move(live_detector),{},std::move(live_segmenter));
         const auto bound = service.bind(port);
         std::cout << "AegisVision ready: http://127.0.0.1:" << bound << " / collection=" << search.qdrant.collection << std::endl;
         return service.listen() ? 0 : 1;

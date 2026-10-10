@@ -1,6 +1,7 @@
 #pragma once
 #include "aegisvision/live.hpp"
 #include "aegisvision/live_archive.hpp"
+#include "aegisvision/segmentation.hpp"
 #include <nlohmann/json.hpp>
 #include <mutex>
 #include <thread>
@@ -16,6 +17,7 @@ struct LiveServiceConfig {
     vision::LiveArchiveConfig archive;
 };
 using LiveDetectorFactory = std::function<std::unique_ptr<IDetector>()>;
+using LiveSegmenterFactory = std::function<std::unique_ptr<vision::ISegmenter>()>;
 class LiveSessionBusy : public std::runtime_error {
 public: LiveSessionBusy() : std::runtime_error("A live session is already active") {}
 };
@@ -30,7 +32,7 @@ struct LivePreview {
 class LiveSessions {
 public:
     LiveSessions(LiveServiceConfig config = {}, LiveDetectorFactory detector = {}, vision::LiveCaptureFactory capture = {},
-        vision::LiveArchive::Callback archived = {});
+        vision::LiveArchive::Callback archived = {}, LiveSegmenterFactory segmenter = {});
     ~LiveSessions();
     nlohmann::json sources() const;
     nlohmann::json current() const; // null before first start; last terminal summary retained.
@@ -46,6 +48,7 @@ private:
     LivePreview preview_locked() const;
     LiveServiceConfig config_;
     LiveDetectorFactory detector_;
+    LiveSegmenterFactory segmenter_;
     vision::LiveCaptureFactory capture_;
     vision::LiveArchive::Callback archived_;
     mutable std::mutex state_mutex_;

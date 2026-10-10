@@ -9,10 +9,11 @@ namespace aegisvision {
 using Json = nlohmann::json;
 using namespace std::chrono_literals;
 LiveSessions::LiveSessions(LiveServiceConfig config, LiveDetectorFactory detector, vision::LiveCaptureFactory capture,
-    vision::LiveArchive::Callback archived)
-    : config_(std::move(config)), detector_(std::move(detector)), capture_(std::move(capture)), archived_(std::move(archived)) {
+    vision::LiveArchive::Callback archived,LiveSegmenterFactory segmenter)
+    : config_(std::move(config)), detector_(std::move(detector)), segmenter_(std::move(segmenter)),
+      capture_(std::move(capture)), archived_(std::move(archived)) {
     vision::validate_live_config(config_.stream);
-    if (config_.sources.size() > 16 || (!config_.sources.empty() && !detector_))
+    if (config_.sources.size() > 16 || (!config_.sources.empty() && !detector_ && !segmenter_))
         throw std::invalid_argument("Live service requires at most 16 presets and an isolated detector factory");
     std::set<std::string> ids;
     for (const auto& source : config_.sources) {
@@ -28,6 +29,8 @@ Json LiveSessions::sources() const {
     auto entries = Json::array();
     for (const auto& s : config_.sources) entries.push_back({{"id", s.id}, {"label", s.label}});
     return {{"sources", entries}, {"max_active", 1}, {"duration_seconds", config_.stream.duration_seconds},
+        {"analysis_mode",segmenter_ ? "segmentation" : "detection"},
+        {"tracker",segmenter_ ? "iou-mask-0.30-max-missed-20" : "configured"},
         {"preview_max_age_ms", 2000}, {"persistent", false}, {"archive_available", config_.archive.enabled},
         {"archive_config", {{"segment_seconds",config_.archive.segment_seconds},
             {"max_segments_per_session",config_.archive.max_segments_per_session},
@@ -45,6 +48,7 @@ Json LiveSessions::snapshot_locked() const {
     const auto& s = summary_.source;
     const auto picture = preview_locked();
     return {{"id", id_}, {"source_id", source_id_}, {"state", state_}, {"active", active_},
+        {"analysis_mode",segmenter_ ? "segmentation" : "detection"},
         {"connection_state", s.connection_state}, {"cancel_requested", cancel_.load()}, {"error", error_},
         {"processed_frames", summary_.processed_frames}, {"decoded_frames", s.decoded_frames},
         {"sessions", s.sessions}, {"connection_attempts", s.connection_attempts}, {"read_failures", s.read_failures},
@@ -115,20 +119,25 @@ void LiveSessions::run(LivePreset preset, bool archive) {
     };
     try {
         recorder = std::make_unique<vision::LiveArchive>(archive_config,id_,preset.id,archived_);
-        auto detector = detector_(); // This model belongs only to this worker.
-        if (!detector) throw std::runtime_error("Null live detector");
+        // Exactly one analysis model per live worker; never share the file-job model.
+        auto segmenter=segmenter_ ? segmenter_() : nullptr;
+        auto detector=!segmenter_ && detector_ ? detector_() : nullptr;
+        if (segmenter_ ? !segmenter : !detector) throw std::runtime_error("Null live analysis model");
+        std::unique_ptr<vision::SegmentationPipeline> mask_pipeline;
+        std::vector<vision::InstanceMask> masks;
         {
             std::lock_guard lock(state_mutex_);
             if (!cancel_) state_ = "running";
         }
-        const auto summary = vision::analyze_stream(preset.url, *detector, config_.tracking, config_.stream, cancel_,
-            [this,&recorder](const vision::LiveFrame& frame, const AnalysisResult& result, const vision::LiveSummary& current, double, double) {
+        const vision::LiveFrameSink sink = [this,&recorder,&masks](const vision::LiveFrame& frame, const AnalysisResult& result, const vision::LiveSummary& current, double, double) {
                 if (!cancel_) recorder->accept(frame,current.tracking_epochs);
                 std::vector<Detection> boxes;
                 for (const auto& t : result.tracks) boxes.push_back({t.bbox,
                     "E" + std::to_string(current.tracking_epochs) + "/ID " + std::to_string(t.track_id) + " " + t.label,
                     t.score, {}, {}});
-                auto image = vision::annotate(frame.image, boxes);
+                auto image = segmenter_ ? vision::paint_masks(frame.image,masks) : vision::annotate(frame.image, boxes);
+                if (segmenter_) cv::putText(image,"Epoch "+std::to_string(current.tracking_epochs),{8,20},
+                    cv::FONT_HERSHEY_SIMPLEX,.6,{255,255,255},2);
                 const double scale = std::min({1.0, 960.0 / image.cols, 720.0 / image.rows});
                 if (scale < 1) cv::resize(image, image, {}, scale, scale, cv::INTER_AREA);
                 auto bytes = std::make_shared<std::vector<unsigned char>>();
@@ -140,12 +149,19 @@ void LiveSessions::run(LivePreset preset, bool archive) {
                 if (cancel_ || current.source.connection_state != "live" || current.source.sessions != frame.session) return;
                 arrived_ = frame.arrived;
                 preview_ = {std::move(bytes), frame.sequence, frame.session, current.tracking_epochs, 0};
-            },
-            [this](const vision::LiveSummary& summary) {
+            };
+        const vision::LiveProgress progress = [this](const vision::LiveSummary& summary) {
                 std::lock_guard lock(state_mutex_); summary_ = summary;
                 if (summary.source.connection_state != "live" || preview_.source_session != summary.source.sessions)
                     preview_.jpeg.reset();
-            }, capture_);
+            };
+        const auto summary = segmenter_ ? vision::analyze_live_frames(preset.url,config_.stream,cancel_,
+            [&](const vision::LiveFrame& frame,bool reset) {
+                if (reset || !mask_pipeline) mask_pipeline=std::make_unique<vision::SegmentationPipeline>(*segmenter,true);
+                masks=mask_pipeline->analyze(frame.image);
+                return AnalysisResult{};
+            },sink,progress,capture_) :
+            vision::analyze_stream(preset.url,*detector,config_.tracking,config_.stream,cancel_,sink,progress,capture_);
         finish_archive();
         std::lock_guard lock(state_mutex_);
         summary_ = summary; active_ = false; preview_.jpeg.reset(); finished_ = Clock::now();

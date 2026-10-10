@@ -1,4 +1,4 @@
-param([int]$Port = 8090, [string]$Output = 'outputs/live-dashboard-test')
+param([int]$Port = 8090, [string]$Output = 'outputs/live-dashboard-test', [switch]$ExpectSegmentation)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $destination = [IO.Path]::GetFullPath($Output, $repo)
@@ -7,6 +7,9 @@ $base = "http://127.0.0.1:$Port"
 $current = (Invoke-RestMethod "$base/api/live").session
 if ($current -and $current.active) { throw 'Stop the existing live session first; the test will not interrupt it' }
 $presets = Invoke-RestMethod "$base/api/live/sources"
+if ($ExpectSegmentation -and $presets.analysis_mode -ne 'segmentation') {
+    throw 'Start service with -LiveSegmentation and -SegmentationModel before this test'
+}
 if (-not ($presets.sources.id -contains 'local-pedestrians') -or $presets.duration_seconds -lt 60) {
     throw 'Start the service with configs/live-preview.toml and the local pedestrians RTSP URL'
 }
@@ -40,6 +43,7 @@ try {
     $accepted = Invoke-RestMethod "$base/api/live/start" -Method Post -ContentType application/json -Body '{"source_id":"local-pedestrians"}'
     $sessionId = $accepted.id
     $first = WaitSession { param($s) $s.has_preview }
+    if ($ExpectSegmentation -and $first.analysis_mode -ne 'segmentation') { throw 'Live worker did not enter segmentation mode' }
     Invoke-WebRequest "$base/api/live/$sessionId/preview.jpg" -OutFile (Join-Path $destination 'before.jpg')
     Start-Sleep -Seconds 2
     $beforePublisher.Kill(); $beforePublisher.WaitForExit()

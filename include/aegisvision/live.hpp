@@ -76,6 +76,11 @@ struct LiveSummary {
 // on this worker, must not retain references, and must keep their own queues bounded.
 using LiveFrameSink = std::function<void(const LiveFrame&, const AnalysisResult&, const LiveSummary&, double, double)>;
 using LiveProgress = std::function<void(const LiveSummary&)>;
+// reset=true on reconnect, long arrival gap or resolution change. Analysis owns its model/tracker.
+using LiveAnalyzer = std::function<AnalysisResult(const LiveFrame&, bool reset)>;
+LiveSummary analyze_live_frames(const std::string& url, const LiveConfig& config,
+    const std::atomic_bool& cancel, LiveAnalyzer analyze, LiveFrameSink sink,
+    LiveProgress progress = {}, LiveCaptureFactory factory = {});
 LiveSummary analyze_stream(const std::string& url, IDetector& detector,
     const VideoConfig& tracking, const LiveConfig& config, const std::atomic_bool& cancel,
     LiveFrameSink sink, LiveProgress progress = {}, LiveCaptureFactory factory = {});

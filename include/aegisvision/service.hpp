@@ -29,7 +29,7 @@ public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an ac
 class LocalService {
 public:
     LocalService(IDetector& detector, IEmbedder& embedder, IVectorStore& store, ServiceConfig config,
-        LiveDetectorFactory live_detector = {}, vision::LiveCaptureFactory live_capture = {});
+        LiveDetectorFactory live_detector = {}, vision::LiveCaptureFactory live_capture = {}, LiveSegmenterFactory live_segmenter = {});
     ~LocalService();
     int bind(int port); // 0 chooses a free port, useful for integration tests.
     bool listen();

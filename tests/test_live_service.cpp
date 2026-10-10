@@ -15,7 +15,7 @@ template<class F> void until(F predicate) {
     }
 }
 struct Control {
-    std::atomic_bool connected{true}, produce{true}, fail_model{false};
+    std::atomic_bool connected{true}, produce{true}, fail_model{false}, wide{false};
     std::atomic_int model_instances{0}, analyses{0};
 };
 class Capture : public vision::ILiveCapture {
@@ -28,7 +28,7 @@ public:
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_);
         while (!state_->produce && state_->connected && std::chrono::steady_clock::now() < deadline) std::this_thread::sleep_for(2ms);
         if (!state_->connected || !state_->produce) return false;
-        image = cv::Mat(120,160,CV_8UC3,cv::Scalar(30,40,50)); return true;
+        image = cv::Mat(120,state_->wide ? 240 : 160,CV_8UC3,cv::Scalar(30,40,50)); return true;
     }
     void close() override {}
 private: std::shared_ptr<Control> state_; int timeout_{2000};
@@ -47,6 +47,17 @@ private: std::shared_ptr<Control> state_;
 class FileDetector : public IDetector {
 public: std::vector<Detection> detect(const Frame&) override { throw std::runtime_error("Live used file detector"); }
 };
+class LiveSegmenter : public vision::ISegmenter {
+public:
+    explicit LiveSegmenter(std::shared_ptr<Control> state):state_(std::move(state)) {++state_->model_instances;}
+    std::vector<vision::InstanceMask> segment(const cv::Mat& image) override {
+        require((image.cols==160 || image.cols==240) && image.rows==120,"Live segmentation pixels missing");
+        if (state_->fail_model) throw std::runtime_error("secret segmentation failure");
+        ++state_->analyses;std::this_thread::sleep_for(20ms);
+        return {{{{10,10,80,90},"person",.9F,{},{}},{10,10,70,80},cv::Mat(80,70,CV_8UC1,cv::Scalar(255))}};
+    }
+private:std::shared_ptr<Control> state_;
+};
 class Embedder : public IEmbedder {
 public:
     std::vector<float> embed_image(const Frame&, const Detection&) override { return {1,0}; }
@@ -61,7 +72,7 @@ Json json(const httplib::Result& response, int code = 200) {
     require(response && response->status == code, "Unexpected HTTP status"); return Json::parse(response->body);
 }
 void code(const httplib::Result& result, int expected) { require(result && result->status == expected, "Unexpected HTTP status"); }
-void http_checks(const std::filesystem::path& root) {
+void http_checks(const std::filesystem::path& root,bool masks=false) {
     const auto control = std::make_shared<Control>();
     FileDetector detector; Embedder embedder; Store store;
     ServiceConfig config{root, std::filesystem::path(__FILE__).parent_path().parent_path() / "web", "fixture"};
@@ -71,7 +82,8 @@ void http_checks(const std::filesystem::path& root) {
     config.live.stream.reconnect_initial_ms = 10; config.live.stream.reconnect_max_ms = 20;
     LocalService service(detector, embedder, store, config,
         [control] { return std::make_unique<LiveDetector>(control); },
-        [control] { return std::make_unique<Capture>(control); });
+        [control] { return std::make_unique<Capture>(control); },
+        masks ? LiveSegmenterFactory([control]{return std::make_unique<LiveSegmenter>(control);}) : LiveSegmenterFactory{});
     const auto port = service.bind(0);
     std::thread server([&] { service.listen(); });
     struct Guard { LocalService& s; std::thread& thread; std::shared_ptr<Control> state;
@@ -79,6 +91,7 @@ void http_checks(const std::filesystem::path& root) {
     httplib::Client client("127.0.0.1",port); client.set_read_timeout(10);
     until([&] { auto r = client.Get("/api/health"); return r && r->status == 200; });
     const auto presets = json(client.Get("/api/live/sources"));
+    require(presets.at("analysis_mode")== (masks ? "segmentation" : "detection"),"Wrong advertised live mode");
     require(presets.at("sources").size() == 1 && presets.dump().find("rtsp://") == std::string::npos,
         "Source URL leaked through API");
     require(json(client.Get("/api/live")).at("session").is_null(), "Session started without user action");
@@ -97,6 +110,11 @@ void http_checks(const std::filesystem::path& root) {
         "Preview headers missing");
     const std::vector<unsigned char> bytes(picture->body.begin(), picture->body.end());
     require(!cv::imdecode(bytes,cv::IMREAD_COLOR).empty(), "Live JPEG not decodable");
+    if (masks) {
+        const auto pixel=cv::imdecode(bytes,cv::IMREAD_COLOR).at<cv::Vec3b>(40,40);
+        require(pixel[0]>45 && pixel[1]>65,"Preview did not paint mask interior");
+        require(current().at("analysis_mode")=="segmentation","Session mode missing");
+    }
     require(control->model_instances == 1 && control->analyses > 0, "Isolated model not used");
     // Regular search still executes while live detector/capture run on their own worker.
     const auto search = json(client.Post("/api/jobs", R"({"type":"search","query":"a person"})", "application/json"),202);
@@ -109,6 +127,9 @@ void http_checks(const std::filesystem::path& root) {
     control->connected = true;
     until([&] { const auto s = current(); return s.at("sessions").get<int>() > sessions_before && s.at("has_preview") == true; });
     require(current().at("tracking_epochs").get<int>() >= 2, "Tracker not reset after reconnect");
+    const int epoch_before_resize=current().at("tracking_epochs").get<int>();
+    control->wide=true;
+    until([&]{return current().at("has_preview")==true && current().at("tracking_epochs").get<int>()>epoch_before_resize;});
     control->produce = false;
     const auto previous_sequence = current().at("preview_sequence").get<std::uint64_t>();
     until([&] { return current().at("has_preview") == false; });
@@ -154,7 +175,7 @@ int main() {
         std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         std::filesystem::create_directories(root);
-        http_checks(root); lifecycle_checks();
+        http_checks(root); http_checks(root,true); lifecycle_checks();
         std::filesystem::remove_all(root); // Only this test's newly created scratch directory.
         std::cout << "Live HTTP presets, isolation, preview, reconnect, stop, failure and lifecycle passed\n";
         return 0;

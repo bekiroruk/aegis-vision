@@ -201,8 +201,20 @@ LiveSummary analyze_stream(const std::string& url, IDetector& detector, const Vi
     LiveProgress progress, LiveCaptureFactory factory) {
     if (tracking.use_appearance)
         throw std::invalid_argument("Appearance tracking requires local video; live appearance is not supported");
-    validate_rtsp_url(url); validate_live_config(config);
     auto tracker = make_tracker(tracking);
+    PipelineConfig pipeline_config;
+    pipeline_config.enable_embeddings = false; pipeline_config.index_embeddings = false;
+    return analyze_live_frames(url,config,cancel,[&](const LiveFrame& frame,bool reset) {
+        if (reset) tracker=make_tracker(tracking);
+        AnalysisPipeline pipeline(pipeline_config,detector,tracker.get(),nullptr,nullptr,nullptr);
+        return pipeline.analyze(image_frame(frame.image,std::to_string(frame.sequence),
+            "rtsp-session-"+std::to_string(frame.session),frame.arrival_ms));
+    },std::move(sink),std::move(progress),std::move(factory));
+}
+LiveSummary analyze_live_frames(const std::string& url,const LiveConfig& config,const std::atomic_bool& cancel,
+    LiveAnalyzer analyze,LiveFrameSink sink,LiveProgress progress,LiveCaptureFactory factory) {
+    validate_rtsp_url(url);validate_live_config(config);
+    if (!analyze) throw std::invalid_argument("Live analyzer required");
     if (!sink) throw std::invalid_argument("Live frame sink required");
     if (cancel) { LiveSummary cancelled; cancelled.stop_reason = "cancelled"; return cancelled; }
     LiveSource source(url, config, std::move(factory));
@@ -211,8 +223,7 @@ LiveSummary analyze_stream(const std::string& url, IDetector& detector, const Vi
     std::uint64_t session = 0;
     std::int64_t previous_arrival = 0;
     double total_analysis = 0;
-    PipelineConfig pipeline_config;
-    pipeline_config.enable_embeddings = false; pipeline_config.index_embeddings = false;
+    cv::Size previous_size;
     while (true) {
         if (cancel) { summary.stop_reason = "cancelled"; break; }
         if (Clock::now() - started >= std::chrono::seconds(config.duration_seconds)) {
@@ -226,16 +237,15 @@ LiveSummary analyze_stream(const std::string& url, IDetector& detector, const Vi
             if (source.finished()) { summary.stop_reason = source.stats().stop_reason; break; }
             continue;
         }
-        if (session != frame->session || frame->arrival_ms - previous_arrival > config.tracking_gap_ms) {
-            tracker = make_tracker(tracking); ++summary.tracking_epochs;
-        }
+        const bool reset=session!=frame->session || frame->arrival_ms-previous_arrival>config.tracking_gap_ms ||
+            frame->image.size()!=previous_size;
+        if (reset) ++summary.tracking_epochs;
+        previous_size=frame->image.size();
         session = frame->session; previous_arrival = frame->arrival_ms;
-        AnalysisPipeline pipeline(pipeline_config, detector, tracker.get(), nullptr, nullptr, nullptr);
         const auto analysis_started = Clock::now();
         const double age = std::chrono::duration<double, std::milli>(analysis_started - frame->arrived).count();
         summary.max_decode_age_at_analysis_ms = std::max(summary.max_decode_age_at_analysis_ms, age);
-        auto result = pipeline.analyze(image_frame(frame->image, std::to_string(frame->sequence),
-            "rtsp-session-" + std::to_string(session), frame->arrival_ms));
+        auto result = analyze(*frame,reset);
         const double analysis_ms = std::chrono::duration<double, std::milli>(Clock::now() - analysis_started).count();
         if (cancel) { summary.stop_reason = "cancelled"; break; }
         total_analysis += analysis_ms;

@@ -52,7 +52,9 @@ CLIP ve YOLO başlangıçta bir kez yüklenir. `service-search.toml` ayrı
 İsteğe bağlı `-SegmentationModel MODEL.onnx` seçeneği aynı kuyrukta tek-kare
 `segment_frame` işini açar. Yeni bir `-JobDatabase` seçin; kullanım, piksel maskesi
 şeması ve sınırlar [segmentation HTTP kılavuzunda](segmentation.md#kuyruk-tabanlı-http-tek-kare-maskesi).
-Dashboard'da **Piksel maskesi analizi** panelini açar; canlı segmentation değildir.
+Dashboard'da **Piksel maskesi analizi** panelini açar. Canlı maskeler için ayrıca
+`-LiveSegmentation -LiveUrl rtsp://127.0.0.1:8554/pedestrians` gerekir;
+[canlı kurulum](live-video.md#canlı-piksel-maskeleri).
 
 ## Süre sınırlı canlı önizleme ve aranabilir arşiv
 

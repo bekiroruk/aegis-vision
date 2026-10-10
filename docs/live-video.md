@@ -57,6 +57,56 @@ tarayıcı da kendi süre kontrolüyle donmuş görüntüyü kaldırır. Bu yaş
 veya kamera-ağ gecikmesi değildir. Önizleme en fazla 960×720 ve 2 MiB'dir; istemci
 başına yeni decoder/model kurulmaz, tek değişmez son JPEG paylaşılır.
 
+## Canlı piksel maskeleri
+
+Sunucuya `--live-segmentation` veya PowerShell başlatıcıya `-LiveSegmentation`
+verilirse canlı worker YOLOv8-seg kullanır. Yukarıdaki relay ve yayıncı açıkken:
+
+```powershell
+./scripts/start_service.ps1 -LiveUrl rtsp://127.0.0.1:8554/pedestrians -SegmentationModel artifacts/models/yolov8n-seg/yolov8n-seg.onnx -LiveSegmentation -JobDatabase artifacts/service/segmentation-jobs.sqlite
+```
+
+Yeni derlemeyi başka klasörde hazırladıysanız `-ServerExecutable` ekleyin; örneğin
+`-ServerExecutable build/live-seg/Release/aegisvision_server.exe`. Aynı porttaki
+eski web servisini önce kendi terminalinde Ctrl+C ile durdurun; Qdrant açık kalır.
+Web paneli **Canlı RTSP maskeleri** başlığını ve **Piksel maskesi + takip** modunu
+gösterir. Başlatma/durdurma, 180 saniyelik süre ve iki saniyelik tazelik sınırı
+önceki canlı analizle aynıdır. Kaynak/oturum API'leri `analysis_mode` alanını verir.
+
+Canlı maskeler için ayrı model örneği yüklenir; dosya işlerinin segmenter'ı
+paylaşılmaz. Her analiz karesi tek segmentation inference'ından geçer. Sınıf
+duyarlı IoU .30/max_missed 20 ile maskeler doğrudan giriş sırasındaki takip
+kimliğine bağlanır. Bu modda TOML'deki detection takipçisi yerine bu maske
+takipçisi kullanılır. Reconnect, uzun decode-arrival aralığı veya çözünürlük
+değişiminde pipeline sıfırlanır; görüntüde **Epoch** ve kişi/nesne yanında **#ID**
+yazar. Kimlik yalnız aynı epoch içinde anlamlıdır. En fazla 1920 piksel kenar,
+100 maske/kare; GPU/gerçek zaman garantisi yoktur. Boş tespitte orijinal kare
+gösterilir, kaçırılan nesne için maske tahmini yapılmaz.
+
+Arşiv açılırsa analiz edilen **orijinal kareler** kaydedilir; piksel maskeleri
+arşive yazılmaz. Arşiv indeksleme mevcut dosya detection/CLIP zincirini kullanır.
+Canlı kayıt/arama sözleşmesi değişmez.
+
+Gerçek RTSP kopma/yeniden bağlanma kontrolü için (relay açık, yayıncıyı betik yönetir):
+
+```powershell
+./scripts/test_live_dashboard.ps1 -ExpectSegmentation -Output outputs/live-mask-rtsp-v1
+```
+
+Bu betik yeni çıktı dizini ister; başlangıç/yeniden bağlantı JPEG'lerini ve oturum
+raporunu kaydeder. Deterministik HTTP testleri iki analiz modunda model izolasyonunu,
+maskenin iç piksellerinin boyandığını, reconnect/çözünürlük değişiminde epoch
+yenilendiğini, eski görüntünün temizlenmesini, arama eşzamanlılığını ve hatadan
+sonra yeniden başlatmayı doğrular. Gerçek RTSP+maske ölçümü ayrıca raporlanmalıdır.
+
+2026-10-10 yerel doğrulama: ayrı `build/live-seg` Release derlemesi başarılı;
+`ctest --test-dir build/live-seg -C Release --output-on-failure` **35/35** geçti
+(44,76 sn; gerçek CLIP referans testi dahil). İki modu kapsayan canlı HTTP testi
+6,92 sn'de geçti. `node tests/test_web_state.cjs` başarılı. Bu sonuçlar gerçek
+YOLOv8-seg modelinin RTSP üzerinde uçtan uca denendiği anlamına gelmez; canlı HTTP
+testi kontrollü capture/model kullanır. Açık eski sunucu bu derlemeyle otomatik
+değiştirilmez; yeni executable ile yeniden başlatılmalıdır.
+
 ## Canlı yayını kaydet ve arşivde ara
 
 Bu özellik 2026-10-02'de eklendi; aşağıdaki eski RTSP smoke sonuçları kendi
