@@ -22,7 +22,7 @@ harf/rakamlarla sınırlıdır; kalıcı `ocr_frame` işi ve web paneli vardır.
 İsteğe bağlı [PP-OCRv6 Türkçe/çok dilli backend](docs/ocr-turkish.md), UTF-8 çıktı
 ve Unicode karakter ölçümü sunar. Doğal Türkçe veri üzerinde geniş kalite ölçümü
 henüz yoktur. İlk [yerel C++ VLM sahne açıklaması CLI'ı](docs/vlm.md) hazırdır;
-SmolVLM çıktısı doğrulanmamış yorumdur, henüz kuyruk/web entegrasyonu yoktur.
+SmolVLM çıktısı doğrulanmamış yorumdur; kalıcı `scene_frame` işi, iptal ve web paneli vardır.
 [C++ OCR değerlendirme aracı](docs/ocr-evaluation.md), etiketli görüntülerde
 kaçırılan/fazladan bölgeleri ve karakter hatalarını raporlar; iki örneklik ilk
 kontrol geniş bir doğruluk benchmark'ı değildir.
@@ -116,7 +116,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
-5. [Segmentation ve OCR CLI/servis/panel, Türkçe backend, ilk VLM CLI hazır] Geniş doğal OCR kalite ölçümü ve VLM kuyruk/panel entegrasyonu bekliyor
+5. [Segmentation, OCR ve VLM CLI/servis/panel hazır] Geniş doğal veri kalite ölçümü ve TOML bağlantıları bekliyor
 6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1/HOTA ve CPU p50/p95;
    OSNet görünüşü ve sabit validation/test protokolü eklendi; geniş veri, kalibrasyon,
    tam ByteTrack ve çoklu kamera bekliyor

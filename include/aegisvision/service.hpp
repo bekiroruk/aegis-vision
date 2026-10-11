@@ -6,6 +6,7 @@
 #include "aegisvision/archive_owner.hpp"
 #include "aegisvision/segmentation.hpp"
 #include "aegisvision/ocr.hpp"
+#include "aegisvision/vlm.hpp"
 #include <httplib.h>
 #include <filesystem>
 
@@ -23,6 +24,8 @@ struct ServiceConfig {
     std::string segmentation_signature;
     vision::IOcr* ocr{}; // Optional; worker-owned use, must outlive service.
     std::string ocr_signature;
+    vision::IVlm* vlm{}; // Optional local scene captioner; worker-owned use, must outlive service.
+    std::string vlm_signature;
 };
 class ArchiveJobBusy : public std::runtime_error {
 public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an active indexing job") {}
@@ -43,6 +46,7 @@ private:
     Json validate(Json request) const;
     Json execute(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json segment_frame(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
+    Json scene_frame(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json summary(const IndexSummary&) const;
     Json archive_segment(const std::string& session, int index) const;
     void verify_archive_media(const std::filesystem::path& path) const;

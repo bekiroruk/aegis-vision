@@ -46,6 +46,8 @@ ServiceConfig prepare(ServiceConfig config) {
         throw std::invalid_argument("Segmentation requires both model and signature");
     if (bool(config.ocr) != !config.ocr_signature.empty())
         throw std::invalid_argument("OCR requires both model and signature");
+    if (bool(config.vlm) != !config.vlm_signature.empty())
+        throw std::invalid_argument("VLM requires both model and signature");
     if (config.live.archive.enabled) {
         const auto expected = config.media_root / "live-archive";
         if (!config.live.archive.root.empty() && fs::absolute(config.live.archive.root).lexically_normal() != expected)
@@ -62,6 +64,8 @@ ServiceConfig prepare(ServiceConfig config) {
             "segment-frame-v1", config.segmentation_signature}).dump();
         if (config.ocr) config.persistence.context = Json::array({config.persistence.context,
             "ocr-frame-v1",config.ocr_signature}).dump();
+        if (config.vlm) config.persistence.context = Json::array({config.persistence.context,
+            "scene-frame-v1",config.vlm_signature}).dump();
     }
     return config;
 }
@@ -126,21 +130,22 @@ LocalService::Json LocalService::validate(Json request) const {
         throw std::invalid_argument("Expected an object with a string type");
     const auto type = request.at("type").get<std::string>();
     const std::set<std::string> allowed = type == "index_video" ?
-        std::set<std::string>{"type", "path", "stride", "max_frames"} : (type == "segment_frame" || type == "ocr_frame") ?
+        std::set<std::string>{"type", "path", "stride", "max_frames"} : (type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") ?
         std::set<std::string>{"type", "path", "frame_index"} : std::set<std::string>{"type", "query", "limit", "scope"};
     for (const auto& [key, value] : request.items()) {
         (void)value; if (!allowed.contains(key)) throw std::invalid_argument("Unknown field: " + key);
     }
-    if (type == "index_video" || type == "segment_frame" || type == "ocr_frame") {
+    if (type == "index_video" || type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") {
         if (type == "segment_frame" && !config_.segmenter)
             throw std::invalid_argument("Segmentation is not configured");
         if (type == "ocr_frame" && !config_.ocr) throw std::invalid_argument("OCR is not configured");
+        if (type == "scene_frame" && !config_.vlm) throw std::invalid_argument("VLM is not configured");
         const auto path = media_path(request.at("path").get<std::string>());
         if (*path.lexically_relative(config_.media_root).begin() == "live-archive")
             throw std::invalid_argument("Use the archive indexing endpoint for managed live clips");
         request["source_bytes"] = fs::file_size(path);
         request["source_modified"] = std::to_string(fs::last_write_time(path).time_since_epoch().count());
-        if (type == "segment_frame" || type == "ocr_frame") request["frame_index"] = integer(request,"frame_index",0,0,10000);
+        if (type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") request["frame_index"] = integer(request,"frame_index",0,0,10000);
         else {
             request["stride"] = integer(request, "stride", 15, 1, 10000);
             request["max_frames"] = integer(request, "max_frames", 0, 0, 1000000);
@@ -153,8 +158,47 @@ LocalService::Json LocalService::validate(Json request) const {
         const auto scope = request.value("scope",std::string("all"));
         if (scope != "all" && scope != "live") throw std::invalid_argument("scope must be all or live");
         request["scope"] = scope;
-    } else throw std::invalid_argument("type must be index_video, search, segment_frame or ocr_frame");
+    } else throw std::invalid_argument("type must be index_video, search, segment_frame, ocr_frame or scene_frame");
     return request;
+}
+LocalService::Json LocalService::scene_frame(const Json& request, const JobQueue::Progress& progress,
+    const std::atomic_bool& cancel) {
+    if (!config_.vlm) throw std::runtime_error("VLM is not configured");
+    const auto path=media_path(request.at("path").get<std::string>());
+    const auto unchanged=[&] {
+        if (request.at("source_bytes") != fs::file_size(path) || request.at("source_modified") !=
+            std::to_string(fs::last_write_time(path).time_since_epoch().count()))
+            throw std::runtime_error("Video changed after job acceptance; submit a new job");
+    };
+    unchanged();
+    cv::VideoCapture capture(utf8(path));
+    if (!capture.isOpened()) throw std::runtime_error("Cannot open scene analysis video");
+    const int index=request.at("frame_index").get<int>();
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    cv::Mat frame;
+    for (int i=0;i<=index;++i) {
+        if (cancel) throw IndexCancelled();
+        if (std::chrono::steady_clock::now()>deadline) throw std::runtime_error("Frame decode deadline exceeded");
+        if (!capture.read(frame) || frame.empty()) throw std::runtime_error("Requested frame unavailable");
+        if (frame.cols>1920 || frame.rows>1920) throw std::runtime_error("Analysis frame exceeds 1920 pixels per side");
+        if (i%100==0) progress({{"decoded_frames",i+1},{"stage","decoding"}});
+    }
+    progress({{"decoded_frames",index+1},{"stage","describing_scene"}});
+    vision::SceneDescription scene;
+    try { scene=config_.vlm->describe(frame,&cancel); }
+    catch (...) { if(cancel) throw IndexCancelled();throw; }
+    if(cancel) throw IndexCancelled();
+    if(scene.summary.empty()||scene.summary.size()>512) throw std::runtime_error("Invalid VLM summary length");
+    for(auto cp:vision::utf8_codepoints(scene.summary))
+        if(cp<32||(cp>=127&&cp<=159)||(cp>=0x202a&&cp<=0x202e)||(cp>=0x2066&&cp<=0x2069))
+            throw std::runtime_error("Invalid VLM summary text");
+    unchanged();
+    Json result{{"path",request.at("path")},{"frame_index",index},{"width",frame.cols},{"height",frame.rows},
+        {"model_signature",config_.vlm_signature},{"summary",scene.summary},{"verified",false},
+        {"warning","Generated interpretation; may hallucinate. Not detection/OCR ground truth."},
+        {"preview_data_url",jpeg_url(frame)}};
+    if(result.dump().size()>1024*1024) throw std::runtime_error("Scene result exceeds 1 MiB");
+    return result;
 }
 LocalService::Json LocalService::segment_frame(const Json& request, const JobQueue::Progress& progress,
     const std::atomic_bool& cancel) {
@@ -252,6 +296,7 @@ LocalService::Json LocalService::summary(const IndexSummary& value) const {
 LocalService::Json LocalService::execute(const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
     if (cancel) throw IndexCancelled();
     if (request.at("type") == "segment_frame" || request.at("type") == "ocr_frame") return segment_frame(request,progress,cancel);
+    if (request.at("type") == "scene_frame") return scene_frame(request,progress,cancel);
     if (request.at("type") == "index_live_archive") return index_archive(request,progress,cancel);
     if (request.at("type") == "index_video") {
         const auto path = media_path(request.at("path").get<std::string>());
@@ -322,6 +367,7 @@ void LocalService::routes() {
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
             {"segmentation_enabled", config_.segmenter != nullptr}, {"ocr_enabled",config_.ocr != nullptr},
+            {"vlm_enabled",config_.vlm != nullptr},
             {"ocr_unicode",config_.ocr && config_.ocr->unicode_output()}, {"storage_error", error}}, error.empty() ? 200 : 503);
     });
     http_.Get("/api/live/sources", [this](const auto&, auto& response) { reply(response, live_.sources()); });

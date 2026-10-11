@@ -58,8 +58,8 @@ Yeni işlev olarak PP-OCRv3 + CRNN EN C++ adaptörü/CLI'ı ve gerçek fotoğraf
 testi eklendi; [OCR kapsamı](ocr.md). `ocr_frame` işi sınırlı HTTP kuyruğuna ve
 web paneline bağlandı. Türkçe/multilingual backend ve Unicode kalite ölçümü eklendi.
 İlk [yerel VLM C++ adaptörü/CLI'ı](vlm.md) gerçek fotoğrafta çalıştı; açıklama
-nesne adı hatası içeriyor, doğrulanmış etiket değildir. Sırada VLM tek-kare işi ve
-panel entegrasyonu var. Daha geniş bağımsız kalite verisi ve aşağıdaki altyapı
+nesne adı hatası içeriyor, doğrulanmış etiket değildir. VLM tek-kare işi, kalıcı
+kuyruk/iptal ve panel entegrasyonu gerçek videoda doğrulandı. Daha geniş bağımsız kalite verisi ve aşağıdaki altyapı
 işleri ayrı açık başlıklardır.
 
 Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablation.md).
@@ -109,7 +109,7 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    backend ve Unicode ölçümü eklendi; sentetik Türkçe kontrolde hatalar hâlâ var.
    Geniş bağımsız doğal veri kalite ölçümü bekliyor. Dokunulmamış daha
    geniş segmentation/OCR verisi ekle. İlk [VLM adaptörü/CLI'ı](vlm.md) hazır;
-   `scene_frame` kuyruğu ve panel henüz yok. Küçük modelin açıklamasında nesne adı
+   `scene_frame` kuyruğu ve panel gerçek modelle doğrulandı. Küçük modelin açıklamasında nesne adı
    hatası görüldü; otomatik etiketleme doğruluğu iddia edilmiyor.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.

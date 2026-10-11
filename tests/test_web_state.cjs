@@ -53,7 +53,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, delayMask=false} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[];
   const get = id => {
@@ -66,7 +66,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, o
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode};
+    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
     else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
@@ -221,10 +221,33 @@ async function ocrPanel() {
   delayed.jobs[0].state='succeeded';delayed.jobs[0].result=job.result;
   await delayed.ui.refresh();assert.equal(delayed.get('ocr-image').hidden,true);assert.equal(delayed.get('ocr-status').textContent,'');
 }
+async function scenePanel() {
+  const disabled=harness();await disabled.started;assert.equal(disabled.get('scene-button').disabled,true);
+  const test=harness({vlm:true});await test.started;assert.equal(test.get('scene-button').disabled,false);
+  test.get('scene-frame').value='3';await test.get('scene-form').emit('submit',{preventDefault(){}});
+  assert.equal(test.jobs[0].request.type,'scene_frame');assert.equal(test.jobs[0].request.frame_index,3);
+  const job=test.jobs[0];job.state='succeeded';job.result={path:ordinary,frame_index:3,width:640,height:480,
+    preview_data_url:'data:image/jpeg;base64,/9j/',summary:'<script>plain model text</script>',verified:false};
+  await test.ui.refresh();assert.equal(test.get('scene-image').hidden,false);
+  assert.equal(test.get('scene-summary').children[0].textContent,'<script>plain model text</script>');
+  assert.equal(test.get('scene-button').disabled,false);
+  test.ui.chooseMedia(archived,true);assert.equal(test.get('scene-image').hidden,true);assert.equal(test.get('scene-button').disabled,true);
+  const reopen=test.get('jobs').children[0].children.find(node=>node.textContent==='Açıklamayı göster');await reopen.emit('click');
+  assert.equal(test.get('media').value,ordinary);assert.equal(test.get('scene-image').hidden,false);
+  await test.get('scene-form').emit('submit',{preventDefault(){}});test.jobs[0].state='failed';test.jobs[0].error='vlm failure';
+  await test.ui.refresh();assert.equal(test.get('scene-image').hidden,true);assert.equal(test.get('scene-status').textContent,'vlm failure');
+  await test.get('scene-form').emit('submit',{preventDefault(){}});test.jobs[0].state='succeeded';
+  test.jobs[0].result={...job.result,verified:true};await test.ui.refresh();assert.equal(test.get('scene-image').hidden,true);
+  const delayed=harness({vlm:true,delayMask:true});await delayed.started;
+  const pending=delayed.get('scene-form').emit('submit',{preventDefault(){}});delayed.ui.chooseMedia(archived,true);delayed.releaseMask();await pending;
+  delayed.jobs[0].state='succeeded';delayed.jobs[0].result=job.result;await delayed.ui.refresh();
+  assert.equal(delayed.get('scene-image').hidden,true);assert.equal(delayed.get('scene-status').textContent,'');
+}
 (async () => {
   await mediaFirst(); await archiveFirst(); await lateInitializationAfterUserChoice(); await archiveOnly();
   await segmentationPanel();await staleSegmentationSubmission();
-  await ocrPanel();console.log('OCR UI passed: capability, request, safe text/URL, source change, history, empty, failure, cancellation, stale reply.');
+  await ocrPanel();await scenePanel();console.log('OCR UI passed: capability, request, safe text/URL, source change, history, empty, failure, cancellation, stale reply.');
+  console.log('VLM UI passed: capability, request, untrusted text, source change, history, failure, invalid result, stale reply.');
   console.log('Segmentation UI passed: capability, submit, result, source change, failure, unsafe URL, delayed submission.');
   console.log('Web media state passed: media-first, archive-first, preserved user selection, seek and managed-index guards.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

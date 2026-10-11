@@ -2,8 +2,8 @@
 
 `aegisvision_scene`, fotoğrafı yerel llama.cpp üzerinden SmolVLM-500M'e gönderir
 ve kısa İngilizce açıklamayı `scene.json` olarak kaydeder. İstek, doğrulama ve
-çıktı C++20'dir; Python veya bulut inference kullanılmaz. Bu ilk sürüm bağımsız
-CLI'dır: HTTP iş kuyruğu, `scene_frame`, dashboard ve TOML entegrasyonu henüz yoktur.
+çıktı C++20'dir; Python veya bulut inference kullanılmaz. CLI yanında kalıcı
+`scene_frame` HTTP işi ve dashboard entegrasyonu vardır. TOML entegrasyonu henüz yoktur.
 
 ## Windows'ta çalıştırma
 
@@ -95,7 +95,43 @@ MIT lisanslı proje; paket içindeki üçüncü taraf lisanslarını koru.
 Runtime arşivi indirmede doğrulanır; çıkarılmış executable her açılışta tekrar
 hash doğrulamasından geçmez. Model, runtime ve sonuç dosyaları Git dışındadır.
 
-## Doğrulama ve sıradaki adım
+## Kalıcı kuyruk ve web paneli
+
+Önce `scripts/start_vlm.ps1` ile modeli başlat. Ayrı terminalde repo kökünden:
+
+```powershell
+.\scripts\start_service.ps1 -ServerExecutable build/live-seg/Release/aegisvision_server.exe -VlmPort 8092 -SegmentationModel artifacts/models/yolov8n-seg/yolov8n-seg.onnx -OcrMultilingual artifacts/models/ocr-multi-v6 -JobDatabase artifacts/service/vlm-demo-jobs.sqlite
+```
+
+Ana servis için Qdrant açık olmalıdır. [Panelde](http://127.0.0.1:8090) video seç,
+“Sahneyi açıkla” bölümüne git ve kare numarasını gönder. Açıklama ve gerçekten
+analiz edilen kare birlikte gösterilir. İş listesinden iptal edebilir veya geçmişteki
+tamamlanmış açıklamayı tekrar açabilirsin. Sayfa yenilenirse “Açıklamayı göster”i kullan.
+
+API: `POST /api/jobs`, JSON gövdesi:
+
+```json
+{"type":"scene_frame","path":"pedestrians.mp4","frame_index":0}
+```
+
+Kare indeksi 0–10000, medya kökü içindeki mevcut video ile sınırlıdır; harici URL,
+prompt veya yönetilen canlı arşiv klibi kabul edilmez. Kaynak değişikliği hata verir.
+Decode için 30 saniyelik döngü sınırı, inference için 60 saniyelik istemci sınırı vardır;
+OpenCV'nin tek bir bloklanan decode çağrısını zorla kesme garantisi yoktur.
+`vlm_enabled` yapılandırılmış adaptörü bildirir; ayrı model sunucusunun anlık sağlık
+garantisi değildir. Model sunucusu yoksa iş `failed` olur, diğer işlere devam edilir.
+
+İşler mevcut tek worker üzerinden sırayla çalışır. SQLite sonucu ve JPEG önizlemeyi
+saklar; tamamlanan iş restart sonrasında tekrar inference yapmaz. Model ayarları
+değiştiğinde yeni veritabanı seç; eski veritabanlarını silme. Bağlam imzası adaptör
+sürümü ve portu içerir; yerel sunucunun model değişimini tespit etmez.
+
+2026-10-11 gerçek tarayıcı kontrolünde `pedestrians.mp4`, kare 0 için iş
+`1791700823339-1` tamamlandı. 768×576 önizleme ve
+`A street with people walking and a tripod in the foreground.` metni panelde görüldü.
+Bu, bağlantı ve panel doğrulamasıdır; caption doğruluğu benchmark'ı değildir.
+
+## Doğrulama ve kalan işler
 
 `aegisvision_vlm` testi gerçek modeli indirmeden yerel HTTP fixture ile sözleşme,
 HTTP hata/yanıt boyutu, timeout, iptal ve iptal sonrası toparlanmayı sınar.
@@ -104,6 +140,8 @@ yukarıda ayrıca kaydedilmiştir; otomatik testler model doğruluğunu ölçmez
 Sunucu durdurulduktan sonra CLI hata kodu 1 verdi ve yeni çıktı klasörü
 oluşturmadı; başarısız inference başarı kaydı olarak yayınlanmaz.
 
-Sırada sınırlı `scene_frame` işi, kalıcı kuyruk/iptal ve panelde açık
-“doğrulanmamış model yorumu” gösterimi vardır. Daha güçlü model ve bağımsız
-etiketli sahne değerlendirmesi ayrı bir kalite adımıdır.
+Servis testi kuyrukta başarılı sonuç, model hatası, iptal, hatadan toparlanma,
+kapalı yetenek, geçersiz istek ve SQLite yeniden açılışında sonuçların korunmasını
+doğrular. Web durum testleri güvenli metin, kaynak değiştirme, geçmişten açma ve
+gecikmiş cevapları kapsar. Değişiklikten sonra ilgili 3 CTest ve web testleri geçti.
+Daha güçlü model, bağımsız etiketli sahne değerlendirmesi ve TOML bağlantısı bekliyor.

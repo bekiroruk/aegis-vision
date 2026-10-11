@@ -5,6 +5,34 @@ let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
 let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
 let selectedMedia = '', mediaReady = false, mediaChoiceMade = false;
+let sceneEnabled=false, sceneSubmitting=false, sceneJob='', sceneRevision=0;
+function syncScene() {
+  const available=sceneEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
+  $('scene-button').disabled=!available || sceneSubmitting || !!sceneJob;
+  $('scene-frame').disabled=!available || sceneSubmitting || !!sceneJob;
+  $('scene-state').textContent=sceneEnabled ? 'Tek kare · Yerel VLM' : 'Model etkin değil';
+  $('scene-source').textContent=selectedMedia ? `Kaynak: ${selectedMedia}` : 'Video seçin.';
+}
+function clearScene() {
+  ++sceneRevision;sceneJob='';$('scene-image').hidden=true;$('scene-image').removeAttribute('src');
+  $('scene-summary').replaceChildren();$('scene-status').textContent='';
+}
+function showScene(job) {
+  if(!sceneJob || job.id!==sceneJob) return;
+  $('scene-status').textContent=`Kare ${job.request.frame_index} · ${stateText[job.state] || job.state}`;
+  if(!terminal(job.state)) return;
+  sceneJob='';syncScene();
+  if(job.state!=='succeeded') {$('scene-status').textContent=job.error || stateText[job.state];return;}
+  const result=job.result;
+  if(!result || result.path!==selectedMedia) return;
+  const url=result.preview_data_url,summary=result.summary;
+  if(typeof url!=='string'||url.length>750000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(url)||
+      typeof summary!=='string'||!summary.length||summary.length>512||result.verified!==false) {
+    $('scene-status').textContent='Bu sonuçta geçerli VLM açıklaması yok. Yeniden deneyin.';return;
+  }
+  $('scene-image').src=url;$('scene-image').hidden=false;$('scene-summary').replaceChildren(element('p',summary));
+  $('scene-status').textContent=`${result.path} · Kare ${result.frame_index} · ${result.width}×${result.height} · Doğrulanmamış model yorumu`;
+}
 let ocrEnabled=false, ocrUnicode=false, ocrSubmitting=false, ocrJob='', ocrRevision=0;
 function syncOcr() {
   const available=ocrEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
@@ -181,7 +209,7 @@ function syncMediaControls() {
   $('index-button').disabled = !selectedMedia || managed;
   $('stride').disabled = !selectedMedia || managed;
   $('max-frames').disabled = !selectedMedia || managed;
-  syncSegmentation();syncOcr();
+  syncSegmentation();syncOcr();syncScene();
 }
 function addMedia(path) {
   if (!Array.from($('media').options).some(option => option.value === path)) {
@@ -194,7 +222,7 @@ function addMedia(path) {
 }
 function chooseMedia(path, userChoice = false) {
   if (!path) return;
-  if (path!==selectedMedia) {clearSegmentation();clearOcr();}
+  if (path!==selectedMedia) {clearSegmentation();clearOcr();clearScene();}
   addMedia(path); selectedMedia = path; $('media').value = path;
   if (userChoice) mediaChoiceMade = true;
   const target = new URL(mediaUrl(path),location.href).href;
@@ -282,7 +310,7 @@ function showJobs(jobs) {
   jobs.slice(0,12).forEach(job => {
     const row = element('div',undefined,'job');
     const title = element('div',undefined,'job-title');
-    title.append(element('strong',job.request.type === 'ocr_frame' ? 'Karedeki yazıları oku' : job.request.type === 'segment_frame' ? 'Piksel maskesi analizi' : job.request.type === 'search' ? 'Metin araması' : job.request.type === 'index_live_archive' ? 'Canlı arşiv indeksleme' : 'Video indeksleme'),
+    title.append(element('strong',job.request.type === 'scene_frame' ? 'Sahneyi açıkla' : job.request.type === 'ocr_frame' ? 'Karedeki yazıları oku' : job.request.type === 'segment_frame' ? 'Piksel maskesi analizi' : job.request.type === 'search' ? 'Metin araması' : job.request.type === 'index_live_archive' ? 'Canlı arşiv indeksleme' : 'Video indeksleme'),
       element('span',job.cancel_requested && !terminal(job.state) ? 'İptal bekleniyor' : stateText[job.state],'state'));
     row.append(title,element('p',job.request.path || job.request.query || (job.request.type === 'index_live_archive' ? `${job.request.session_id} · Parça ${job.request.segment_index}` : '')));
     if (job.recoveries > 0) row.append(element('p',`Yeniden başlatma sonrası kurtarıldı · Deneme ${job.attempts}`));
@@ -302,6 +330,13 @@ function showJobs(jobs) {
         $('ocr-image').scrollIntoView({behavior:'smooth',block:'center'});
       });row.append(open);
     }
+    if(job.request.type==='scene_frame' && job.state==='succeeded') {
+      const open=element('button','Açıklamayı göster','cancel');open.type='button';
+      open.addEventListener('click',()=> {
+        chooseMedia(job.request.path,true);clearScene();sceneJob=job.id;showScene(job);
+        $('scene-image').scrollIntoView({behavior:'smooth',block:'center'});
+      });row.append(open);
+    }
     if (!terminal(job.state)) {
       const cancel = element('button','İptal','cancel'); cancel.type = 'button'; cancel.disabled = job.cancel_requested;
       cancel.addEventListener('click',async() => { try { await api(`/api/jobs/${job.id}/cancel`,{}); await refresh(); } catch(error) { notice(error.message); } });
@@ -312,6 +347,7 @@ function showJobs(jobs) {
   const maskJob=jobs.find(job=>job.id===segmentationJob);
   if (maskJob) showSegmentation(maskJob);
   const textJob=jobs.find(job=>job.id===ocrJob);if(textJob) showOcr(textJob);
+  const descriptionJob=jobs.find(job=>job.id===sceneJob);if(descriptionJob) showScene(descriptionJob);
   const latest = jobs.find(job => job.request.type === 'search' && job.state === 'succeeded');
   if (latest && latest.id !== displayedSearch) showResults(latest);
 }
@@ -322,8 +358,9 @@ async function refresh() {
     const data = await api('/api/jobs'); showJobs(data.jobs);
     const health=await api('/api/health');segmentationEnabled=health.segmentation_enabled===true;syncSegmentation();
     ocrEnabled=health.ocr_enabled===true;ocrUnicode=health.ocr_unicode===true;syncOcr();
+    sceneEnabled=health.vlm_enabled===true;syncScene();
     $('health').textContent = '● Servis hazır';
-  } catch(error) { segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
+  } catch(error) { segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }
 }
 $('index-form').addEventListener('submit',async event => {
@@ -361,6 +398,18 @@ $('ocr-form').addEventListener('submit',async event=> {
     await refresh();
   } catch(error) {if(revision===ocrRevision) $('ocr-status').textContent=error.message;}
   finally {ocrSubmitting=false;syncOcr();}
+});
+$('scene-form').addEventListener('submit',async event=> {
+  event.preventDefault();
+  const frame=Number($('scene-frame').value),path=selectedMedia;
+  if($('scene-button').disabled||!Number.isInteger(frame)||frame<0||frame>10000) return;
+  clearScene();const revision=sceneRevision;sceneSubmitting=true;syncScene();$('scene-status').textContent='İş gönderiliyor…';
+  try {
+    const job=await api('/api/jobs',{type:'scene_frame',path,frame_index:frame});
+    if(revision===sceneRevision&&selectedMedia===path){sceneJob=job.id;showScene(job);}
+    await refresh();
+  } catch(error) {if(revision===sceneRevision)$('scene-status').textContent=error.message;}
+  finally {sceneSubmitting=false;syncScene();}
 });
 $('media').addEventListener('change',() => chooseMedia($('media').value,true));
 $('player').addEventListener('loadedmetadata',() => {

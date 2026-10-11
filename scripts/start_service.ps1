@@ -8,6 +8,7 @@ param(
     [string]$SegmentationModel = "",
     [string]$OcrModels = "",
     [string]$OcrMultilingual = "",
+    [ValidateRange(0,65535)][int]$VlmPort = 0,
     [switch]$LiveSegmentation,
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
@@ -46,6 +47,7 @@ try {
         }
         $serverArguments += @('--ocr-multilingual',$OcrMultilingual)
     }
+    if ($VlmPort) { $serverArguments += @('--vlm-port',$VlmPort) }
     & $ServerExecutable @serverArguments
     if ($LASTEXITCODE -ne 0) { throw "Video servisi hata koduyla kapandi: $LASTEXITCODE" }
 }

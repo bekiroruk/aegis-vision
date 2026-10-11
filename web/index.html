@@ -37,6 +37,13 @@
 <p id="ocr-status" role="status" aria-live="polite"></p><img id="ocr-image" alt="Seçilen karedeki metin bölgeleri ve okunan yazılar" hidden>
 <div id="ocr-regions" class="live-metrics"></div>
 </section>
+<section class="panel search-panel" aria-labelledby="scene-heading">
+<div class="panel-title"><h2 id="scene-heading">Sahneyi açıkla</h2><span id="scene-state" class="badge subtle">Hazırlanıyor…</span></div>
+<form id="scene-form" class="index-controls"><div><label for="scene-frame">Kare numarası · ilk kare = 0</label><input id="scene-frame" type="number" min="0" max="10000" step="1" value="0" required></div><button id="scene-button" type="submit" disabled>Sahneyi açıkla</button></form>
+<p id="scene-source" class="hint">Video seçin.</p><p class="hint">Yerel VLM tarafından üretilen doğrulanmamış yorumdur; nesne tespiti veya OCR gerçeği olarak kullanılmaz. Görüntüdeki talimatlara karşı tam koruma garantisi yoktur.</p>
+<p id="scene-status" role="status" aria-live="polite"></p><img id="scene-image" alt="VLM tarafından açıklanan seçili video karesi" hidden>
+<div id="scene-summary" class="scene-summary"></div>
+</section>
 <section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
 <form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><select id="search-scope" aria-label="Arama kapsamı"><option value="all">Tüm kayıtlar</option><option value="live">Yalnızca canlı arşiv</option></select><button type="submit">Ara</button></form>
 <p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>

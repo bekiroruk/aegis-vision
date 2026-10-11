@@ -114,7 +114,7 @@ target_compile_definitions(aegis_job_sqlite PRIVATE SQLITE_THREADSAFE=1 SQLITE_O
 target_link_libraries(aegis_job_sqlite PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 add_library(aegisvision_service src/jobs.cpp src/job_store.cpp src/service.cpp src/service_archive.cpp src/live_session.cpp src/live_archive.cpp src/clip_encoder.cpp src/archive_owner.cpp)
 target_include_directories(aegisvision_service PRIVATE "${search_sha_SOURCE_DIR}")
-target_link_libraries(aegisvision_service PUBLIC aegisvision_search httplib::httplib Threads::Threads PRIVATE aegis_job_sqlite)
+target_link_libraries(aegisvision_service PUBLIC aegisvision_search aegisvision_vlm httplib::httplib Threads::Threads PRIVATE aegis_job_sqlite)
 add_executable(aegisvision_server apps/server.cpp)
 target_link_libraries(aegisvision_server PRIVATE aegisvision_service aegisvision_configuration aegisvision_ocr_multilingual)
 aegis_search_runtime(aegisvision_server)

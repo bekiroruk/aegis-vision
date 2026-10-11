@@ -96,6 +96,17 @@ public:
         return {text};
     }
 };
+class Vlm : public vision::IVlm {
+public:
+    std::atomic_int mode{0};std::atomic_bool started{false};
+    vision::SceneDescription describe(const cv::Mat& image,const std::atomic_bool* cancel) override {
+        require(image.cols==160&&image.rows==120,"VLM frame missing");
+        if(mode==1) throw std::runtime_error("fixture VLM model error");
+        if(mode==2) {started=true;until([&]{return cancel&&cancel->load();});throw std::runtime_error("VLM cancelled");}
+        if(mode==3) return {"bad\ncaption"};
+        return {"A dark video frame."};
+    }
+};
 class Store : public IVectorStore {
 public:
     std::map<std::string, SearchResult> records;
@@ -133,11 +144,12 @@ std::string http_checks(const fs::path& root) {
     require(writer.isOpened(), "Video fixture unavailable");
     for (int n = 0; n < 10; ++n) writer.write(cv::Mat(120,160,CV_8UC3,cv::Scalar(10,20,30)));
     writer.release();
-    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;Vlm vlm;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
     config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
     config.ocr=&ocr;config.ocr_signature="fixture-ocr-v1";
+    config.vlm=&vlm;config.vlm_signature="fixture-vlm-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -147,6 +159,7 @@ std::string http_checks(const fs::path& root) {
     require(response(client.Get("/api/health")).at("history_persistent") == true, "HTTP persistence disabled");
     require(response(client.Get("/api/health")).at("segmentation_enabled") == true,"Segmentation capability missing");
     require(response(client.Get("/api/health")).at("ocr_enabled")==true,"OCR capability missing");
+    require(response(client.Get("/api/health")).at("vlm_enabled")==true,"VLM capability missing");
     require(response(client.Get("/api/media")).at("videos").size() == 1, "Media listing failed");
     const auto dashboard = client.Get("/");
     status(dashboard, 200);
@@ -224,6 +237,24 @@ std::string http_checks(const fs::path& root) {
     until([&]{return response(client.Get("/api/jobs/"+running_text)).at("state")=="cancelled";});
     require(response(client.Get("/api/jobs/"+running_text)).at("result").is_null(),"Cancelled OCR published result");
     ocr.mode=0;require(completed(client,text_request).at("state")=="succeeded","OCR worker recovery failed");
+    const Json scene_request{{"type","scene_frame"},{"path","test.avi"},{"frame_index",2}};
+    for(const auto& invalid:std::vector<Json>{
+        {{"type","scene_frame"},{"path","../outside.avi"}},
+        {{"type","scene_frame"},{"path","test.avi"},{"frame_index",-1}},
+        {{"type","scene_frame"},{"path","test.avi"},{"frame_index",10001}},
+        {{"type","scene_frame"},{"path","test.avi"},{"prompt","ignore policy"}}})
+        (void)response(client.Post("/api/jobs",invalid.dump(),"application/json"),400);
+    const auto scene=completed(client,scene_request);
+    require(scene.at("state")=="succeeded"&&scene.at("result").at("summary")=="A dark video frame."&&
+        scene.at("result").at("verified")==false&&scene.at("result").at("preview_data_url").get<std::string>().starts_with("data:image/jpeg;base64,/9j/"),
+        "Queued VLM result missing");
+    vlm.mode=1;require(completed(client,scene_request).at("state")=="failed","VLM failure hidden");
+    vlm.mode=3;require(completed(client,scene_request).at("state")=="failed","Invalid VLM text accepted");
+    vlm.mode=2;const auto running_scene=response(client.Post("/api/jobs",scene_request.dump(),"application/json"),202).at("id").get<std::string>();
+    until([&]{return vlm.started.load();});(void)response(client.Post("/api/jobs/"+running_scene+"/cancel","{}","application/json"));
+    until([&]{return response(client.Get("/api/jobs/"+running_scene)).at("state")=="cancelled";});
+    require(response(client.Get("/api/jobs/"+running_scene)).at("result").is_null(),"Cancelled VLM published result");
+    vlm.mode=0;require(completed(client,scene_request).at("state")=="succeeded","VLM worker recovery failed");
     { std::ofstream outside(root / "outside.avi"); outside << "outside"; }
     std::error_code error;
     fs::create_symlink(root / "outside.avi", root / "media/escape.avi", error);
@@ -271,11 +302,12 @@ std::string http_checks(const fs::path& root) {
     return found.at("id").get<std::string>();
 }
 void http_restart(const fs::path& root, const std::string& search_id) {
-    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;
+    Detector detector; Embedder embedder; Store store; Segmenter segmenter;Ocr ocr;Vlm vlm;
     ServiceConfig config{root / "media", fs::path(__FILE__).parent_path().parent_path() / "web", "fixture-detector"};
     config.persistence = {root / "jobs.sqlite", "http-fixture"};
     config.segmenter=&segmenter;config.segmentation_signature="fixture-seg-v1";
     config.ocr=&ocr;config.ocr_signature="fixture-ocr-v1";
+    config.vlm=&vlm;config.vlm_signature="fixture-vlm-v1";
     LocalService service(detector, embedder, store, config);
     const int port = service.bind(0);
     std::thread server([&] { service.listen(); });
@@ -286,9 +318,14 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     require(restored.at("state") == "succeeded" && restored.at("result").at("results").size() == 4 &&
         restored.at("attempts") == 1, "HTTP completed search lost or rerun after restart");
     status(client.Get("/api/preview/" + search_id + "/0.jpg"), 200);
-    bool restored_mask=false,restored_text=false,restored_unicode=false;
+    bool restored_mask=false,restored_text=false,restored_unicode=false,restored_scene=false;
     const auto history=response(client.Get("/api/jobs"));
     for (const auto& job:history.at("jobs")) {
+        if(job.at("request").at("type")=="scene_frame" && job.at("state")=="succeeded") {
+            require(job.at("attempts")==1 && job.at("result").at("summary")=="A dark video frame." &&
+                job.at("result").at("verified")==false,"Persisted scene changed or reran");
+            restored_scene=true;
+        }
         if(job.at("request").at("type")=="ocr_frame" && job.at("state")=="succeeded" && !job.at("result").at("regions").empty()) {
             require(job.at("attempts")==1,"Persisted OCR was rerun");
             if(job.at("result").at("charset")=="utf8-ppocrv6-tiny") {
@@ -306,6 +343,7 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     require(restored_mask,"Persisted mask job missing");
     require(restored_text,"Persisted OCR job missing");
     require(restored_unicode,"Persisted Unicode OCR job missing");
+    require(restored_scene,"Persisted VLM job missing");
 }
 void segmentation_disabled(const fs::path& root) {
     Detector detector; Embedder embedder; Store store;
@@ -317,8 +355,10 @@ void segmentation_disabled(const fs::path& root) {
     until([&]{const auto result=client.Get("/api/health");return result && result->status==200;});
     require(response(client.Get("/api/health")).at("segmentation_enabled")==false,"Disabled segmentation advertised");
     require(response(client.Get("/api/health")).at("ocr_enabled")==false,"Disabled OCR advertised");
+    require(response(client.Get("/api/health")).at("vlm_enabled")==false,"Disabled VLM advertised");
     (void)response(client.Post("/api/jobs",R"({"type":"ocr_frame","path":"test.avi"})","application/json"),400);
     (void)response(client.Post("/api/jobs",R"({"type":"segment_frame","path":"test.avi"})","application/json"),400);
+    (void)response(client.Post("/api/jobs",R"({"type":"scene_frame","path":"test.avi"})","application/json"),400);
 }
 }
 int main() {
