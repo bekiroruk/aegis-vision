@@ -11,6 +11,9 @@ içinde birleştirmektir.
 
 ## Mevcut özellikler
 
+Hazır Windows kurulumunda tüm demo servislerini aç: `./scripts/demo.ps1 -OpenBrowser`.
+Kullanım ve ilk kurulum sınırları: [tek komutluk demo](docs/demo.md).
+
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.
