@@ -34,6 +34,24 @@ int main() {
     try {
         fs::create_directories(root / "models");
         save(root / "models/detector.onnx", "placeholder");
+        const auto analysis_file=root/"analysis.toml";
+        save(analysis_file,"version=1\n[segmentation]\nbackend='yolov8_onnx'\nmodel='models/detector.onnx'\n[ocr]\nbackend='ppocr_v6_multilingual'\nbundle='models'\n[vlm]\nbackend='local_smolvlm'\nport=8092\ntimeout_ms=3000\n");
+        const auto analysis=aegisvision::vision::load_analysis_settings(analysis_file);
+        require(analysis.segmentation_model==fs::weakly_canonical(root/"models/detector.onnx") &&
+            analysis.ocr_bundle==fs::weakly_canonical(root/"models") && analysis.ocr_multilingual &&
+            analysis.vlm_port==8092 && analysis.vlm_timeout_ms==3000,"Analysis settings/path resolution failed");
+        for(const auto& invalid:std::vector<std::string>{"version=2", "version=1\n[vlm]\nbackend='cloud'",
+            "version=1\n[vlm]\nbackend='local_smolvlm'\nport=0",
+            "version=1\n[vlm]\nbackend='local_smolvlm'\nport=2.5",
+            "version=1\n[vlm]\nbackend='local_smolvlm'\ntimeout_ms=99",
+            "version=1\n[vlm]\nbackend='local_smolvlm'\nhost='remote'",
+            "version=1\n[ocr]\nbackend='unknown'\nbundle='models'",
+            "version=1\n[segmentation]\nbackend='yolov8_onnx'\nmodel='missing.onnx'"}) {
+            save(analysis_file,invalid);
+            rejects([&]{(void)aegisvision::vision::load_analysis_settings(analysis_file);},"Invalid analysis config accepted");
+        }
+        save(analysis_file,"version=1");
+        require(aegisvision::vision::load_analysis_settings(analysis_file).vlm_port==0,"Omitted VLM should stay disabled");
         for (auto name : {"manifest.json", "vision.onnx", "text.onnx", "tokenizer.json"})
             save(root / "models" / name, "placeholder");
         fs::create_directories(root / "models/reid");

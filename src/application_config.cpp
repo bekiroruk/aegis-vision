@@ -252,6 +252,36 @@ ApplicationSettings load_application_settings(const std::filesystem::path& file)
     return settings;
 }
 
+AnalysisSettings load_analysis_settings(const std::filesystem::path& file) {
+    std::ifstream input(file,std::ios::binary);
+    if(!input) throw std::invalid_argument("Cannot read analysis TOML");
+    const auto root=toml::parse(input);
+    keys(root,"root",{"version","segmentation","ocr","vlm"});
+    (void)integer(root,"root","version",0,1,1,true);
+    const auto directory=std::filesystem::absolute(file).parent_path();
+    AnalysisSettings settings;
+    if(root.contains("segmentation")) {
+        const auto& table=section(root,"segmentation");
+        keys(table,"segmentation",{"backend","model"});
+        if(string(table,"segmentation","backend")!="yolov8_onnx") throw std::invalid_argument("Unsupported segmentation backend");
+        settings.segmentation_model=model_path(table,"segmentation","model",directory);
+    }
+    if(root.contains("ocr")) {
+        const auto& table=section(root,"ocr");keys(table,"ocr",{"backend","bundle"});
+        const auto backend=string(table,"ocr","backend");
+        if(backend!="ppocr_crnn_en"&&backend!="ppocr_v6_multilingual") throw std::invalid_argument("Unsupported OCR backend");
+        settings.ocr_multilingual=backend=="ppocr_v6_multilingual";
+        settings.ocr_bundle=model_path(table,"ocr","bundle",directory,true);
+    }
+    if(root.contains("vlm")) {
+        const auto& table=section(root,"vlm");keys(table,"vlm",{"backend","port","timeout_ms"});
+        if(string(table,"vlm","backend")!="local_smolvlm") throw std::invalid_argument("Unsupported VLM backend");
+        settings.vlm_port=static_cast<int>(integer(table,"vlm","port",8092,1,65535));
+        settings.vlm_timeout_ms=static_cast<int>(integer(table,"vlm","timeout_ms",60000,100,120000));
+    }
+    return settings;
+}
+
 std::unique_ptr<IDetector> make_configured_detector(const ApplicationSettings& settings) {
     if (settings.mode == ApplicationMode::Search || settings.detector_model.empty())
         throw std::invalid_argument("Configured detector requires image or video mode");

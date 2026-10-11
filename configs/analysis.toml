@@ -1,0 +1,14 @@
+version = 1
+
+[segmentation]
+backend = "yolov8_onnx"
+model = "../artifacts/models/yolov8n-seg/yolov8n-seg.onnx"
+
+[ocr]
+backend = "ppocr_v6_multilingual"
+bundle = "../artifacts/models/ocr-multi-v6"
+
+[vlm]
+backend = "local_smolvlm"
+port = 8092
+timeout_ms = 60000

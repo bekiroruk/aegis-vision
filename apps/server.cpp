@@ -16,6 +16,7 @@ int run(std::vector<std::filesystem::path> args) {
                 "   Add --live-segmentation with live arguments and --segment-model to draw tracked live masks.\n"
                 "   OCR: --ocr-models BUNDLE_DIR (CRNN EN) OR --ocr-multilingual BUNDLE_DIR (PP-OCRv6 UTF-8).\n"
                 "   VLM: --vlm-port PORT enables queued scene_frame jobs through local llama.cpp.\n"
+                "   Analysis: --analysis-config FILE.toml replaces segmentation/OCR/VLM flags.\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
@@ -32,8 +33,20 @@ int run(std::vector<std::filesystem::path> args) {
             return value;
         };
         segmentation_model=take_path("--segment-model");ocr_bundle=take_path("--ocr-models");
-        const auto multilingual_bundle=take_path("--ocr-multilingual");
-        const auto vlm_port_text=take_path("--vlm-port");
+        auto multilingual_bundle=take_path("--ocr-multilingual");
+        auto vlm_port_text=take_path("--vlm-port");
+        const auto analysis_file=take_path("--analysis-config");
+        int vlm_timeout_ms=60000;
+        if(!analysis_file.empty()) {
+            if(!segmentation_model.empty()||!ocr_bundle.empty()||!multilingual_bundle.empty()||!vlm_port_text.empty())
+                throw std::invalid_argument("Do not mix analysis TOML with model flags");
+            const auto analysis=aegisvision::vision::load_analysis_settings(analysis_file);
+            segmentation_model=analysis.segmentation_model;
+            if(analysis.ocr_multilingual) multilingual_bundle=analysis.ocr_bundle;
+            else ocr_bundle=analysis.ocr_bundle;
+            if(analysis.vlm_port) vlm_port_text=std::to_string(analysis.vlm_port);
+            vlm_timeout_ms=analysis.vlm_timeout_ms;
+        }
         if(!ocr_bundle.empty()&&!multilingual_bundle.empty()) throw std::invalid_argument("Choose one OCR backend");
         if ((args.size() < 5 || args.size() > 7) && args.size() != 9 && args.size()!=10) throw std::invalid_argument("Missing arguments; run --help");
         if (live_segmentation && (segmentation_model.empty() || args.size()<9))
@@ -64,7 +77,7 @@ int run(std::vector<std::filesystem::path> args) {
             const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),vlm_port);
             if(error!=std::errc{}||end!=text.data()+text.size()||vlm_port<1||vlm_port>65535)
                 throw std::invalid_argument("VLM port must be 1..65535");
-            vlm=std::make_unique<aegisvision::vision::LocalVlm>(aegisvision::vision::VlmConfig{vlm_port,60000});
+            vlm=std::make_unique<aegisvision::vision::LocalVlm>(aegisvision::vision::VlmConfig{vlm_port,vlm_timeout_ms});
             config.vlm=vlm.get();config.vlm_signature="local-smolvlm-500m-v1:127.0.0.1:"+std::to_string(vlm_port);
         }
         if(!multilingual_bundle.empty()) {

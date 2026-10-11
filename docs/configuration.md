@@ -94,8 +94,31 @@ kare sayısı komut argümanlarıdır. [İndeksleme ayrıntıları](indexing.md)
 yalnızca `cpu`, `fp32` ve moda göre `opencv-dnn`/`onnxruntime` değerlerini kabul
 eder. `stream` modu `[tracking]` ve `[stream]` kullanır; `[video]` kabul etmez.
 Diğer modlar `[stream]` kabul etmez. Ayar aralıkları ve komut için [RTSP kılavuzu](live-video.md).
-TensorRT, OCR ve segmentation bu şemanın desteklenen seçenekleri
-değildir; gelecek bir şema sürümünde eklenecekler.
+TensorRT bu şemada desteklenmez. Servisteki segmentation, OCR ve VLM için ayrı
+`configs/analysis.toml` profili kullanılır:
+
+```powershell
+.\scripts\start_service.ps1 -ServerExecutable build/live-seg/Release/aegisvision_server.exe -AnalysisConfig configs/analysis.toml -JobDatabase artifacts/service/vlm-demo-jobs.sqlite
+```
+
+Qdrant ve ayrı VLM sunucusu önceden açık olmalıdır; VLM için `scripts/start_vlm.ps1`.
+Arama/detection mevcut ayrı profillerini kullanmaya devam eder.
+`version = 1` zorunludur. Atlanan bölümlerin bileşenleri kapalıdır:
+
+- `[segmentation]`: `backend = "yolov8_onnx"` ve mevcut ONNX `model` dosyası.
+- `[ocr]`: `backend = "ppocr_crnn_en"` veya `"ppocr_v6_multilingual"`, mevcut `bundle` klasörü.
+- `[vlm]`: `backend = "local_smolvlm"`, `port` 1–65535 (varsayılan 8092),
+  `timeout_ms` 100–120000 (varsayılan 60000). Host sabit loopback'tir.
+
+Yollar analiz TOML dosyasına göre çözülür. Yanlış alan, tip ve backend reddedilir;
+model içerikleri adaptör yüklenirken doğrulanır. Analiz profili ile tekil model
+bayrakları birlikte kullanılamaz. Canlı maskeler için `-LiveUrl ... -LiveSegmentation`
+ayrıca verilir. Model değişikliğinde farklı iş veritabanı seç; eski sonuçları silme.
+
+2026-10-11 doğrulaması: config/servis/help testleri (3/3) geçti. Yerel sunucu ortak
+profille 8090'da açıldı; üç analiz yeteneği etkinleşti, önceki SQLite sonucu korundu
+ve `scene_frame` işi `1791700823339-2` gerçek modelle tamamlandı. Profil ile model
+bayrağının birlikte verilmesi modeller yüklenmeden reddedildi.
 
 Bu bilgisayarda üç örnek dosya uygulamalarla çalıştırıldı: 5 fotoğraf tespiti,
 12 karelik video ve otobüsü ilk sıraya koyan metin sorgusu elde edildi. Bunlar

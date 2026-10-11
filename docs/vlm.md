@@ -3,7 +3,8 @@
 `aegisvision_scene`, fotoğrafı yerel llama.cpp üzerinden SmolVLM-500M'e gönderir
 ve kısa İngilizce açıklamayı `scene.json` olarak kaydeder. İstek, doğrulama ve
 çıktı C++20'dir; Python veya bulut inference kullanılmaz. CLI yanında kalıcı
-`scene_frame` HTTP işi ve dashboard entegrasyonu vardır. TOML entegrasyonu henüz yoktur.
+`scene_frame` HTTP işi ve dashboard entegrasyonu vardır. Servis ayarları
+`-AnalysisConfig configs/analysis.toml` ile de verilebilir; [şema](configuration.md).
 
 ## Windows'ta çalıştırma
 
@@ -144,4 +145,4 @@ Servis testi kuyrukta başarılı sonuç, model hatası, iptal, hatadan toparlan
 kapalı yetenek, geçersiz istek ve SQLite yeniden açılışında sonuçların korunmasını
 doğrular. Web durum testleri güvenli metin, kaynak değiştirme, geçmişten açma ve
 gecikmiş cevapları kapsar. Değişiklikten sonra ilgili 3 CTest ve web testleri geçti.
-Daha güçlü model, bağımsız etiketli sahne değerlendirmesi ve TOML bağlantısı bekliyor.
+Daha güçlü model ve bağımsız etiketli sahne değerlendirmesi bekliyor.

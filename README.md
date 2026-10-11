@@ -95,7 +95,7 @@ Bu şema hedef mimaridir. `YoloDetector` gerçek piksel tamponu üzerinden infer
 eski demo detector önceden verilen kutuları okur. Hash embedding yalnızca test içindir
 ve anlamsal arama sağlamaz. OpenCV ayrı bir adaptör katmanıdır. C++ uygulamaları
 `configs/*.toml` dosyalarını okuyabilir; RTSP kayıt/analiz ve ayrı OCR CLI'ı hazırdır.
-OCR HTTP entegrasyonu hazırdır; OCR TOML ve Redis entegrasyonları planlanmıştır.
+OCR HTTP entegrasyonu ve servis analiz TOML profili hazırdır; Redis entegrasyonu bekliyor.
 
 ```text
 RTSP / Image
@@ -116,7 +116,7 @@ PaddleOCR gibi teknoloji seçimleri adaptör olarak eklenir; çekirdek iş akı�
 2. [Tamamlandı] OpenCV DNN/ONNX ile YOLOv8 detector; ONNX Runtime alternatif backend olarak planlandı
 3. [Tamamlandı] Yerel video pipeline'ı ve iki aşamalı tracking başlangıcı (tam ByteTrack değil)
 4. [Tamamlandı: başlangıç sürümü] CLIP görsel/metin embedding ve yerel Qdrant arama; geniş ölçekli kalite değerlendirmesi bekliyor
-5. [Segmentation, OCR ve VLM CLI/servis/panel hazır] Geniş doğal veri kalite ölçümü ve TOML bağlantıları bekliyor
+5. [Segmentation, OCR ve VLM CLI/servis/panel ve ortak TOML profili hazır] Geniş doğal veri kalite ölçümü bekliyor
 6. [Başlangıç ölçümü tamamlandı] Etiketli AP/CLEAR/IDF1/HOTA ve CPU p50/p95;
    OSNet görünüşü ve sabit validation/test protokolü eklendi; geniş veri, kalibrasyon,
    tam ByteTrack ve çoklu kamera bekliyor

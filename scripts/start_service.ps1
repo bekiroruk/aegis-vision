@@ -8,12 +8,14 @@ param(
     [string]$SegmentationModel = "",
     [string]$OcrModels = "",
     [string]$OcrMultilingual = "",
+    [string]$AnalysisConfig = "",
     [ValidateRange(0,65535)][int]$VlmPort = 0,
     [switch]$LiveSegmentation,
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
 $ErrorActionPreference = "Stop"
 if($OcrModels -and $OcrMultilingual){throw 'Tek bir OCR backend secin: OcrModels veya OcrMultilingual'}
+if($AnalysisConfig -and ($SegmentationModel -or $OcrModels -or $OcrMultilingual -or $VlmPort)){throw 'AnalysisConfig ile model parametrelerini birlikte kullanmayin.'}
 $repoDirectory = Split-Path $PSScriptRoot -Parent
 Push-Location $repoDirectory
 try {
@@ -28,7 +30,8 @@ try {
     try { Invoke-RestMethod -Uri http://127.0.0.1:6333/healthz -TimeoutSec 3 | Out-Null }
     catch { throw "Qdrant calismiyor. Ayri terminalde artifacts/deps/qdrant/qdrant.exe --config-path configs/qdrant-local.yaml komutunu baslatin." }
     $serverArguments = @('configs/service-search.toml','configs/image.toml',$MediaDirectory,'web',$Port,$JobDatabase)
-    if ($LiveSegmentation -and (-not $LiveUrl -or -not $SegmentationModel)) { throw 'LiveSegmentation icin LiveUrl ve SegmentationModel gereklidir.' }
+    if($AnalysisConfig){$serverArguments += @('--analysis-config',$AnalysisConfig)}
+    if ($LiveSegmentation -and (-not $LiveUrl -or (-not $SegmentationModel -and -not $AnalysisConfig))) { throw 'LiveSegmentation icin LiveUrl ve segmentation modeli gereklidir.' }
     if ($LiveUrl) { $serverArguments += @($LiveConfig,$LiveUrl,$Ffmpeg) }
     if ($SegmentationModel) {
         if (-not (Test-Path -LiteralPath $SegmentationModel -PathType Leaf)) { throw "Segmentation modeli bulunamadi: $SegmentationModel" }
