@@ -81,14 +81,16 @@ std::size_t ascii_edit_distance(const std::string& reference,const std::string& 
     return row.back();
 }
 PpocrCrnn::PpocrCrnn(const std::filesystem::path& detector,const std::filesystem::path& recognizer,OcrConfig config)
-    :config_(validate_config(config)),detector_(load_net(detector)),recognizer_(load_net(recognizer)) {
+    :config_(validate_config(config)),detector_(detector,config),recognizer_(load_net(recognizer)) {}
+PpocrDetector::PpocrDetector(const std::filesystem::path& detector,OcrConfig config)
+    :config_(validate_config(config)),detector_(load_net(detector)) {
     // OpenCV Zoo ppocr_det.py preprocessing, pinned by prepare_ocr.ps1.
     // Normalize explicitly: older OpenCV 4.x only exposes a scalar model scale.
     detector_.setInputParams(1.0,{736,736},cv::Scalar(),false,false);
     detector_.setBinaryThreshold(.3F);detector_.setPolygonThreshold(.5F);
     detector_.setUnclipRatio(2.0);detector_.setMaxCandidates(200);
 }
-std::vector<TextRegion> PpocrCrnn::read(const cv::Mat& bgr,const std::atomic_bool* cancel) {
+std::vector<TextRegion> PpocrDetector::detect(const cv::Mat& bgr,const std::atomic_bool* cancel) {
     validate_image(bgr);
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(config_.timeout_ms);
     const auto checkpoint=[&] {
@@ -116,10 +118,22 @@ std::vector<TextRegion> PpocrCrnn::read(const cv::Mat& bgr,const std::atomic_boo
             std::clamp(boxes[index][i].x*bgr.cols/736.F,0.F,static_cast<float>(bgr.cols-1)),
             std::clamp(boxes[index][i].y*bgr.rows/736.F,0.F,static_cast<float>(bgr.rows-1))};
         if(!valid_quad(polygon,bgr.size())) continue; // Clipped degenerate detection, never warp it.
-        auto crop=rectify_text(bgr,polygon);cv::cvtColor(crop,crop,cv::COLOR_BGR2GRAY);
+        results.push_back({polygon,scores[index],{}});
+    }
+    checkpoint();return results;
+}
+std::vector<TextRegion> PpocrCrnn::read(const cv::Mat& bgr,const std::atomic_bool* cancel) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(config_.timeout_ms);
+    const auto checkpoint=[&] {
+        if(cancel&&cancel->load()) throw std::runtime_error("OCR cancelled");
+        if(std::chrono::steady_clock::now()>=deadline) throw std::runtime_error("OCR deadline exceeded");
+    };
+    auto results=detector_.detect(bgr,cancel);
+    for(auto& region:results) {
+        checkpoint();
+        auto crop=rectify_text(bgr,region.polygon);cv::cvtColor(crop,crop,cv::COLOR_BGR2GRAY);
         recognizer_.setInput(cv::dnn::blobFromImage(crop,1.0/127.5,{100,32},cv::Scalar::all(127.5)));
-        auto recognition=decode_english_ctc(recognizer_.forward());checkpoint();
-        results.push_back({polygon,scores[index],std::move(recognition)});
+        region.recognition=decode_english_ctc(recognizer_.forward());checkpoint();
     }
     checkpoint();return results; // No partial result published after failure/cancellation.
 }

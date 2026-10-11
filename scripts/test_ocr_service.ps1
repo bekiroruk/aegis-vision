@@ -10,7 +10,7 @@ $repo=Split-Path $PSScriptRoot -Parent
 $destination=if ([IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $repo $Output }
 if (Test-Path -LiteralPath $destination) { throw 'Use a new output directory' }
 $base="http://127.0.0.1:$Port"
-if (-not (Invoke-RestMethod "$base/api/health" -TimeoutSec 5).ocr_enabled) { throw 'Start service with -OcrModels first' }
+if (-not (Invoke-RestMethod "$base/api/health" -TimeoutSec 5).ocr_enabled) { throw 'Start service with -OcrModels or -OcrMultilingual first' }
 New-Item -ItemType Directory -Path $destination | Out-Null
 $request=@{type='ocr_frame';path=$Video;frame_index=$FrameIndex} | ConvertTo-Json
 $accepted=Invoke-RestMethod "$base/api/jobs" -Method Post -ContentType application/json -Body $request -TimeoutSec 5

@@ -1,4 +1,7 @@
 #include "aegisvision/ocr_evaluation.hpp"
+#ifdef AEGISVISION_OCR_MULTILINGUAL
+#include "aegisvision/ocr_multilingual.hpp"
+#endif
 #include <toml++/toml.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <algorithm>
@@ -6,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <memory>
 
 namespace fs=std::filesystem;
 using namespace aegisvision::vision;
@@ -15,7 +19,7 @@ std::string required_string(const toml::node_view<const toml::node>& node) {
     if(!value||value->empty()||value->size()>1024) throw std::invalid_argument("Missing/invalid manifest string");
     return *value;
 }
-std::vector<Sample> read_manifest(const fs::path& path) {
+std::vector<Sample> read_manifest(const fs::path& path,bool unicode=false) {
     if(!fs::is_regular_file(path)||fs::file_size(path)>1024*1024) throw std::invalid_argument("Manifest must be <=1 MiB");
     std::ifstream stream(path);const auto root=toml::parse(stream);
     if(root["schema_version"].value<int>()!=1) throw std::invalid_argument("Expected manifest schema_version=1");
@@ -44,7 +48,7 @@ std::vector<Sample> read_manifest(const fs::path& path) {
                 throw std::invalid_argument("Reference box exceeds image dimensions");
             s.labels.push_back(std::move(label));
         }
-        (void)evaluate_ocr(s.labels,{}); // Validate alphabet and geometry before loading any model.
+        (void)evaluate_ocr(s.labels,{},.5,unicode); // Validate alphabet and geometry before loading any model.
         result.push_back(std::move(s));
     }
     return result;
@@ -64,24 +68,34 @@ toml::table metrics(const OcrEvaluation& m) {
     if(m.reference_characters) t.insert("spatial_character_error_ratio",double(m.spatial_edits)/m.reference_characters);
     return t;
 }
-int run(const std::vector<fs::path>& args) {
+int run(std::vector<fs::path> args) {
     try {
+        bool multilingual=false;
+        if(args.size()>1&&args[1]=="--multilingual") {multilingual=true;args.erase(args.begin()+1);}
         if(args.size()==2&&args[1]=="--help") {
             std::cout<<"Usage: aegisvision_ocr_evaluate BUNDLE MANIFEST.toml NEW_OUTPUT_DIR\n"
                 "       aegisvision_ocr_evaluate --validate-manifest MANIFEST.toml\n"
+                "Prefix --multilingual for PP-OCRv6 UTF-8 codepoint metrics (requires search build for inference).\n"
                 "C++ CPU OCR dataset evaluation, fixed axis-aligned IoU >=0.5.\n"
                 "Lowercase English alphanumeric labels only; unsupported text is rejected.\n"
                 "Writes report.json only after all images succeed; no model downloads.\n";return 0;
         }
         if(args.size()==3&&args[1]=="--validate-manifest") {
-            const auto samples=read_manifest(args[2]);
+            const auto samples=read_manifest(args[2],multilingual);
             std::cout<<"Valid labels: "<<samples.size()<<" samples (image contents and models not checked)\n";return 0;
         }
         if(args.size()!=4) throw std::invalid_argument("Use --help for arguments");
         if(fs::exists(args[3])) throw std::invalid_argument("Output directory must not exist");
-        const auto samples=read_manifest(args[2]);
+        const auto samples=read_manifest(args[2],multilingual);
         cv::setNumThreads(1);
-        PpocrCrnn model(args[1]/"text_detection_en_ppocrv3_2023may.onnx",args[1]/"text_recognition_CRNN_EN_2021sep.onnx");
+        std::unique_ptr<IOcr> model;
+        if(multilingual) {
+#ifdef AEGISVISION_OCR_MULTILINGUAL
+            model=std::make_unique<PpocrMultilingual>(args[1]);
+#else
+            throw std::invalid_argument("Multilingual inference requires AEGISVISION_WITH_SEARCH=ON");
+#endif
+        } else model=std::make_unique<PpocrCrnn>(args[1]/"text_detection_en_ppocrv3_2023may.onnx",args[1]/"text_recognition_CRNN_EN_2021sep.onnx");
         toml::array results;OcrEvaluation total;double elapsed_total=0;
         for(const auto& s:samples) {
             if(!fs::is_regular_file(s.image)||fs::file_size(s.image)>32*1024*1024) throw std::invalid_argument("Image missing or exceeds 32 MiB: "+s.id);
@@ -89,7 +103,7 @@ int run(const std::vector<fs::path>& args) {
             if(bytes.empty()||!input.read(reinterpret_cast<char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()))) throw std::runtime_error("Image read failed: "+s.id);
             const auto image=cv::imdecode(bytes,cv::IMREAD_COLOR);
             if(image.empty()||image.cols!=s.width||image.rows!=s.height) throw std::invalid_argument("Image dimensions differ from manifest: "+s.id);
-            const auto start=std::chrono::steady_clock::now();const auto regions=model.read(image);
+            const auto start=std::chrono::steady_clock::now();const auto regions=model->read(image);
             const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();elapsed_total+=ms;
             std::vector<OcrLabel> predictions;toml::array texts;
             for(const auto& region:regions) {
@@ -98,16 +112,16 @@ int run(const std::vector<fs::path>& args) {
                 predictions.push_back({{left,top,right-left,bottom-top},region.recognition.text});
                 texts.push_back(toml::table{{"text",region.recognition.text},{"box",toml::array{left,top,right-left,bottom-top}}});
             }
-            const auto score=evaluate_ocr(s.labels,predictions);total+=score;
+            const auto score=evaluate_ocr(s.labels,predictions,.5,multilingual);total+=score;
             auto row=metrics(score);row.insert("id",s.id);row.insert("elapsed_ms",ms);row.insert("predicted_regions",std::move(texts));
             toml::array labels;for(const auto& label:s.labels) labels.push_back(toml::table{{"text",label.text},
                 {"box",toml::array{label.box.x,label.box.y,label.box.width,label.box.height}}});
             row.insert("reference_regions",std::move(labels));results.push_back(std::move(row));
             std::cout<<s.id<<": exact="<<score.exact_matches<<'/'<<score.references<<" extras="<<score.predictions-score.matches<<" ms="<<ms<<'\n';
         }
-        toml::table report{{"schema_version",1},{"backend","ppocrv3-crnn-en-opencv-cpu"},
+        toml::table report{{"schema_version",1},{"backend",multilingual?"ppocrv3-det-ppocrv6-tiny-ort-cpu":"ppocrv3-crnn-en-opencv-cpu"},
             {"geometry","axis_aligned_box_iou"},{"minimum_iou",.5},{"matching","maximum_cardinality_then_iou_no_text"},
-            {"normalization","none_lowercase_alphanumeric_labels_required"},{"sample_count",static_cast<int64_t>(samples.size())},
+            {"normalization",multilingual?"none_utf8_codepoints_case_and_space_sensitive":"none_lowercase_alphanumeric_labels_required"},{"sample_count",static_cast<int64_t>(samples.size())},
             {"inference_total_ms",elapsed_total},{"timing","one_pass_no_warmup_excludes_model_load_and_image_decode"},
             {"summary",metrics(total)},{"samples",std::move(results)}};
         if(!fs::create_directories(args[3])) throw std::runtime_error("Cannot create new output directory");

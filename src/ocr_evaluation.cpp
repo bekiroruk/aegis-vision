@@ -6,7 +6,7 @@
 
 namespace aegisvision::vision {
 namespace {
-void validate(const std::vector<OcrLabel>& labels,bool reference) {
+void validate(const std::vector<OcrLabel>& labels,bool reference,bool unicode) {
     if(labels.size()>64) throw std::invalid_argument("Evaluation supports at most 64 regions per image");
     for(const auto& label:labels) {
         const auto& b=label.box;
@@ -14,8 +14,10 @@ void validate(const std::vector<OcrLabel>& labels,bool reference) {
            b.x<0||b.y<0||b.width<=0||b.height<=0||b.x+b.width>1920||b.y+b.height>1920)
             throw std::invalid_argument("Invalid evaluation box");
         if(label.text.size()>256||(reference&&label.text.empty())) throw std::invalid_argument("Invalid evaluation text length");
-        for(char c:label.text) if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')))
-            throw std::invalid_argument("Evaluation labels require lowercase a-z/0-9; unsupported characters must not be dropped");
+        if(unicode) {
+            for(auto cp:utf8_codepoints(label.text)) if(cp<32||(cp>=127&&cp<=159)) throw std::invalid_argument("Control character in OCR label");
+        } else for(char c:label.text) if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')))
+                throw std::invalid_argument("Evaluation labels require lowercase a-z/0-9; unsupported characters must not be dropped");
     }
 }
 double iou(const cv::Rect2f& a,const cv::Rect2f& b) {
@@ -29,14 +31,15 @@ OcrEvaluation& OcrEvaluation::operator+=(const OcrEvaluation& b) {
     reference_characters+=b.reference_characters;matched_characters+=b.matched_characters;
     matched_edits+=b.matched_edits;spatial_edits+=b.spatial_edits;return *this;
 }
-OcrEvaluation evaluate_ocr(const std::vector<OcrLabel>& reference,const std::vector<OcrLabel>& prediction,double minimum_iou) {
+OcrEvaluation evaluate_ocr(const std::vector<OcrLabel>& reference,const std::vector<OcrLabel>& prediction,double minimum_iou,bool unicode) {
     if(!std::isfinite(minimum_iou)||minimum_iou<=0||minimum_iou>1) throw std::invalid_argument("IoU must be in (0,1]");
-    validate(reference,true);validate(prediction,false);
+    validate(reference,true,unicode);validate(prediction,false,unicode);
+    const auto length=[&](const std::string& text){return unicode?utf8_codepoints(text).size():text.size();};
     OcrEvaluation result;result.references=reference.size();result.predictions=prediction.size();
     std::vector<std::vector<double>> weights(reference.size(),std::vector<double>(prediction.size(),-1));
     const double bonus=static_cast<double>(std::min(reference.size(),prediction.size())+1);
     for(std::size_t r=0;r<reference.size();++r) {
-        result.reference_characters+=reference[r].text.size();
+        result.reference_characters+=length(reference[r].text);
         for(std::size_t p=0;p<prediction.size();++p) {
             const auto overlap=iou(reference[r].box,prediction[p].box);
             if(overlap>=minimum_iou) weights[r][p]=(bonus+overlap)/(bonus+1);
@@ -46,12 +49,12 @@ OcrEvaluation evaluate_ocr(const std::vector<OcrLabel>& reference,const std::vec
     for(const auto& [r,p]:assign_max_weight(weights)) {
         used_reference[r]=true;used_prediction[p]=true;++result.matches;
         if(reference[r].text==prediction[p].text) ++result.exact_matches;
-        result.matched_characters+=reference[r].text.size();
-        result.matched_edits+=ascii_edit_distance(reference[r].text,prediction[p].text);
+        result.matched_characters+=length(reference[r].text);
+        result.matched_edits+=unicode?unicode_edit_distance(reference[r].text,prediction[p].text):ascii_edit_distance(reference[r].text,prediction[p].text);
     }
     result.spatial_edits=result.matched_edits;
-    for(std::size_t r=0;r<reference.size();++r) if(!used_reference[r]) result.spatial_edits+=reference[r].text.size();
-    for(std::size_t p=0;p<prediction.size();++p) if(!used_prediction[p]) result.spatial_edits+=prediction[p].text.size();
+    for(std::size_t r=0;r<reference.size();++r) if(!used_reference[r]) result.spatial_edits+=length(reference[r].text);
+    for(std::size_t p=0;p<prediction.size();++p) if(!used_prediction[p]) result.spatial_edits+=length(prediction[p].text);
     return result;
 }
 } // namespace aegisvision::vision

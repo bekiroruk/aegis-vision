@@ -1,6 +1,7 @@
 #include "aegisvision/application_config.hpp"
 #include "aegisvision/clip.hpp"
 #include "aegisvision/service.hpp"
+#include "aegisvision/ocr_multilingual.hpp"
 #include <charconv>
 #include <algorithm>
 #include <iostream>
@@ -13,7 +14,7 @@ int run(std::vector<std::filesystem::path> args) {
                 "   Live: append STREAM.toml RTSP_URL [FFMPEG] after PORT JOB_DB to enable preset local-pedestrians and opt-in archive.\n"
                 "   Segmentation: append --segment-model MODEL.onnx at the end to enable queued segment_frame jobs.\n"
                 "   Add --live-segmentation with live arguments and --segment-model to draw tracked live masks.\n"
-                "   OCR: --ocr-models BUNDLE_DIR enables queued ocr_frame (PP-OCRv3 + CRNN EN).\n"
+                "   OCR: --ocr-models BUNDLE_DIR (CRNN EN) OR --ocr-multilingual BUNDLE_DIR (PP-OCRv6 UTF-8).\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
@@ -30,6 +31,8 @@ int run(std::vector<std::filesystem::path> args) {
             return value;
         };
         segmentation_model=take_path("--segment-model");ocr_bundle=take_path("--ocr-models");
+        const auto multilingual_bundle=take_path("--ocr-multilingual");
+        if(!ocr_bundle.empty()&&!multilingual_bundle.empty()) throw std::invalid_argument("Choose one OCR backend");
         if ((args.size() < 5 || args.size() > 7) && args.size() != 9 && args.size()!=10) throw std::invalid_argument("Missing arguments; run --help");
         if (live_segmentation && (segmentation_model.empty() || args.size()<9))
             throw std::invalid_argument("Live segmentation requires live source arguments and --segment-model");
@@ -52,7 +55,11 @@ int run(std::vector<std::filesystem::path> args) {
         aegisvision::ServiceConfig config{args[3], args[4],
             aegisvision::yolo_index_signature(detection.detector_model, detection.detector)};
         std::unique_ptr<aegisvision::vision::YoloSegmenter> segmenter;
-        std::unique_ptr<aegisvision::vision::PpocrCrnn> ocr;
+        std::unique_ptr<aegisvision::vision::IOcr> ocr;
+        if(!multilingual_bundle.empty()) {
+            auto model=std::make_unique<aegisvision::vision::PpocrMultilingual>(multilingual_bundle);
+            config.ocr_signature=model->signature();ocr=std::move(model);config.ocr=ocr.get();
+        }
         if(!ocr_bundle.empty()) {
             const auto detection_model=ocr_bundle/"text_detection_en_ppocrv3_2023may.onnx";
             const auto recognition_model=ocr_bundle/"text_recognition_CRNN_EN_2021sep.onnx";

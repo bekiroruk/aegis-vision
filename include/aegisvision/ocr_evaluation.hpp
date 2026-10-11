@@ -14,5 +14,5 @@ struct OcrEvaluation {
 // Geometry-only maximum-cardinality assignment, then maximum IoU; no text-based matching.
 // Unsupported alphabet/invalid boxes are rejected rather than silently normalized away.
 OcrEvaluation evaluate_ocr(const std::vector<OcrLabel>& reference,
-                           const std::vector<OcrLabel>& prediction, double minimum_iou=.5);
+                           const std::vector<OcrLabel>& prediction, double minimum_iou=.5, bool unicode=false);
 } // namespace aegisvision::vision

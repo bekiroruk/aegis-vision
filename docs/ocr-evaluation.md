@@ -2,7 +2,9 @@
 
 `aegisvision_ocr_evaluate`, etiketlenmiş yerel görüntülerde **tespit + okuma**
 zincirini ölçer. Model eğitmez, eşik aramaz, başarılı örnekleri seçip hataları atmaz.
-Mevcut İngilizce modelin sınırlarını görünür kılar; Türkçe desteği eklemez.
+Varsayılan İngilizce modelin sınırlarını görünür kılar. İsteğe bağlı
+[`--multilingual` modu](ocr-turkish.md) Türkçe/UTF-8 modelini ve kod noktası
+tabanlı ölçümü açar; aşağıdaki ilk ölçüm İngilizce profile aittir.
 
 ## Çalıştırma
 
@@ -93,7 +95,7 @@ Resimler repoda yeniden dağıtılmaz; [OCR kaynak/lisans notları](ocr.md) geç
 
 ## Sonraki adım
 
-Türkçe karakterleri gerçekten üretebilen ayrı bir recognizer/dictionary ve buna
-uygun Unicode karakter ölçümü gerekir. Mevcut CTC çıktısına birkaç karakter
-eklemek veya `ü` → `u` dönüştürmek Türkçe desteği değildir. Geniş, lisansı açık
-etiketli veri kümesi, Türkçe backend ve VLM entegrasyonu hâlâ tamamlanmadı.
+Türkçe karakterleri gerçekten üretebilen ayrı [recognizer/dictionary ve Unicode
+ölçümü](ocr-turkish.md) eklendi. Mevcut CTC çıktısına birkaç karakter eklemek veya
+`ü` → `u` dönüştürmek kullanılmadı. Geniş, lisansı açık doğal etiketli veri kümesi
+ve VLM entegrasyonu hâlâ tamamlanmadı.

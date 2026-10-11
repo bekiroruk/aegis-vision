@@ -53,7 +53,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, delayMask=false} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, delayMask=false} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[];
   const get = id => {
@@ -66,7 +66,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, o
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr};
+    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode};
     else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
@@ -188,6 +188,9 @@ async function staleSegmentationSubmission() {
   assert.equal(test.get('segmentation-status').textContent,'');
 }
 async function ocrPanel() {
+  const multilingual=harness({ocr:true,ocrUnicode:true});await multilingual.started;
+  assert.match(multilingual.get('ocr-state').textContent,/Çok dilli/);
+  assert.match(multilingual.get('ocr-language').textContent,/Türkçe karakterler desteklenir/);
   const disabled=harness();await disabled.started;assert.equal(disabled.get('ocr-button').disabled,true);
   const test=harness({ocr:true});await test.started;
   assert.equal(test.get('ocr-button').disabled,false);test.get('ocr-frame').value='2';

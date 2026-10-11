@@ -5,12 +5,13 @@ let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
 let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
 let selectedMedia = '', mediaReady = false, mediaChoiceMade = false;
-let ocrEnabled=false, ocrSubmitting=false, ocrJob='', ocrRevision=0;
+let ocrEnabled=false, ocrUnicode=false, ocrSubmitting=false, ocrJob='', ocrRevision=0;
 function syncOcr() {
   const available=ocrEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
   $('ocr-button').disabled=!available || ocrSubmitting || !!ocrJob;
   $('ocr-frame').disabled=!available || ocrSubmitting || !!ocrJob;
-  $('ocr-state').textContent=ocrEnabled ? 'Tek kare · İngilizce' : 'Model etkin değil';
+  $('ocr-state').textContent=ocrEnabled ? (ocrUnicode ? 'Tek kare · Çok dilli' : 'Tek kare · İngilizce') : 'Model etkin değil';
+  $('ocr-language').textContent=ocrEnabled ? (ocrUnicode ? 'Türkçe karakterler desteklenir; hatasız okuma garantisi değildir. Numaralı kutular metin listesine karşılık gelir.' : 'İngilizce harfler ve rakamlar · Türkçe karakter desteği yok.') : 'OCR modeli etkin değil.';
   $('ocr-source').textContent=selectedMedia ? `Kaynak: ${selectedMedia}` : 'Video seçin.';
 }
 function clearOcr() {
@@ -320,7 +321,7 @@ async function refresh() {
   try {
     const data = await api('/api/jobs'); showJobs(data.jobs);
     const health=await api('/api/health');segmentationEnabled=health.segmentation_enabled===true;syncSegmentation();
-    ocrEnabled=health.ocr_enabled===true;syncOcr();
+    ocrEnabled=health.ocr_enabled===true;ocrUnicode=health.ocr_unicode===true;syncOcr();
     $('health').textContent = '● Servis hazır';
   } catch(error) { segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }

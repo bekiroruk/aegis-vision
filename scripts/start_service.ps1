@@ -7,10 +7,12 @@ param(
     [string]$Ffmpeg = "ffmpeg",
     [string]$SegmentationModel = "",
     [string]$OcrModels = "",
+    [string]$OcrMultilingual = "",
     [switch]$LiveSegmentation,
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
 $ErrorActionPreference = "Stop"
+if($OcrModels -and $OcrMultilingual){throw 'Tek bir OCR backend secin: OcrModels veya OcrMultilingual'}
 $repoDirectory = Split-Path $PSScriptRoot -Parent
 Push-Location $repoDirectory
 try {
@@ -37,6 +39,12 @@ try {
             if (-not (Test-Path -LiteralPath (Join-Path $OcrModels $name) -PathType Leaf)) { throw "OCR modeli bulunamadi: $name" }
         }
         $serverArguments += @('--ocr-models',$OcrModels)
+    }
+    if ($OcrMultilingual) {
+        foreach($model in @('inference.onnx','inference.yml','text_detection_en_ppocrv3_2023may.onnx')) {
+            if(-not(Test-Path -LiteralPath (Join-Path $OcrMultilingual $model) -PathType Leaf)){throw "Eksik OCR modeli: $model. scripts/prepare_ocr_multilingual.ps1 calistirin."}
+        }
+        $serverArguments += @('--ocr-multilingual',$OcrMultilingual)
     }
     & $ServerExecutable @serverArguments
     if ($LASTEXITCODE -ne 0) { throw "Video servisi hata koduyla kapandi: $LASTEXITCODE" }

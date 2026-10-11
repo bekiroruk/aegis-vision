@@ -92,8 +92,12 @@ Gerçek model testi için CMake'e `AEGISVISION_OCR_BUNDLE` ve
 `AEGISVISION_OCR_TEST_IMAGE` mutlak yolları verilir.
 
 Bu çalışma ağacında Release derlemesi ve gerçek OCR/CLIP referanslarını içeren
-**38/38 CTest** geçti. Ayrı OCR veri kümesi, Türkçe/multilingual model, video
-karelerinden geniş kalite ölçümü henüz tamamlanmadı.
+ilk sürümde **38/38 CTest** geçti. Ayrı doğal OCR veri kümesi ve video
+karelerinden geniş kalite ölçümü henüz tamamlanmadı; Türkçe model aşağıdaki
+ayrı backend ile sonradan eklendi.
+
+Türkçe için ayrı [PP-OCRv6 çok dilli backend](ocr-turkish.md) kullanılabilir;
+bu sayfadaki CRNN EN modelinin alfabe sınırı değişmez.
 
 ## HTTP kuyruğu ve web paneli
 

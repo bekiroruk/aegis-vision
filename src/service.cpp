@@ -191,7 +191,12 @@ LocalService::Json LocalService::segment_frame(const Json& request, const JobQue
         Json texts=Json::array();auto painted=frame.clone();
         for(const auto& r:regions) {
             if(cancel) throw IndexCancelled();
-            if(r.recognition.text.size()>256 || r.recognition.text.find_first_not_of("0123456789abcdefghijklmnopqrstuvwxyz")!=std::string::npos ||
+            bool valid_text=true;
+            if(config_.ocr->unicode_output()) {
+                for(auto cp:vision::utf8_codepoints(r.recognition.text))
+                    if(cp<32||(cp>=127&&cp<=159)||cp==0x2028||cp==0x2029||(cp>=0x202a&&cp<=0x202e)||(cp>=0x2066&&cp<=0x2069)) valid_text=false;
+            } else valid_text=r.recognition.text.find_first_not_of("0123456789abcdefghijklmnopqrstuvwxyz")==std::string::npos;
+            if(r.recognition.text.size()>256 || !valid_text ||
                 !std::isfinite(r.detection_confidence) || r.detection_confidence<0 || r.detection_confidence>1 ||
                 !std::isfinite(r.recognition.confidence) || r.recognition.confidence<0 || r.recognition.confidence>1)
                 throw std::runtime_error("Invalid OCR region text or confidence");
@@ -202,12 +207,14 @@ LocalService::Json LocalService::segment_frame(const Json& request, const JobQue
             texts.push_back({{"text",r.recognition.text},{"polygon",std::move(polygon)},
                 {"detection_confidence",r.detection_confidence},{"recognition_confidence",r.recognition.confidence}});
             cv::polylines(painted,points,true,{0,255,0},2);
-            cv::putText(painted,r.recognition.text,{points[1].x,std::max(16,points[1].y-6)},cv::FONT_HERSHEY_SIMPLEX,.55,{0,0,255},2);
+            // OpenCV Hershey does not render Unicode. Numbered boxes correspond to the UTF-8 UI list.
+            cv::putText(painted,config_.ocr->unicode_output()?std::to_string(texts.size()):r.recognition.text,
+                {points[1].x,std::max(16,points[1].y-6)},cv::FONT_HERSHEY_SIMPLEX,.55,{0,0,255},2);
         }
         unchanged();
         Json result{{"path",request.at("path")},{"frame_index",index},{"width",frame.cols},{"height",frame.rows},
-            {"model_signature",config_.ocr_signature},{"charset","0123456789abcdefghijklmnopqrstuvwxyz"},
-            {"polygon_order","BL,TL,TR,BR"},{"recognition_confidence_kind","mean_emitted_softmax_uncalibrated"},
+            {"model_signature",config_.ocr_signature},{"charset",config_.ocr->unicode_output()?"utf8-ppocrv6-tiny":"0123456789abcdefghijklmnopqrstuvwxyz"},
+            {"polygon_order","BL,TL,TR,BR"},{"recognition_confidence_kind",config_.ocr->unicode_output()?"mean_emitted_probability_uncalibrated":"mean_emitted_softmax_uncalibrated"},
             {"regions",std::move(texts)},{"preview_data_url",jpeg_url(painted)}};
         if(cancel) throw IndexCancelled();
         if(result.dump().size()>1024*1024) throw std::runtime_error("OCR result exceeds 1 MiB");
@@ -314,7 +321,8 @@ void LocalService::routes() {
         const auto error = jobs_.storage_error();
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
-            {"segmentation_enabled", config_.segmenter != nullptr}, {"ocr_enabled",config_.ocr != nullptr}, {"storage_error", error}}, error.empty() ? 200 : 503);
+            {"segmentation_enabled", config_.segmenter != nullptr}, {"ocr_enabled",config_.ocr != nullptr},
+            {"ocr_unicode",config_.ocr && config_.ocr->unicode_output()}, {"storage_error", error}}, error.empty() ? 200 : 503);
     });
     http_.Get("/api/live/sources", [this](const auto&, auto& response) { reply(response, live_.sources()); });
     http_.Get("/api/live", [this](const auto&, auto& response) { reply(response, {{"session", live_.current()}}); });

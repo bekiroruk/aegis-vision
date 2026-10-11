@@ -81,6 +81,7 @@ public:
 class Ocr : public vision::IOcr {
 public:
     std::atomic_int mode{0};std::atomic_bool started{false};
+    bool unicode_output() const override {return mode.load()>=6;}
     std::vector<vision::TextRegion> read(const cv::Mat& image,const std::atomic_bool* cancel) override {
         require(image.cols==160 && image.rows==120,"OCR frame missing");
         if(mode==1) throw std::runtime_error("fixture OCR model error");
@@ -89,6 +90,9 @@ public:
         vision::TextRegion text{{cv::Point2f{10,50},{10,10},{90,10},{90,50}},.9F,{"canon",.8F}};
         if(mode==3) text.recognition.text="<script>";
         if(mode==5) return std::vector<vision::TextRegion>(65,text);
+        if(mode==6) text.recognition.text="Türkçe İstanbul";
+        if(mode==7) text.recognition.text="\xc0\x80";
+        if(mode==8) text.recognition.text="bad\ntext";
         return {text};
     }
 };
@@ -200,6 +204,13 @@ std::string http_checks(const fs::path& root) {
         {{"type","ocr_frame"},{"path","test.avi"},{"language","tr"}}})
         (void)response(client.Post("/api/jobs",invalid.dump(),"application/json"),400);
     const auto text_job=completed(client,text_request);
+    ocr.mode=6;
+    require(response(client.Get("/api/health")).at("ocr_unicode")==true,"Unicode OCR capability missing");
+    const auto unicode_job=completed(client,text_request);
+    require(unicode_job.at("state")=="succeeded"&&unicode_job.at("result").at("regions")[0].at("text")=="Türkçe İstanbul"&&
+        unicode_job.at("result").at("charset")=="utf8-ppocrv6-tiny","UTF-8 HTTP output changed");
+    for(const int mode:{7,8}) {ocr.mode=mode;require(completed(client,text_request).at("state")=="failed","Invalid UTF-8/control text accepted");}
+    ocr.mode=0;
     require(text_job.at("state")=="succeeded" && text_job.at("result").at("regions")[0].at("text")=="canon" &&
         text_job.at("result").at("frame_index")==2,"OCR result missing");
     require(text_job.at("result").at("preview_data_url").get<std::string>().starts_with("data:image/jpeg;base64,/9j/"),"OCR JPEG missing");
@@ -275,11 +286,16 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     require(restored.at("state") == "succeeded" && restored.at("result").at("results").size() == 4 &&
         restored.at("attempts") == 1, "HTTP completed search lost or rerun after restart");
     status(client.Get("/api/preview/" + search_id + "/0.jpg"), 200);
-    bool restored_mask=false,restored_text=false;
+    bool restored_mask=false,restored_text=false,restored_unicode=false;
     const auto history=response(client.Get("/api/jobs"));
     for (const auto& job:history.at("jobs")) {
         if(job.at("request").at("type")=="ocr_frame" && job.at("state")=="succeeded" && !job.at("result").at("regions").empty()) {
-            require(job.at("attempts")==1 && job.at("result").at("regions")[0].at("text")=="canon","Persisted OCR result differs");restored_text=true;
+            require(job.at("attempts")==1,"Persisted OCR was rerun");
+            if(job.at("result").at("charset")=="utf8-ppocrv6-tiny") {
+                require(job.at("result").at("regions")[0].at("text")=="Türkçe İstanbul","Persisted UTF-8 OCR result differs");restored_unicode=true;
+            } else {
+                require(job.at("result").at("regions")[0].at("text")=="canon","Persisted OCR result differs");restored_text=true;
+            }
         }
         if (job.at("request").at("type")=="segment_frame" && job.at("state")=="succeeded") {
             require(job.at("attempts")==1 && job.at("result").at("instances")[0].at("mask_pixels")==4,
@@ -289,6 +305,7 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     }
     require(restored_mask,"Persisted mask job missing");
     require(restored_text,"Persisted OCR job missing");
+    require(restored_unicode,"Persisted Unicode OCR job missing");
 }
 void segmentation_disabled(const fs::path& root) {
     Detector detector; Embedder embedder; Store store;

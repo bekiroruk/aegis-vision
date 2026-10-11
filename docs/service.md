@@ -273,6 +273,8 @@ Bu gerçek kayıt üzerinden yerel sistem kontrolüdür; fiziksel kamera, etiket
 doğruluk ölçümü veya throughput benchmark'ı değildir.
 
 OCR için `-OcrModels artifacts/models/ocr-en` ve ayrı iş veritabanı ile sunucuyu
+başlatabilirsiniz. Türkçe/UTF-8 için bunun yerine `-OcrMultilingual artifacts/models/ocr-multi-v6`
+kullanın; [hazırlama ve sınırlar](ocr-turkish.md). Aynı anda tek OCR backend
 açın. Panelde **Karedeki yazıları oku**, API'de `ocr_frame` işi kullanılır;
 [istek şeması, model/SQLite bağlamı ve sınırlar](ocr.md#http-kuyruğu-ve-web-paneli).
 

@@ -1,0 +1,12 @@
+# Generated typography, NOT an independent real-world benchmark.
+# Run scripts/create_turkish_ocr_fixture.ps1 first; use evaluator --multilingual.
+schema_version = 1
+[[samples]]
+id = "turkish-synthetic-two-lines"
+image = "../outputs/ocr-turkish-fixture/turkish.png"
+width = 1000
+height = 300
+regions = [
+  {text = "Türkçe İstanbul", box = [45, 42, 286, 42]},
+  {text = "Çığ ŞÖLEN ıİ öü 123", box = [45, 142, 398, 45]}
+]

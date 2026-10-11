@@ -30,6 +30,11 @@ int main() {
         require(evaluate_ocr({a,b},{swapped,swapped2}).exact_matches==0); // Must not match by text.
         auto aggregate=evaluate_ocr({a},{a});aggregate+=evaluate_ocr({b},{});
         require(aggregate.references==2&&aggregate.matches==1&&aggregate.spatial_edits==7);
+        auto tr=a;tr.text="İş";auto tr_prediction=a;tr_prediction.text="Is";
+        auto unicode=evaluate_ocr({tr},{tr_prediction},.5,true);
+        require(unicode.matched_edits==2&&unicode.reference_characters==2);
+        require(evaluate_ocr({tr},{},.5,true).spatial_edits==2);
+        require(evaluate_ocr({},{tr},.5,true).spatial_edits==2);
         std::cout<<"OCR evaluation tests passed\n";return 0;
     } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }
