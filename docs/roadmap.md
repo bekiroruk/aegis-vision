@@ -56,9 +56,11 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 **Aktif sıra:** canlı segmentasyonun gerçek RTSP doğrulaması tamamlandı.
 Yeni işlev olarak PP-OCRv3 + CRNN EN C++ adaptörü/CLI'ı ve gerçek fotoğraf smoke
 testi eklendi; [OCR kapsamı](ocr.md). `ocr_frame` işi sınırlı HTTP kuyruğuna ve
-web paneline bağlandı. Sırada daha geniş OCR kalite ölçümü ve dil desteği var;
-ardından VLM adaptörü. Daha geniş bağımsız kalite
-verisi, Türkçe/multilingual model ve aşağıdaki altyapı işleri ayrı açık başlıklardır.
+web paneline bağlandı. Türkçe/multilingual backend ve Unicode kalite ölçümü eklendi.
+İlk [yerel VLM C++ adaptörü/CLI'ı](vlm.md) gerçek fotoğrafta çalıştı; açıklama
+nesne adı hatası içeriyor, doğrulanmış etiket değildir. Sırada VLM tek-kare işi ve
+panel entegrasyonu var. Daha geniş bağımsız kalite verisi ve aşağıdaki altyapı
+işleri ayrı açık başlıklardır.
 
 Son tracking deneyi: [korumalı appearance esnetmesi](guarded-appearance-ablation.md).
 250 gerçek karede resmi doğrulama tamamlandı; sonuçlar karışık, varsayılan değişmedi.
@@ -106,7 +108,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    iki örneklik kontrolde küçük Welcome kırpımı kaçırıldı. [Türkçe/çok dilli OCR](ocr-turkish.md)
    backend ve Unicode ölçümü eklendi; sentetik Türkçe kontrolde hatalar hâlâ var.
    Geniş bağımsız doğal veri kalite ölçümü bekliyor. Dokunulmamış daha
-   geniş segmentation/OCR verisi ve ayrı VLM adaptörü ekle; VLM mevcut değildir.
+   geniş segmentation/OCR verisi ekle. İlk [VLM adaptörü/CLI'ı](vlm.md) hazır;
+   `scene_frame` kuyruğu ve panel henüz yok. Küçük modelin açıklamasında nesne adı
+   hatası görüldü; otomatik etiketleme doğruluğu iddia edilmiyor.
    Kabul: maske IoU, OCR hata oranı ve şemaya uygun VLM çıktısı ölçülür; timeout ve
    model hataları pipeline'ı belirsiz durumda bırakmaz. Otomatik etiketler gözden geçirilir.
 
