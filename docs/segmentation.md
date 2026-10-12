@@ -10,6 +10,10 @@ Gerçek modelle RTSP kopma/yeniden bağlantı, maske önizlemesi ve stop doğrul
 [2026-10-10'da geçti](live-mask-validation.md).
 Segmentation için ayrı TOML modu henüz yoktur.
 
+Gerçek GPU eğitimi, 80/16/74 Penn–Fudan bölünmesi ve hazır modele karşı native C++
+karşılaştırması: [eğitim protokolü ve sonuçlar](segmentation-training.md).
+Eğitilmiş ONNX yereldedir; varsayılan servis modelini değiştirmez.
+
 ## Model ve çalıştırma
 
 Mevcut export ortamında `ultralytics==8.3.252`, `onnx==1.19.1` kullanılır:

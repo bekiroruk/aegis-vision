@@ -1,0 +1,178 @@
+{
+  "experiment": "penn-fudan-person-finetune-v1",
+  "date": "2026-10-12",
+  "baseline": {
+    "protocol": "official COCOeval segm, IoU .50:.05:.95, maxDets [1,10,100]; fixed confidence .35",
+    "images": 74,
+    "classes": {
+      "person": 1
+    },
+    "predictions_in_selected_classes": 252,
+    "hashes": {
+      "manifest": "f59c1c781b0164b31b605ed898d649783d3f0dd586de4421d0003b766dcd8591",
+      "annotations": "a0f5fac352f91e2ade5144bb835106f7a2e11c0cfacd0fbc4767142f92815889",
+      "model": "85c8cb2695f586a3b9cc0279a3fca8aaa4e233f5ed6dfee88b2ec7cad587495b",
+      "predictions": "d89b563cac99538eeb7412a4e1e7b92d8af8c04933d42d6fa3527c7477d78313"
+    },
+    "pycocotools": "2.0.11",
+    "metrics": {
+      "AP": 0.6172955315050183,
+      "AP50": 0.9412987625578644,
+      "AP75": 0.7278398370977746,
+      "AP_small": 0.3279282917787577,
+      "AP_medium": 0.4398296632210094,
+      "AP_large": 0.6629196784861353,
+      "AR1": 0.338125,
+      "AR10": 0.68625,
+      "AR100": 0.68625,
+      "AR_small": 0.49000000000000005,
+      "AR_medium": 0.5814814814814815,
+      "AR_large": 0.7252032520325203
+    },
+    "at_mask_iou_50": {
+      "tp": 159,
+      "fp": 93,
+      "fn": 1,
+      "ignored_detections": 0,
+      "matched_mean_iou": 0.8211590564123236
+    },
+    "dataset": "penn-fudan-transfer-v1-test",
+    "limitations": [
+      "Small person-only domain transfer, not a general 80-class quality guarantee.",
+      "Penn train/validation scenes may share backgrounds; Fudan location is held out from fine-tuning.",
+      "No claim that upstream pretrained weights never encountered similar images.",
+      "Training uses largest external polygon per person; evaluation uses complete original pixel masks.",
+      "Dataset contains upright, relatively large pedestrians; no negative-only scenes.",
+      "AP is at deployed confidence .35, not low-threshold/full COCO model benchmark.",
+      "Matched mean IoU excludes false positives and misses; read TP/FP/FN and AP together."
+    ]
+  },
+  "candidate": {
+    "protocol": "official COCOeval segm, IoU .50:.05:.95, maxDets [1,10,100]; fixed confidence .35",
+    "images": 74,
+    "classes": {
+      "person": 1
+    },
+    "predictions_in_selected_classes": 187,
+    "hashes": {
+      "manifest": "f59c1c781b0164b31b605ed898d649783d3f0dd586de4421d0003b766dcd8591",
+      "annotations": "a0f5fac352f91e2ade5144bb835106f7a2e11c0cfacd0fbc4767142f92815889",
+      "model": "139cedbd23fcb1a191ae7309dd77c2d922b6982724e640c2ac5255bd97d244c6",
+      "predictions": "65df23828c22db627b99e452e512b792e20b447850417365c50bd660257e43e9"
+    },
+    "pycocotools": "2.0.11",
+    "metrics": {
+      "AP": 0.7106475088251298,
+      "AP50": 0.9038253788185192,
+      "AP75": 0.8633094220183545,
+      "AP_small": 0.14356435643564355,
+      "AP_medium": 0.4796261228302273,
+      "AP_large": 0.79404290922075,
+      "AR1": 0.38125,
+      "AR10": 0.7618750000000001,
+      "AR100": 0.7618750000000001,
+      "AR_small": 0.19,
+      "AR_medium": 0.6148148148148149,
+      "AR_large": 0.840650406504065
+    },
+    "at_mask_iou_50": {
+      "tp": 150,
+      "fp": 37,
+      "fn": 10,
+      "ignored_detections": 0,
+      "matched_mean_iou": 0.8795589105867475
+    },
+    "dataset": "penn-fudan-transfer-v1-test",
+    "limitations": [
+      "Small person-only domain transfer, not a general 80-class quality guarantee.",
+      "Penn train/validation scenes may share backgrounds; Fudan location is held out from fine-tuning.",
+      "No claim that upstream pretrained weights never encountered similar images.",
+      "Training uses largest external polygon per person; evaluation uses complete original pixel masks.",
+      "Dataset contains upright, relatively large pedestrians; no negative-only scenes.",
+      "AP is at deployed confidence .35, not low-threshold/full COCO model benchmark.",
+      "Matched mean IoU excludes false positives and misses; read TP/FP/FN and AP together."
+    ]
+  },
+  "candidate_manifest": {
+    "task": "person-domain instance segmentation",
+    "weights_sha256": "1fb199e2855d734e3b5297f042a05764387e7b0f92563e62d6bba42fa69b22a2",
+    "onnx_sha256": "139cedbd23fcb1a191ae7309dd77c2d922b6982724e640c2ac5255bd97d244c6",
+    "protocol_sha256": "518b4a75bf2939f3aac6849f785c93aa2652514143098965f33dcc4bbb9f71fc",
+    "input": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "class_head": "COCO 80 classes preserved; only person fine-tuned",
+    "deployment_approved": false
+  },
+  "dataset": {
+    "archive_sha256": "9095a9613c95586f1c7f2a327d454833d16e0f5e17e5f83d35027ffd315b48e2",
+    "splits": {
+      "train": 80,
+      "val": 16,
+      "test": 74
+    },
+    "instances": 423,
+    "training_polygon_iou_min": 0.7987135236899906,
+    "training_polygon_iou_mean": 0.9972304888929429,
+    "limitations": [
+      "Small person-only domain transfer, not a general 80-class quality guarantee.",
+      "Penn train/validation scenes may share backgrounds; Fudan location is held out from fine-tuning.",
+      "No claim that upstream pretrained weights never encountered similar images.",
+      "Training uses largest external polygon per person; evaluation uses complete original pixel masks.",
+      "Dataset contains upright, relatively large pedestrians; no negative-only scenes."
+    ]
+  },
+  "protocol": {
+    "experiment": "penn-fudan-person-finetune-v1",
+    "options": {
+      "data": "<dataset-root>/dataset.yaml",
+      "epochs": 10,
+      "batch": 4,
+      "imgsz": 640,
+      "device": 0,
+      "workers": 0,
+      "seed": 20261012,
+      "deterministic": true,
+      "optimizer": "AdamW",
+      "lr0": 0.0001,
+      "lrf": 0.1,
+      "weight_decay": 0.0005,
+      "freeze": 10,
+      "amp": false,
+      "mosaic": 0,
+      "mixup": 0,
+      "copy_paste": 0,
+      "scale": 0.1,
+      "translate": 0.05,
+      "close_mosaic": 0,
+      "patience": 10,
+      "cache": false,
+      "plots": true,
+      "project": "<output-root>",
+      "name": "training",
+      "exist_ok": false,
+      "save": true,
+      "val": true
+    },
+    "selection": "best.pt chosen only by the 16-image Penn validation split; Fudan test never selects weights",
+    "software": {
+      "torch": "2.9.1+cu130",
+      "ultralytics": "8.3.252",
+      "onnx": "1.19.1"
+    },
+    "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "weights_sha256": "a7cd8f929e1903d78a12a48efecab430209f18dc46cb96c3599a5980c63c423c",
+    "data_hashes": {
+      "train": "69882c2600afdabac471c333d8e771ebddab8d7be7ccf1853f2063eadc43b404",
+      "val": "b35504082bca1fa7a8ea82f1c81fb01c0b6d1a28cd400a23cbbb5f8299ffa01e",
+      "test": "f59c1c781b0164b31b605ed898d649783d3f0dd586de4421d0003b766dcd8591",
+      "dataset_yaml": "a3f0daede608ed167abdcd029549dfde134fae0faca627e6d6248643501cd77b"
+    },
+    "deployment": "Candidate only. Do not replace the general 80-class production model based on person-only results."
+  },
+  "decision": "Do not promote: person mask AP improves, but small-object AP and recall regress; other classes not evaluated.",
+  "runtime": "Native C++20, OpenCV 4.12 CPU FP32; both models evaluated with identical patched segmentation decoder."
+}

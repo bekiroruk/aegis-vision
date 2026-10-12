@@ -43,6 +43,24 @@ void tracking_and_rle() {
 int main() {
     try {
         tracking_and_rle();
+        {
+            YoloConfig full;full.max_detections=100;
+            const int dims[]={1,37,1}, pdims[]={1,32,160,160};
+            cv::Mat predictions(3,dims,CV_32F,cv::Scalar(0));
+            cv::Mat prototypes(4,pdims,CV_32F,cv::Scalar(0));
+            // Real held-out FudanPed00042 dimensions and transposed regression.
+            for (const auto size:{cv::Size(588,547),cv::Size(547,588)}) {
+                auto input=prepare_yolo(cv::Mat(size,CV_8UC3,cv::Scalar::all(0)),640);
+                require(decode_segmentation(predictions,prototypes,input,{"person"},full).empty(),
+                    "Valid resized dimensions rejected due to floating-point roundoff");
+                auto invalid=input;invalid.scale_x=(640.001)/size.width;
+                rejects([&]{decode_segmentation(predictions,prototypes,invalid,{"person"},full);});
+                invalid=input;invalid.scale_x=641.0/size.width;
+                rejects([&]{decode_segmentation(predictions,prototypes,invalid,{"person"},full);});
+                invalid=input;invalid.pad_left=641;
+                rejects([&]{decode_segmentation(predictions,prototypes,invalid,{"person"},full);});
+            }
+        }
         YoloConfig config;config.input_size=32;config.max_detections=10;
         auto transform=prepare_yolo(cv::Mat(16,32,CV_8UC3,cv::Scalar::all(0)),32);
         const int shape[]={1,37,2}, proto_shape[]={1,32,8,8};

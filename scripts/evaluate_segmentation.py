@@ -1,7 +1,7 @@
 """Offline official COCO segmentation evaluation of native C++ mask exports.
 
-No inference, downloading, threshold tuning or input mutation. Reuses the fixed
-64-image development selection; not a fresh holdout or full COCO leaderboard.
+No inference, downloading, threshold tuning or input mutation. Dataset scope and
+independence are recorded from the manifest; this is not a full COCO leaderboard.
 """
 import argparse
 import hashlib
@@ -129,7 +129,8 @@ def main():
               "metrics": {name: float(value) if value >= 0 else None for name,value in zip(names,evaluator.stats)},
               "at_mask_iou_50": {"tp": int(tp), "fp": int(fp), "fn": int(fn), "ignored_detections": ignored,
                                  "matched_mean_iou": sum(matched_ious)/len(matched_ious) if matched_ious else None},
-              "limitations": ["Previously observed 64-image/8-class development selection, not fresh holdout.",
+              "dataset": manifest.get("dataset", "unspecified"),
+              "limitations": list(manifest.get("limitations", ["Dataset independence not specified in manifest."])) + [
                               "AP is at deployed confidence .35, not low-threshold/full COCO model benchmark.",
                               "Matched mean IoU excludes false positives and misses; read TP/FP/FN and AP together."]}
     if hashes != {name: digest(getattr(args,name)) for name in hashes}:

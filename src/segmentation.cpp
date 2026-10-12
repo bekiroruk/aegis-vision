@@ -76,9 +76,15 @@ std::vector<InstanceMask> decode_segmentation(const cv::Mat& predictions, const 
     cv::Mat boxes(3,size,CV_32F,const_cast<float*>(predictions.ptr<float>()));
     auto detections = decode_yolo(boxes,transform,labels,config,true);
     if (!cv::checkRange(prototypes)) throw std::invalid_argument("Nonfinite mask prototypes");
-    const double content_width=transform.original_size.width*transform.scale_x;
-    const double content_height=transform.original_size.height*transform.scale_y;
+    // prepare_yolo records integer resized dimensions as double ratios. Multiplying
+    // back may produce 640.0000000000001 (e.g. width 588); restore the integers
+    // before bounds/crop checks, while rejecting genuinely fractional transforms.
+    const double raw_width=transform.original_size.width*transform.scale_x;
+    const double raw_height=transform.original_size.height*transform.scale_y;
+    const double content_width=std::round(raw_width);
+    const double content_height=std::round(raw_height);
     if (!std::isfinite(content_width) || !std::isfinite(content_height) ||
+        std::abs(raw_width-content_width)>1e-7 || std::abs(raw_height-content_height)>1e-7 ||
         content_width<1 || content_height<1 || content_width>config.input_size || content_height>config.input_size ||
         transform.pad_left<0 || transform.pad_top<0 ||
         transform.pad_left+content_width>config.input_size || transform.pad_top+content_height>config.input_size)
@@ -86,8 +92,8 @@ std::vector<InstanceMask> decode_segmentation(const cv::Mat& predictions, const 
     const int side = prototypes.size[2];
     const int left = static_cast<int>(std::round(transform.pad_left / 4.0));
     const int top = static_cast<int>(std::round(transform.pad_top / 4.0));
-    const int width = static_cast<int>(std::round(transform.original_size.width * transform.scale_x / 4.0));
-    const int height = static_cast<int>(std::round(transform.original_size.height * transform.scale_y / 4.0));
+    const int width = static_cast<int>(std::round(content_width / 4.0));
+    const int height = static_cast<int>(std::round(content_height / 4.0));
     if (left < 0 || top < 0 || width < 1 || height < 1 || left+width > side || top+height > side)
         throw std::invalid_argument("Invalid segmentation letterbox crop");
     const cv::Mat bases(32,side*side,CV_32F,const_cast<float*>(prototypes.ptr<float>()));

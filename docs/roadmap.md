@@ -90,8 +90,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    Sonraki iş, daha geniş veri, hata analizi ve yalnız geliştirme/validation üzerinde
    kalibrasyondur; yeni ayarlar için dokunulmamış test verisi gerekir.
    Mevcut iki aşamalı tracker her sekans için daha iyi değildir.
-   İhtiyaca göre
-   fine-tuning, metric learning, tam ByteTrack ve appearance ablation/kalibrasyonunu genişlet. Mevcut
+   İlk [gerçek GPU segmentation fine-tuning ve native C++ karşılaştırması](segmentation-training.md)
+   tamamlandı: ayrı konumdaki 74 test görüntüsünde AP50:95 %61,73 → %71,06,
+   ancak kaçırma ve küçük nesne başarısı geriledi; aday yayına alınmadı.
+   Daha geniş fine-tuning, metric learning, tam ByteTrack ve appearance ablation/kalibrasyonunu genişlet. Mevcut
    Kalman backend resmi ByteTrack değildir; canlıda zaman-adımı desteği de gerekir. Çoklu kamera için
    zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.

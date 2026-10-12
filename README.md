@@ -22,6 +22,10 @@ Panelden `segment_video` işiyle maskeli ve takip numaralı video üretilebilir:
 ilerleme/iptal, H.264 MP4 oynatma/indirme ve kare bazlı takip CSV'si. CPU üzerinde
 en fazla 1.000 kare; sessiz çıktı ve video-yerel IoU kimlikleri. [Kapsam ve sınırlar](docs/segmentation.md#panelden-maskeli-video-ve-takip-çıktısı).
 
+Gerçek GPU [segmentation fine-tuning deneyi](docs/segmentation-training.md) tamamlandı:
+80 eğitim / 16 doğrulama / 74 ayrı konum testi. Native C++ maske AP50:95
+%61,73 → %71,06; ancak kaçırmalar arttığı için aday varsayılan model yapılmadı.
+
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce
 harf/rakamlarla sınırlıdır; kalıcı `ocr_frame` işi ve web paneli vardır.
