@@ -115,8 +115,8 @@ iptal tekrar kontrol edilir. Kaynak boyutu/mtime kabulde ve işin önce/sonrası
 kontrol edilir (kriptografik medya bütünlüğü garantisi değildir).
 
 Mevcut bounded queue/backpressure, SQLite durum kaydı, hata sonrası worker'ın
-devamı ve aynı-origin kontrolleri kullanılır. Tam video HTTP export'u henüz
-dahil değildir. Canlı RTSP maskeleri ayrı canlı worker'da çalışır. Test betiği gerçek HTTP sonucunun RLE
+devamı ve aynı-origin kontrolleri kullanılır. Video HTTP export'u aşağıdaki ayrı
+`segment_video` işidir. Canlı RTSP maskeleri ayrı canlı worker'da çalışır. Test betiği gerçek HTTP sonucunun RLE
 kapsamını/alanını denetler, `job.json` ve `preview.jpg` çıktısını bilgisayarda saklar.
 
 ### Web panelinde kullanım
@@ -156,6 +156,60 @@ olarak kontrol edildi. Aynı istek `scripts/test_segmentation_service.ps1` ile
 tekrar doğrulandı; COCO RLE kapsamı/alanı geçti ve yerel, Git dışı
 `outputs/segmentation-http-v1/job.json` ile `preview.jpg` üretildi. Bu smoke testi
 tek video/tek karedir; genel model doğruluğu iddiası değildir.
+
+## Panelden maskeli video ve takip çıktısı
+
+`POST /api/jobs` isteği:
+
+```json
+{"type":"segment_video","path":"pedestrians.mp4","max_frames":0}
+```
+
+`max_frames:0` decode sonuna kadar işler; 1..1000 açık bir ilk-kare sınırıdır.
+Tam video 1000 kareyi aşarsa sessizce kısaltılmaz, iş hata verir. Kaynak yalnız
+medya kökündeki normal yerel videodur; canlı arşiv ve çıktı klasörü kabul edilmez.
+Yeni iş tek dosya worker'ını kullanır, `SegmentationPipeline(track=true)` ile
+her kareye IoU takip kimliği ve renkli maskeler çizer. Kimlik sayısı benzersiz kişi
+sayısı değildir. Kaynak ses taşınmaz; sabit FPS çıktısıdır, VFR/PTS koruması yoktur.
+Kareler arasında iptal ve 30 dakikalık işlem bütçesi kontrol edilir; OpenCV çağrısı
+ortasında zorunlu kesme yoktur. Kaynak boyut/mtime önce ve sonra doğrulanır.
+
+Panelde **Maskeli video + nesne takibi → Videoyu analiz et** kullanılır.
+`processed_frames`, `total_frames_hint` (yalnız metadata tahmini), `instances`,
+`track_ids` ve `stage` ile ilerleme gösterilir. `encoding_video` aşamasında MP4
+hazırlanır; yüzde tamamlanmış gibi sunulmaz. İptal düğmesi mevcut cancel API'sini
+kullanır. Kaynak değişince eski çıktı gizlenir; geciken yanıt yeni kaynağı etkilemez.
+Sayfa yenilenince başlangıç videosunun son işi geri yüklenir; geçmişte **Videoyu
+göster** ile tekrar açılır. Oynatıcı tamamlanmadan görünmez.
+
+Başarılı `result`, `frames`, `fps`, `duration_seconds`, `width`, `height`, `bytes`,
+`instances`, `track_ids`, `stop_reason` ve model imzasını içerir. Dosyalar:
+
+- `GET /api/jobs/{id}/video.mp4`: H.264/yuv420p, faststart, byte-range/seek desteği.
+- Aynı URL'ye `?download=1`: indirme yanıtı.
+- `GET /api/jobs/{id}/tracks.csv`: kare, takip ID, sınıf, skor, ROI ve maske alanı.
+- `GET /api/jobs/{id}/preview.jpg`: ilk maskeli karenin posteri.
+
+Yalnız tamamlanmış, geçmişte tutulan `segment_video` işinin dosyaları yayınlanır.
+Doğrudan `/media/analysis-output/...` erişimi kapalıdır; dosya adları HTTP'den
+alınmaz. Çıktılar `media_root/analysis-output/v-...` altında bilgisayarda kalır.
+Kaynak model veya medya yeniden işlenmeden sonuç yeniden açılabilir; bu bir
+kalite doğruluğu garantisi değildir. Decode sonu OpenCV EOF/hata ayrımıyla sınırlıdır.
+
+Çalışma sınırları: çift boyutlu en fazla 1920×1080, 1..60 FPS, 1000 kare,
+256 MiB geçici AVI, 64 MiB MP4, 16 MiB CSV. Mevcut kabuksuz FFmpeg encoder,
+30 saniyelik dönüştürme/doğrulama bütçesiyle gerçek kare sayısını/FPS'i/boyutu
+kontrol eder; kısmi MP4 başarı sayılmaz. FFmpeg/libx264 sunucunun PATH'inde olmalı;
+eksikse iş anlaşılır bir hata ile biter. Canlı arşivin varsayılan 12 MiB limiti
+değişmez; büyük limit yalnız offline çağrı tarafından seçilir.
+
+Çıktı kökü en fazla 32 deneme dizini ve 1 GiB toplam bütçeyle sınırlandırılır;
+yeni işe ham dosya için alan ayrılır. Kota dolunca eski sonuçlar silinmez, yeni
+iş reddedilir. Normal hata/iptalde yalnız o denemenin geçici çıktıları kaldırılır;
+başarıda ham AVI silinir, MP4/CSV/JPEG kalır. Çökme dosyaları manuel inceleme için
+kalabilir; yeniden deneme yeni dizin kullanır, yarım çıktıyı devralmaz.
+İş geçmişinden düşen dosyalar otomatik silinmez; web bağlantısı artık 404 döner.
+Temizlik, gerekli sonuçlar indirildikten sonra sunucu kapalıyken elle yapılmalıdır.
 
 ## Etiketli maske değerlendirmesi
 

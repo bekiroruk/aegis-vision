@@ -49,12 +49,14 @@ class Node {
     await Promise.all(entries.map(entry => entry.callback(event)));
   }
   play() { return Promise.resolve(); }
+  pause() {}
+  load() {}
   requestSubmit() { return this.emit('submit',{preventDefault(){}}); }
   scrollIntoView() {}
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[]} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[]} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[...initialJobs];
   const get = id => {
@@ -67,7 +69,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, o
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
+    if (pathname === '/api/health') data = {video_analysis_enabled:video,segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
     else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
@@ -75,6 +77,9 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, o
       const request=JSON.parse(options.body);
       data={id:`1-${jobs.length+1}`,request,state:'queued',progress:{}};jobs.unshift(data);
       if (delayMask) await maskReply.promise;
+    }
+    else if (/^\/api\/jobs\/[^/]+\/cancel$/.test(pathname)) {
+      const job=jobs.find(job=>pathname===`/api/jobs/${job.id}/cancel`);job.state='cancelled';data=job;
     }
     else if (pathname === '/api/jobs') data = {jobs};
     else if (pathname === '/api/media') {
@@ -269,7 +274,37 @@ async function visibleResultsOnReload() {
   assert.equal(waiting.jobs[0].request.type,'segment_frame');
   assert.equal(waiting.jobs[0].request.frame_index,0);
 }
+async function videoPanel() {
+  const disabled=harness();await disabled.started;assert.equal(disabled.get('video-button').disabled,true);
+  const test=harness({video:true});await test.started;
+  test.get('video-limit').value='0';await test.get('video-form').emit('submit',{preventDefault(){}});
+  const job=test.jobs[0];assert.equal(job.request.type,'segment_video');assert.equal(job.request.max_frames,0);
+  assert.equal(test.get('video-button').disabled,true);assert.equal(test.get('video-cancel').hidden,false);
+  job.state='running';job.progress={stage:'segmenting_video',processed_frames:30,total_frames_hint:150};await test.ui.refresh();
+  assert.match(test.get('video-status').textContent,/30.*150/);assert.equal(test.get('video-progress').value,30);
+  job.progress.stage='encoding_video';await test.ui.refresh();assert.match(test.get('video-status').textContent,/MP4 hazırlanıyor/);
+  job.state='succeeded';job.result={path:ordinary,frames:150,tracking:true,duration_seconds:15,width:768,height:576,track_ids:12};
+  await test.ui.refresh();assert.equal(test.get('video-result').hidden,false);
+  assert.equal(test.get('video-result').src,new URL(`/api/jobs/${job.id}/video.mp4`,base).href);
+  assert.equal(test.get('video-download').href,`/api/jobs/${job.id}/video.mp4?download=1`);
+  assert.equal(test.get('video-button').disabled,false);
+  const restored=harness({video:true,initialJobs:[job]});await restored.started;assert.equal(restored.get('video-result').hidden,false);
+  test.ui.chooseMedia(archived,true);assert.equal(test.get('video-result').hidden,true);assert.equal(test.get('video-download').hidden,true);
+  assert.equal(test.get('video-button').disabled,true);
+  const open=test.get('jobs').children[0].children.find(n=>n.textContent==='Videoyu göster');await open.emit('click');
+  assert.equal(test.get('video-result').hidden,false);
+  await test.get('video-form').emit('submit',{preventDefault(){}});await test.get('video-cancel').emit('click');
+  assert.equal(test.jobs[0].state,'cancelled');assert.equal(test.get('video-result').hidden,true);assert.equal(test.get('video-button').disabled,false);
+  await test.get('video-form').emit('submit',{preventDefault(){}});test.jobs[0].state='failed';test.jobs[0].error='encoder missing';await test.ui.refresh();
+  assert.equal(test.get('video-status').textContent,'encoder missing');assert.equal(test.get('video-download').hidden,true);
+  const stale=harness({video:true,delayMask:true});await stale.started;
+  const pending=stale.get('video-form').emit('submit',{preventDefault(){}});stale.ui.chooseMedia(archived,true);stale.releaseMask();await pending;
+  stale.jobs[0].state='succeeded';stale.jobs[0].result=job.result;await stale.ui.refresh();assert.equal(stale.get('video-result').hidden,true);
+  const malicious=harness({video:true,initialJobs:[{...job,id:'../../bad',result:job.result}]});await malicious.started;
+  assert.equal(malicious.get('video-result').hidden,true);assert.equal(malicious.get('video-download').hidden,true);
+}
 (async () => {
+  await videoPanel();console.log('Video UI passed: submission, progress, encoding, playback URL, download, cancel, failure, restore, stale source and invalid ID.');
   await visibleResultsOnReload();
   console.log('First-use UI passed: restored results, hidden inactive panels, queue explanation, quick analysis.');
   await mediaFirst(); await archiveFirst(); await lateInitializationAfterUserChoice(); await archiveOnly();

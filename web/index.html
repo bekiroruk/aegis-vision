@@ -8,6 +8,7 @@
 <main>
 <section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videodaki nesneleri görün.</h1><p>Önce bir kareyi analiz edin: nesneler renkli maskelerle aşağıda görünür. Bunun için videoyu indekslemek gerekmez.</p><div class="demo-actions"><button id="quick-analyze" type="button" disabled>İlk kareyi analiz et</button><a href="#segmentation-heading">Maske sonucuna git</a><a href="#result-title">Arama sonuçlarına git</a></div><p class="hint">Önceki analizler bu video için otomatik açılır. Yeni bir iş gönderirseniz işlem sırasını aşağıdan izleyin.</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
+<p class="demo-actions"><a href="#video-heading">Videonun tamamını maskeli ve takip numaralı işle →</a></p>
 <p id="queue-status" role="status" aria-live="polite"></p>
 <section id="live-panel" class="panel live-panel" aria-labelledby="live-heading" hidden>
 <div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
@@ -24,6 +25,15 @@
 <p class="hint">Yalnızca metinle arama için gerekir. Başlangıçta ilk 150 kare işlenir; tüm video için sınırı 0 yapın. CPU üzerinde uzun sürebilir ve diğer analizleri bekletebilir. Daha önce indekslediyseniz yeniden başlatmayın.</p></section>
 <aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
 </div>
+<section class="panel search-panel" aria-labelledby="video-heading">
+<div class="panel-title"><h2 id="video-heading">Maskeli video + nesne takibi</h2><span class="badge subtle">C++ · Video çıktısı</span></div>
+<p class="hint">Video boyunca renkli maskeler ve takip numaraları çizilir. İş bitince aşağıdaki oynatıcıdan izleyin veya MP4 indirin. Arama için indeksleme gerekmez.</p>
+<form id="video-form" class="index-controls"><div><label for="video-limit">İşlenecek kare · 0 = tüm video</label><input id="video-limit" type="number" min="0" max="1000" step="1" value="0" required></div><button id="video-button" type="submit" disabled>Videoyu analiz et</button><button id="video-cancel" type="button" class="secondary" hidden>Analizi iptal et</button></form>
+<p id="video-source" class="hint">Video seçin.</p><p class="hint">CPU işlemi zaman alabilir; diğer işler aynı sırada bekler. Sınır: 1.000 kare, çift boyutlu en fazla 1920×1080, 1–60 FPS. Çıktı sessizdir. Takip numaraları bu videoya aittir; örtüşmelerde değişebilir.</p>
+<p id="video-status" role="status" aria-live="polite"></p><progress id="video-progress" aria-label="Video analizi ilerlemesi" hidden></progress>
+<video id="video-result" controls muted playsinline preload="metadata" aria-label="Maskeli ve takip numaralı analiz videosu" hidden></video>
+<div class="demo-actions"><a id="video-download" download hidden>MP4 indir</a><a id="video-report" download hidden>Takip raporunu indir (CSV)</a></div>
+</section>
 <section class="panel search-panel" aria-labelledby="segmentation-heading">
 <div class="panel-title"><h2 id="segmentation-heading">Piksel maskesi analizi</h2><span id="segmentation-state" class="badge subtle">Hazırlanıyor…</span></div>
 <form id="segmentation-form" class="index-controls"><div><label for="segmentation-frame">Kare numarası · ilk kare = 0</label><input id="segmentation-frame" type="number" min="0" max="10000" step="1" value="0" required></div><button id="segmentation-button" type="submit" disabled>Seçili kareyi analiz et</button></form>

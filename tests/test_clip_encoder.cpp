@@ -173,6 +173,11 @@ void checks(const fs::path& root, const fs::path& self, const fs::path& ffmpeg, 
     config.fps = std::numeric_limits<double>::quiet_NaN();
     (void)rejects(invoke, "NaN FPS accepted");
     config.fps = 10;
+    config.max_input_bytes=257ULL*1024*1024;
+    (void)rejects(invoke,"Oversized configurable input limit accepted");
+    config.max_input_bytes=1024;
+    (void)rejects(invoke,"Input/output limit mismatch accepted");
+    config.max_input_bytes=12ULL*1024*1024;
     write(root / "invalid.avi", "not an AVI");
     (void)rejects([&] { return encode_archive_clip(root / "invalid.avi", output, config, cancel); }, "Invalid AVI accepted");
     fixture(root / "empty.avi", 0);

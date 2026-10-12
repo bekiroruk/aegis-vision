@@ -44,6 +44,12 @@ ServiceConfig prepare(ServiceConfig config) {
     config.web_root = fs::canonical(config.web_root);
     if (bool(config.segmenter) != !config.segmentation_signature.empty())
         throw std::invalid_argument("Segmentation requires both model and signature");
+    if (config.segmenter) {
+        const auto root=config.media_root/"analysis-output";
+        if (fs::is_symlink(fs::symlink_status(root)) || fs::weakly_canonical(root)!=root)
+            throw std::invalid_argument("Analysis output root cannot be an alias");
+        fs::create_directories(root);
+    }
     if (bool(config.ocr) != !config.ocr_signature.empty())
         throw std::invalid_argument("OCR requires both model and signature");
     if (bool(config.vlm) != !config.vlm_signature.empty())
@@ -118,6 +124,7 @@ fs::path LocalService::media_path(const std::string& relative) const {
     if (inside.empty() || inside.is_absolute() || *inside.begin() == ".." ||
         !fs::is_regular_file(path) || !video_extension(path))
         throw std::invalid_argument("Video must exist inside media_root with a supported extension");
+    if (*inside.begin()=="analysis-output") throw std::invalid_argument("Use a completed job output endpoint");
     if (*inside.begin() == "live-archive" && path.filename() != "clip.mp4")
         throw std::invalid_argument("Raw or staging archive files are not public media");
     if (*inside.begin() == "live-archive") {
@@ -129,14 +136,14 @@ LocalService::Json LocalService::validate(Json request) const {
     if (!request.is_object() || !request.contains("type") || !request.at("type").is_string())
         throw std::invalid_argument("Expected an object with a string type");
     const auto type = request.at("type").get<std::string>();
-    const std::set<std::string> allowed = type == "index_video" ?
+    const std::set<std::string> allowed = type == "segment_video" ? std::set<std::string>{"type","path","max_frames"} : type == "index_video" ?
         std::set<std::string>{"type", "path", "stride", "max_frames"} : (type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") ?
         std::set<std::string>{"type", "path", "frame_index"} : std::set<std::string>{"type", "query", "limit", "scope"};
     for (const auto& [key, value] : request.items()) {
         (void)value; if (!allowed.contains(key)) throw std::invalid_argument("Unknown field: " + key);
     }
-    if (type == "index_video" || type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") {
-        if (type == "segment_frame" && !config_.segmenter)
+    if (type == "index_video" || type == "segment_video" || type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") {
+        if ((type == "segment_frame" || type == "segment_video") && !config_.segmenter)
             throw std::invalid_argument("Segmentation is not configured");
         if (type == "ocr_frame" && !config_.ocr) throw std::invalid_argument("OCR is not configured");
         if (type == "scene_frame" && !config_.vlm) throw std::invalid_argument("VLM is not configured");
@@ -145,7 +152,8 @@ LocalService::Json LocalService::validate(Json request) const {
             throw std::invalid_argument("Use the archive indexing endpoint for managed live clips");
         request["source_bytes"] = fs::file_size(path);
         request["source_modified"] = std::to_string(fs::last_write_time(path).time_since_epoch().count());
-        if (type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") request["frame_index"] = integer(request,"frame_index",0,0,10000);
+        if (type == "segment_video") request["max_frames"]=integer(request,"max_frames",0,0,1000);
+        else if (type == "segment_frame" || type == "ocr_frame" || type == "scene_frame") request["frame_index"] = integer(request,"frame_index",0,0,10000);
         else {
             request["stride"] = integer(request, "stride", 15, 1, 10000);
             request["max_frames"] = integer(request, "max_frames", 0, 0, 1000000);
@@ -158,7 +166,7 @@ LocalService::Json LocalService::validate(Json request) const {
         const auto scope = request.value("scope",std::string("all"));
         if (scope != "all" && scope != "live") throw std::invalid_argument("scope must be all or live");
         request["scope"] = scope;
-    } else throw std::invalid_argument("type must be index_video, search, segment_frame, ocr_frame or scene_frame");
+    } else throw std::invalid_argument("type must be index_video, search, segment_video, segment_frame, ocr_frame or scene_frame");
     return request;
 }
 LocalService::Json LocalService::scene_frame(const Json& request, const JobQueue::Progress& progress,
@@ -295,6 +303,7 @@ LocalService::Json LocalService::summary(const IndexSummary& value) const {
 }
 LocalService::Json LocalService::execute(const Json& request, const JobQueue::Progress& progress, const std::atomic_bool& cancel) {
     if (cancel) throw IndexCancelled();
+    if (request.at("type") == "segment_video") return segment_video(request,progress,cancel);
     if (request.at("type") == "segment_frame" || request.at("type") == "ocr_frame") return segment_frame(request,progress,cancel);
     if (request.at("type") == "scene_frame") return scene_frame(request,progress,cancel);
     if (request.at("type") == "index_live_archive") return index_archive(request,progress,cancel);
@@ -367,6 +376,7 @@ void LocalService::routes() {
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
             {"segmentation_enabled", config_.segmenter != nullptr}, {"ocr_enabled",config_.ocr != nullptr},
+            {"video_analysis_enabled",config_.segmenter != nullptr}, {"video_analysis_max_frames",1000},
             {"vlm_enabled",config_.vlm != nullptr},
             {"ocr_unicode",config_.ocr && config_.ocr->unicode_output()}, {"storage_error", error}}, error.empty() ? 200 : 503);
     });
@@ -500,6 +510,7 @@ void LocalService::routes() {
             response.set_content(reinterpret_cast<const char*>(bytes.data()), bytes.size(), "image/jpeg");
         } catch (const std::exception& error) { reply(response, {{"error", error.what()}}, 404); }
     });
+    video_result_routes();
     if (!http_.set_mount_point("/", utf8(config_.web_root))) throw std::runtime_error("Cannot serve web assets");
 }
 }

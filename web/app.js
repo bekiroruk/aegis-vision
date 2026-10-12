@@ -6,7 +6,44 @@ let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = 
 let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
 let selectedMedia = '', mediaReady = false, mediaChoiceMade = false;
 let restorePending = true, activeJobs = [];
-const jobName = job => ({index_video:'Video indeksleme',index_live_archive:'Canlı arşiv indeksleme',segment_frame:'Piksel maskesi analizi',ocr_frame:'Yazı okuma',scene_frame:'Sahne açıklaması',search:'Metin araması'}[job.request.type] || 'Analiz');
+let videoEnabled=false, videoSubmitting=false, videoJob='', videoRevision=0;
+function syncVideo() {
+  const available=videoEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
+  $('video-button').disabled=!available || videoSubmitting || !!videoJob;
+  $('video-limit').disabled=$('video-button').disabled;
+  $('video-cancel').hidden=!videoJob;
+  $('video-source').textContent=selectedMedia ? `Kaynak: ${selectedMedia}` : 'Video seçin.';
+}
+function clearVideo() {
+  ++videoRevision;videoJob='';$('video-result').pause();$('video-result').hidden=true;
+  $('video-result').removeAttribute('src');$('video-result').removeAttribute('poster');$('video-result').load();
+  $('video-download').hidden=true;$('video-download').removeAttribute('href');
+  $('video-report').hidden=true;$('video-report').removeAttribute('href');
+  $('video-status').textContent='';$('video-progress').hidden=true;syncVideo();
+}
+function showVideo(job) {
+  if(!videoJob || job.id!==videoJob) return;
+  const p=job.progress || {}, frames=Number(p.processed_frames || 0), total=Number(p.total_frames_hint || 0);
+  const stage=p.stage==='encoding_video' ? 'MP4 hazırlanıyor ve doğrulanıyor' : `${frames}${total>0 ? ` / yaklaşık ${Math.ceil(total)}` : ''} kare işlendi`;
+  $('video-status').textContent=`${stateText[job.state] || job.state} · ${stage}`;
+  if(job.state==='queued') $('video-status').textContent=activeJobs.some(j=>j.state==='running') ? 'Sırada · Çalışan işin bitmesi bekleniyor.' : 'Sırada · Başlatılıyor…';
+  $('video-progress').hidden=job.state!=='running';
+  if(total>0 && p.stage!=='encoding_video') {$('video-progress').max=total;$('video-progress').value=Math.min(frames,total);}
+  else $('video-progress').removeAttribute('value');
+  if(!terminal(job.state)) return;
+  videoJob='';syncVideo();$('video-progress').hidden=true;
+  if(job.state!=='succeeded') {$('video-status').textContent=job.error || stateText[job.state];return;}
+  const r=job.result;
+  if(!r || r.path!==selectedMedia || !/^[0-9]+-[0-9]+$/.test(job.id) || r.tracking!==true || !Number.isInteger(r.frames) || r.frames<1 || r.frames>1000) {
+    $('video-status').textContent='Geçerli video sonucu yok.';return;
+  }
+  const base=`/api/jobs/${job.id}`;
+  $('video-result').src=base+'/video.mp4';$('video-result').poster=base+'/preview.jpg';$('video-result').hidden=false;
+  $('video-download').href=base+'/video.mp4?download=1';$('video-download').hidden=false;
+  $('video-report').href=base+'/tracks.csv';$('video-report').hidden=false;
+  $('video-status').textContent=`Tamamlandı · ${r.frames} kare · ${Number(r.duration_seconds).toFixed(1)} saniye · ${r.width}×${r.height} · ${r.track_ids} takip kimliği (benzersiz kişi sayısı değil)${r.stop_reason==='requested_frame_limit' ? ' · Seçtiğiniz kare sınırına kadar' : ''}`;
+}
+const jobName = job => ({segment_video:'Maskeli video + takip',index_video:'Video indeksleme',index_live_archive:'Canlı arşiv indeksleme',segment_frame:'Piksel maskesi analizi',ocr_frame:'Yazı okuma',scene_frame:'Sahne açıklaması',search:'Metin araması'}[job.request.type] || 'Analiz');
 function analysisStatus(job) {
   const running=activeJobs.filter(item=>item.state==='running');
   const waiting=job.state==='queued' && running.length ? ` · ${running.map(jobName).join(', ')} tamamlanınca başlayacak` : '';
@@ -217,7 +254,7 @@ function syncMediaControls() {
   $('index-button').disabled = !selectedMedia || managed;
   $('stride').disabled = !selectedMedia || managed;
   $('max-frames').disabled = !selectedMedia || managed;
-  syncSegmentation();syncOcr();syncScene();
+  syncSegmentation();syncOcr();syncScene();syncVideo();
 }
 function addMedia(path) {
   if (!Array.from($('media').options).some(option => option.value === path)) {
@@ -230,7 +267,7 @@ function addMedia(path) {
 }
 function chooseMedia(path, userChoice = false) {
   if (!path) return;
-  if (path!==selectedMedia) {clearSegmentation();clearOcr();clearScene();}
+  if (path!==selectedMedia) {clearSegmentation();clearOcr();clearScene();clearVideo();}
   addMedia(path); selectedMedia = path; $('media').value = path;
   if (userChoice) mediaChoiceMade = true;
   const target = new URL(mediaUrl(path),location.href).href;
@@ -322,6 +359,8 @@ function showJobs(jobs) {
     restorePending=false;
     if (!mediaChoiceMade) {
       const latest=type=>jobs.find(job=>job.request.type===type && job.request.path===selectedMedia);
+      const movie=latest('segment_video');
+      if(movie && !videoSubmitting && !videoJob && !$('video-status').textContent) videoJob=movie.id;
       const mask=latest('segment_frame'), text=latest('ocr_frame'), scene=latest('scene_frame');
       if(mask && !segmentationSubmitting && !segmentationJob && !$('segmentation-status').textContent) segmentationJob=mask.id;
       if(text && !ocrSubmitting && !ocrJob && !$('ocr-status').textContent) ocrJob=text.id;
@@ -333,12 +372,19 @@ function showJobs(jobs) {
   jobs.slice(0,12).forEach(job => {
     const row = element('div',undefined,'job');
     const title = element('div',undefined,'job-title');
-    title.append(element('strong',job.request.type === 'scene_frame' ? 'Sahneyi açıkla' : job.request.type === 'ocr_frame' ? 'Karedeki yazıları oku' : job.request.type === 'segment_frame' ? 'Piksel maskesi analizi' : job.request.type === 'search' ? 'Metin araması' : job.request.type === 'index_live_archive' ? 'Canlı arşiv indeksleme' : 'Video indeksleme'),
+    title.append(element('strong',jobName(job)),
       element('span',job.cancel_requested && !terminal(job.state) ? 'İptal bekleniyor' : stateText[job.state],'state'));
     row.append(title,element('p',job.request.path || job.request.query || (job.request.type === 'index_live_archive' ? `${job.request.session_id} · Parça ${job.request.segment_index}` : '')));
     if (job.recoveries > 0) row.append(element('p',`Yeniden başlatma sonrası kurtarıldı · Deneme ${job.attempts}`));
     if (['index_video','index_live_archive'].includes(job.request.type)) row.append(element('p',`${job.progress.decoded_frames || 0} kare okundu · ${job.progress.indexed_items || 0} nesne kaydı`));
     if (job.error) row.append(element('p',job.error));
+    if(job.request.type==='segment_video') {
+      row.append(element('p',`${job.progress?.processed_frames || 0} kare işlendi${!terminal(job.state) && job.progress?.stage==='encoding_video' ? ' · MP4 hazırlanıyor' : ''}`));
+      if(job.state==='succeeded') {
+        const open=element('button','Videoyu göster','cancel');open.type='button';
+        open.addEventListener('click',()=>{chooseMedia(job.request.path,true);clearVideo();videoJob=job.id;showVideo(job);$('video-heading').scrollIntoView({behavior:'smooth',block:'start'});});row.append(open);
+      }
+    }
     if (job.request.type==='segment_frame' && job.state==='succeeded') {
       const open=element('button','Maskeyi göster','cancel');open.type='button';
       open.addEventListener('click',()=> {
@@ -368,6 +414,7 @@ function showJobs(jobs) {
     container.append(row);
   });
   const maskJob=jobs.find(job=>job.id===segmentationJob);
+  const movie=jobs.find(job=>job.id===videoJob);if(movie) showVideo(movie);
   if (maskJob) showSegmentation(maskJob);
   const textJob=jobs.find(job=>job.id===ocrJob);if(textJob) showOcr(textJob);
   const descriptionJob=jobs.find(job=>job.id===sceneJob);if(descriptionJob) showScene(descriptionJob);
@@ -380,10 +427,11 @@ async function refresh() {
   try {
     const data = await api('/api/jobs'); showJobs(data.jobs);
     const health=await api('/api/health');segmentationEnabled=health.segmentation_enabled===true;syncSegmentation();
+    videoEnabled=health.video_analysis_enabled===true;syncVideo();
     ocrEnabled=health.ocr_enabled===true;ocrUnicode=health.ocr_unicode===true;syncOcr();
     sceneEnabled=health.vlm_enabled===true;syncScene();
     $('health').textContent = activeJobs.length ? `● Servis çalışıyor · ${activeJobs.length} iş` : '● Servis hazır';
-  } catch(error) { segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
+  } catch(error) { videoEnabled=false;syncVideo();segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }
 }
 $('index-form').addEventListener('submit',async event => {
@@ -402,6 +450,25 @@ $('quick-analyze').addEventListener('click',()=> {
   $('segmentation-frame').value='0';
   $('segmentation-form').requestSubmit();
   $('segmentation-heading').scrollIntoView({behavior:'smooth',block:'start'});
+});
+$('video-form').addEventListener('submit',async event=> {
+  event.preventDefault();
+  const limit=Number($('video-limit').value),path=selectedMedia;
+  if($('video-button').disabled || !Number.isInteger(limit) || limit<0 || limit>1000) return;
+  clearVideo();const revision=videoRevision;videoSubmitting=true;syncVideo();$('video-status').textContent='İş gönderiliyor…';
+  try {
+    const job=await api('/api/jobs',{type:'segment_video',path,max_frames:limit});
+    if(revision===videoRevision && selectedMedia===path) {videoJob=job.id;showVideo(job);syncVideo();}
+    await refresh();
+  } catch(error) {if(revision===videoRevision) $('video-status').textContent=error.message;}
+  finally {videoSubmitting=false;syncVideo();}
+});
+$('video-cancel').addEventListener('click',async()=> {
+  const id=videoJob;if(!id) return;
+  try {await api(`/api/jobs/${id}/cancel`,{});await refresh();}catch(error){notice(error.message);}
+});
+$('video-result').addEventListener('error',()=> {
+  if(!$('video-result').hidden) $('video-status').textContent='Video açılamadı. Çıktı dosyası eksik olabilir veya tarayıcı H.264 desteklemiyor olabilir; MP4 indir bağlantısını deneyin.';
 });
 $('segmentation-form').addEventListener('submit',async event => {
   event.preventDefault();

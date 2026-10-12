@@ -18,6 +18,9 @@ Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videos
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.
 Kuyruk tabanlı HTTP `segment_frame` işi ve isteğe bağlı [canlı RTSP maskeleri](docs/live-video.md#canlı-piksel-maskeleri) vardır.
+Panelden `segment_video` işiyle maskeli ve takip numaralı video üretilebilir:
+ilerleme/iptal, H.264 MP4 oynatma/indirme ve kare bazlı takip CSV'si. CPU üzerinde
+en fazla 1.000 kare; sessiz çıktı ve video-yerel IoU kimlikleri. [Kapsam ve sınırlar](docs/segmentation.md#panelden-maskeli-video-ve-takip-çıktısı).
 
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce

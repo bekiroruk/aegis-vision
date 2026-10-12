@@ -35,7 +35,7 @@ namespace aegisvision::vision {
 namespace {
 namespace fs = std::filesystem;
 using Clock = std::chrono::steady_clock;
-constexpr std::uint64_t max_input_bytes = 12ULL * 1024 * 1024;
+constexpr std::uint64_t max_input_bytes = 256ULL * 1024 * 1024;
 class EncodeError : public std::runtime_error {
 public: using std::runtime_error::runtime_error;
 };
@@ -335,16 +335,17 @@ void validate_config(const ArchiveEncodeConfig& config) {
     if (config.timeout.count() < 1 || config.timeout > std::chrono::seconds(30) ||
         config.expected_frames == 0 || config.expected_frames > 1000 ||
         !std::isfinite(config.fps) || config.fps < 1 || config.fps > 60 ||
-        config.max_output_bytes < 1024 || config.max_output_bytes > max_input_bytes)
+        config.max_input_bytes < 1024 || config.max_input_bytes > max_input_bytes ||
+        config.max_output_bytes < 1024 || config.max_output_bytes > config.max_input_bytes)
         throw EncodeError("Invalid archive encoder limits");
 }
-std::pair<fs::path, fs::path> validate_paths(const fs::path& input_avi, const fs::path& output_mp4) {
+std::pair<fs::path, fs::path> validate_paths(const fs::path& input_avi, const fs::path& output_mp4, std::uint64_t input_limit) {
     const auto input = fs::absolute(input_avi).lexically_normal();
     const auto output = fs::absolute(output_mp4).lexically_normal();
     if (input == output || input.extension() != ".avi" || output.extension() != ".mp4")
         throw EncodeError("Archive input/output extensions are invalid");
     safe_path(input); safe_path(output);
-    if (!fs::is_regular_file(fs::symlink_status(input)) || fs::file_size(input) == 0 || fs::file_size(input) > max_input_bytes)
+    if (!fs::is_regular_file(fs::symlink_status(input)) || fs::file_size(input) == 0 || fs::file_size(input) > input_limit)
         throw EncodeError("Archive AVI must be a nonempty regular file within its byte limit");
     if (!fs::is_directory(fs::symlink_status(output.parent_path())))
         throw EncodeError("Archive output directory is unavailable");
@@ -360,7 +361,7 @@ EncodedArchiveClip encode_archive_clip(const fs::path& input_avi, const fs::path
         validate_config(config);
         const auto deadline = Clock::now() + config.timeout;
         checkpoint(cancel, deadline);
-        const auto [input, output] = validate_paths(input_avi, output_mp4);
+        const auto [input, output] = validate_paths(input_avi, output_mp4, config.max_input_bytes);
         auto temporary_name = output.stem();
         temporary_name += ".partial.mp4";
         partial = output.parent_path() / temporary_name;
@@ -400,7 +401,7 @@ EncodedArchiveClip validate_archive_clip(const fs::path& input_avi, const fs::pa
         validate_config(config);
         const auto deadline = Clock::now() + config.timeout;
         checkpoint(cancel, deadline);
-        const auto [input, output] = validate_paths(input_avi, output_mp4);
+        const auto [input, output] = validate_paths(input_avi, output_mp4, config.max_input_bytes);
         if (!present(output) || !fs::is_regular_file(fs::symlink_status(output)) || fs::file_size(output) == 0)
             throw EncodeError("Published archive MP4 is unavailable");
         output_bound(output, config.max_output_bytes);

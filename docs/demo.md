@@ -12,6 +12,10 @@ Panel: http://127.0.0.1:8090. Komut başka dizinden tam dosya yolu ile de çağr
 
 1. `pedestrians.mp4` videosunu seç.
 2. Üstteki “İlk kareyi analiz et” ile nesne maskelerini gör; indeksleme gerekmez.
+   Hareketli çıktı için **Maskeli video + nesne takibi → Videoyu analiz et** seç.
+   Varsayılan 0 tüm videoyu işler (en fazla 1.000 kare); örneğin 150 girersen
+   yalnız ilk 150 kare işlenir. Tamamlanınca oynat, **MP4 indir** veya takip CSV'sini indir.
+   İşlem sürerken **Analizi iptal et** kullanılabilir. Bu işlem de indeksleme gerektirmez.
 3. “Sahneyi açıkla” ile seçili karenin yerel model yorumunu al.
 4. “Yazıları oku” ile Türkçe destekli OCR çalıştır. Yazı olmayan karede boş sonuç normaldir.
 5. Yalnız arama için “Arama için indeksle”yi kullan; ardından İngilizce bir arama metni gönder. Varsayılan sınır ilk 150 karedir; tüm video için 0 gir. Önceden indekslenmiş videoyu tekrar indekslemek gerekmez.
@@ -19,7 +23,7 @@ Panel: http://127.0.0.1:8090. Komut başka dizinden tam dosya yolu ile de çağr
 Demo tek işçiyle çalışır: uzun indeksleme sırasında maske/OCR/VLM ve arama işleri
 sırada bekler. Üstteki durum satırı çalışan işi ve bekleyen iş sayısını gösterir;
 gerekirse İşler bölümünden iptal et. Sayfa yenilenince başlangıç videosunun son
-maske, OCR ve VLM işi otomatik açılır (bitmemişse takip edilir). Başka bir sonuç
+tek-kare maske, OCR, VLM ve maskeli video işi otomatik açılır (bitmemişse takip edilir). Başka bir sonuç
 için İşler bölümündeki göster düğmelerini kullan. Kaynak tanımlanmayan canlı
 kamera paneli ve devre dışı/boş arşiv paneli gösterilmez; eski arşiv kayıtları korunur.
 
@@ -80,3 +84,22 @@ bu profilin medya kökünde olmadığı için oynatma düğmeleri devre dışıy
 OCR'ın tek karakterlik çıktısı güvenilir metin okuma kanıtı sayılmadı.
 `node tests/test_web_state.cjs` yenileme, kuyruk açıklaması, hızlı analiz,
 kaynak değişimi ve mevcut güvenli çıktı regresyonlarıyla geçti.
+
+## Tam video panel doğrulaması — 2026-10-12
+
+Panelde “Videoyu analiz et” ile `1791700823339-11` işi gönderildi. Gerçek
+YOLOv8n-seg + IoU pipeline'ı `pedestrians.mp4` videosunun 795 karesini işledi.
+Çıktı H.264 MP4, 768×576, 10 FPS, 79,5 saniye ve 17.137.901 bayt.
+7.034 kare-içi maske ve 96 takip ID'si üretildi; bunlar doğruluk metriği veya
+benzersiz kişi sayısı değildir. Basit IoU takipçisi kopabilir, model yanlış sınıf
+üretebilir. Çıktı `artifacts/media/analysis-output/v-17918018757271891-1/` altında.
+
+Sayfa yeniden açıldığında sonuç geri geldi; tarayıcıda `paused=false`,
+`readyState=4`, süre 79,5 saniye ve doğru video boyutlarıyla oynatma doğrulandı.
+İleri sarma kontrolü çalıştı. “MP4 indir” dosyayı bilgisayarın Downloads klasörüne
+kaydetti; indirilen dosyanın SHA256 değeri yerel çıktıyla aynı:
+`70bb298cf2d10733dc8ba1b55293c01feacc6dd7509559ea4c26542075ab2f14`.
+FFprobe dosyanın 795 karesinin tamamını saydı. 46/46 CTest geçti; ek sınır ve
+iptal testlerinden sonra servis/encoder testleri tekrar geçti. Web regresyonu
+gönderim, ilerleme, MP4 URL'si, indirme, iptal, hata, sayfa yenileme, kaynak değişimi
+ve güvensiz ID reddini kapsadı. Bu doğrulama Windows CPU üzerindedir.

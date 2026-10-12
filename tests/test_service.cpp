@@ -67,6 +67,7 @@ class Segmenter : public vision::ISegmenter {
 public:
     std::atomic_int mode{0};
     std::vector<vision::InstanceMask> segment(const cv::Mat& image) override {
+        if(mode==3) std::this_thread::sleep_for(40ms);
         if (mode==1) throw std::runtime_error("fixture segmentation error");
         if (mode==2) {
             cv::Mat mask(image.size(),CV_8UC1);
@@ -137,6 +138,7 @@ Json completed(httplib::Client& client, const Json& request) {
     });
     return job;
 }
+#include "test_service_video.hpp"
 std::string http_checks(const fs::path& root) {
     fs::create_directories(root / "media");
     const auto path = root / "media/test.avi";
@@ -208,6 +210,7 @@ std::string http_checks(const fs::path& root) {
         "Oversized mask result accepted");
     segmenter.mode=0;
     require(completed(client,segmentation).at("state")=="succeeded","Worker did not recover from segmentation failure");
+    video_checks(client,root,segmenter);
     const Json text_request{{"type","ocr_frame"},{"path","test.avi"},{"frame_index",2}};
     for(const auto& invalid:std::vector<Json>{
         {{"type","ocr_frame"},{"path","../outside.avi"}},
@@ -289,12 +292,19 @@ std::string http_checks(const fs::path& root) {
     require(response(client.Get("/api/jobs/"+cancelled_mask)).at("state")=="cancelled","Queued mask cancellation failed");
     const auto changed = response(client.Post("/api/jobs", video.dump(), "application/json"), 202).at("id").get<std::string>();
     const auto changed_mask = response(client.Post("/api/jobs",segmentation.dump(),"application/json"),202).at("id").get<std::string>();
+    const Json movie_request{{"type","segment_video"},{"path","test.avi"}};
+    const auto changed_movie=response(client.Post("/api/jobs",movie_request.dump(),"application/json"),202).at("id").get<std::string>();
+    const auto cancelled_movie=response(client.Post("/api/jobs",movie_request.dump(),"application/json"),202).at("id").get<std::string>();
+    (void)response(client.Post("/api/jobs/"+cancelled_movie+"/cancel","{}","application/json"));
+    require(response(client.Get("/api/jobs/"+cancelled_movie)).at("state")=="cancelled","Queued video cancellation failed");
     fs::last_write_time(path, fs::last_write_time(path) + std::chrono::seconds(1));
     embedder.released = true;
     Json changed_job;
     until([&] { changed_job = response(client.Get("/api/jobs/" + changed)); return changed_job.at("state") == "failed"; });
     require(changed_job.at("error").get<std::string>().find("Video changed") != std::string::npos, "Changed queued input silently replayed");
     until([&] { return response(client.Get("/api/jobs/"+changed_mask)).at("state")=="failed"; });
+    until([&] {return response(client.Get("/api/jobs/"+changed_movie)).at("state")=="failed";});
+    require(response(client.Get("/api/jobs/"+changed_movie)).at("error").get<std::string>().find("Video changed")!=std::string::npos,"Video export accepted changed queued input");
     until([&] {return response(client.Get("/api/jobs/"+changed_text)).at("state")=="failed";});
     require(response(client.Get("/api/jobs/"+changed_text)).at("error").get<std::string>().find("Video changed")!=std::string::npos,"OCR source mutation ignored");
     require(response(client.Get("/api/jobs/"+changed_mask)).at("error").get<std::string>().find("Video changed")!=std::string::npos,
@@ -321,6 +331,10 @@ void http_restart(const fs::path& root, const std::string& search_id) {
     bool restored_mask=false,restored_text=false,restored_unicode=false,restored_scene=false;
     const auto history=response(client.Get("/api/jobs"));
     for (const auto& job:history.at("jobs")) {
+        if(job.at("request").at("type")=="segment_video" && job.at("state")=="succeeded") {
+            require(job.at("attempts")==1,"Completed export reran after restart");
+            status(client.Get("/api/jobs/"+job.at("id").get<std::string>()+"/video.mp4"),200);
+        }
         if(job.at("request").at("type")=="scene_frame" && job.at("state")=="succeeded") {
             require(job.at("attempts")==1 && job.at("result").at("summary")=="A dark video frame." &&
                 job.at("result").at("verified")==false,"Persisted scene changed or reran");
@@ -358,6 +372,7 @@ void segmentation_disabled(const fs::path& root) {
     require(response(client.Get("/api/health")).at("vlm_enabled")==false,"Disabled VLM advertised");
     (void)response(client.Post("/api/jobs",R"({"type":"ocr_frame","path":"test.avi"})","application/json"),400);
     (void)response(client.Post("/api/jobs",R"({"type":"segment_frame","path":"test.avi"})","application/json"),400);
+    (void)response(client.Post("/api/jobs",R"({"type":"segment_video","path":"test.avi"})","application/json"),400);
     (void)response(client.Post("/api/jobs",R"({"type":"scene_frame","path":"test.avi"})","application/json"),400);
 }
 }

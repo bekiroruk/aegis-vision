@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-10. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+Güncelleme: 2026-10-12. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -9,6 +9,9 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 - OpenCV görüntü okuma, kutu çizme, ORB eşleştirme ve RANSAC homografi.
 - YOLOv8 ONNX ile gerçek piksel verisinden CPU detection.
 - Yerel video okuma, IoU / iki aşamalı takip, ID etiketli video ve CSV/JSON raporları.
+- Panelden maskeli/takip numaralı video işi: ilerleme/iptal, doğrulanmış H.264 MP4
+  oynatma/indirme, takip CSV'si ve kalıcı sonuç açma. Offline CPU, 1000 kare ve
+  disk kotası sınırı; gerçek zamanlı/GPU/çoklu kamera iddiası yoktur.
 - Bellekte cosine similarity indeksi ve test amaçlı hash embedding.
 - Gerçek CLIP görsel/metin embedding ve C++ Qdrant istemcisi; kalıcı görsel/kırpma indeksi,
   metin/görsel sorgu CLI'ı, Unicode tokenizer ve PyTorch referans testleri.

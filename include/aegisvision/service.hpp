@@ -46,6 +46,8 @@ private:
     Json validate(Json request) const;
     Json execute(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json segment_frame(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
+    Json segment_video(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
+    void video_result_routes();
     Json scene_frame(const Json&, const JobQueue::Progress&, const std::atomic_bool&);
     Json summary(const IndexSummary&) const;
     Json archive_segment(const std::string& session, int index) const;

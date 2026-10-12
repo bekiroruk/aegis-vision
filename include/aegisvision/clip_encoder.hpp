@@ -14,6 +14,8 @@ struct ArchiveEncodeConfig {
     std::uint64_t max_output_bytes{12ULL * 1024 * 1024};
     std::uint64_t expected_frames{};
     double fps{};
+    // Archive default unchanged; offline video exports may opt into <=256 MiB.
+    std::uint64_t max_input_bytes{12ULL * 1024 * 1024};
 };
 
 struct EncodedArchiveClip {
@@ -22,7 +24,8 @@ struct EncodedArchiveClip {
     double fps{};
 };
 
-// Converts a sealed, regular MJPEG AVI (<=12 MiB, <=1000 frames) to H.264 MP4.
+// Converts a sealed, regular MJPEG AVI (default <=12 MiB, <=1000 frames) to H.264 MP4.
+// Trusted offline callers may opt into an input byte limit up to 256 MiB.
 // No shell, URLs, inherited sockets, or unbounded stderr logs. A single owned
 // child is cancelled/reaped on timeout. Existing output and .partial.mp4 files
 // are rejected, not overwritten. Only fully decoded, frame-count/FPS-verified
