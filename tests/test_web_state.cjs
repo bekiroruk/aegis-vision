@@ -49,13 +49,14 @@ class Node {
     await Promise.all(entries.map(entry => entry.callback(event)));
   }
   play() { return Promise.resolve(); }
+  requestSubmit() { return this.emit('submit',{preventDefault(){}}); }
   scrollIntoView() {}
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[]} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
-  const maskReply=deferred(), jobs=[];
+  const maskReply=deferred(), jobs=[...initialJobs];
   const get = id => {
     if (!nodes.has(id)) nodes.set(id,new Node(['media','live-source','search-scope'].includes(id) ? 'select' : 'div'));
     return nodes.get(id);
@@ -243,7 +244,34 @@ async function scenePanel() {
   delayed.jobs[0].state='succeeded';delayed.jobs[0].result=job.result;await delayed.ui.refresh();
   assert.equal(delayed.get('scene-image').hidden,true);assert.equal(delayed.get('scene-status').textContent,'');
 }
+async function visibleResultsOnReload() {
+  const result={path:ordinary,frame_index:0,width:640,height:480,preview_data_url:'data:image/jpeg;base64,/9j/',instances:[],regions:[],summary:'People walking.',verified:false};
+  const initialJobs=['segment_frame','ocr_frame','scene_frame'].map((type,i)=>({id:`old-${i}`,request:{type,path:ordinary,frame_index:0},state:'succeeded',result}));
+  const test=harness({segmentation:true,ocr:true,vlm:true,initialJobs});await test.started;
+  for(const type of ['segmentation','ocr','scene']) assert.equal(test.get(`${type}-image`).hidden,false,'Reload should restore existing results');
+  assert.equal(test.get('live-panel').hidden,true);
+  test.ui.showArchive({enabled:false,segments:[]});assert.equal(test.get('archive-panel').hidden,true);
+  test.ui.showArchive({enabled:false,segments:[segment(archived)]});assert.equal(test.get('archive-panel').hidden,false,'Keep historical clips visible');
+  test.ui.chooseMedia(archived,true);await test.ui.refresh();
+  for(const type of ['segmentation','ocr','scene']) assert.equal(test.get(`${type}-image`).hidden,true,'History must not override a changed source');
+  const queued={...initialJobs[0],state:'queued',result:undefined};
+  const indexing={id:'index',request:{type:'index_video',path:ordinary},state:'running',progress:{decoded_frames:150,indexed_items:42}};
+  const waiting=harness({segmentation:true,initialJobs:[queued,indexing]});await waiting.started;
+  assert.match(waiting.get('segmentation-status').textContent,/Video indeksleme tamamlanınca/);
+  assert.match(waiting.get('queue-status').textContent,/150 kare okundu, 42 nesne kaydı/);
+  assert.match(waiting.get('queue-status').textContent,/1 iş sırada/);
+  assert.equal(waiting.get('quick-analyze').disabled,true);
+  queued.state='succeeded';queued.result=result;indexing.state='succeeded';await waiting.ui.refresh();
+  assert.equal(waiting.get('segmentation-image').hidden,false);
+  assert.equal(waiting.get('queue-status').textContent,'');
+  assert.equal(waiting.get('quick-analyze').disabled,false);
+  await waiting.get('quick-analyze').emit('click');
+  assert.equal(waiting.jobs[0].request.type,'segment_frame');
+  assert.equal(waiting.jobs[0].request.frame_index,0);
+}
 (async () => {
+  await visibleResultsOnReload();
+  console.log('First-use UI passed: restored results, hidden inactive panels, queue explanation, quick analysis.');
   await mediaFirst(); await archiveFirst(); await lateInitializationAfterUserChoice(); await archiveOnly();
   await segmentationPanel();await staleSegmentationSubmission();
   await ocrPanel();await scenePanel();console.log('OCR UI passed: capability, request, safe text/URL, source change, history, empty, failure, cancellation, stale reply.');

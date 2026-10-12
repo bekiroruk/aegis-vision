@@ -5,6 +5,13 @@ let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
 let archiveAvailable = false, archivePolling = false, archiveRevision = 0;
 let selectedMedia = '', mediaReady = false, mediaChoiceMade = false;
+let restorePending = true, activeJobs = [];
+const jobName = job => ({index_video:'Video indeksleme',index_live_archive:'Canlı arşiv indeksleme',segment_frame:'Piksel maskesi analizi',ocr_frame:'Yazı okuma',scene_frame:'Sahne açıklaması',search:'Metin araması'}[job.request.type] || 'Analiz');
+function analysisStatus(job) {
+  const running=activeJobs.filter(item=>item.state==='running');
+  const waiting=job.state==='queued' && running.length ? ` · ${running.map(jobName).join(', ')} tamamlanınca başlayacak` : '';
+  return `Kare ${job.request.frame_index} · ${stateText[job.state] || job.state}${waiting}`;
+}
 let sceneEnabled=false, sceneSubmitting=false, sceneJob='', sceneRevision=0;
 function syncScene() {
   const available=sceneEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
@@ -19,7 +26,7 @@ function clearScene() {
 }
 function showScene(job) {
   if(!sceneJob || job.id!==sceneJob) return;
-  $('scene-status').textContent=`Kare ${job.request.frame_index} · ${stateText[job.state] || job.state}`;
+  $('scene-status').textContent=analysisStatus(job);
   if(!terminal(job.state)) return;
   sceneJob='';syncScene();
   if(job.state!=='succeeded') {$('scene-status').textContent=job.error || stateText[job.state];return;}
@@ -48,7 +55,7 @@ function clearOcr() {
 }
 function showOcr(job) {
   if (!ocrJob || job.id!==ocrJob) return;
-  $('ocr-status').textContent=`Kare ${job.request.frame_index} · ${stateText[job.state] || job.state}`;
+  $('ocr-status').textContent=analysisStatus(job);
   if (!terminal(job.state)) return;
   ocrJob='';syncOcr();
   if (job.state!=='succeeded') { $('ocr-status').textContent=job.error || stateText[job.state];return; }
@@ -72,6 +79,7 @@ let segmentationEnabled=false, segmentationSubmitting=false, segmentationJob='',
 function syncSegmentation() {
   const available=segmentationEnabled && !!selectedMedia && !selectedMedia.startsWith('live-archive/');
   $('segmentation-button').disabled=!available || segmentationSubmitting || !!segmentationJob;
+  $('quick-analyze').disabled=$('segmentation-button').disabled;
   $('segmentation-frame').disabled=!available || segmentationSubmitting || !!segmentationJob;
   $('segmentation-state').textContent=segmentationEnabled ? 'Tek kare · C++' : 'Model etkin değil';
   $('segmentation-source').textContent=selectedMedia ? `Kaynak: ${selectedMedia}` : 'Video seçin.';
@@ -83,12 +91,12 @@ function clearSegmentation() {
 }
 function showSegmentation(job) {
   if (!segmentationJob || job.id!==segmentationJob) return;
-  $('segmentation-status').textContent=`Kare ${job.request.frame_index} · ${stateText[job.state] || job.state}`;
+  $('segmentation-status').textContent=analysisStatus(job);
   if (!terminal(job.state)) return;
   segmentationJob='';syncSegmentation();
   if (job.state!=='succeeded') { $('segmentation-status').textContent=job.error || stateText[job.state];return; }
   const result=job.result;
-  if (result.path!==selectedMedia) return;
+  if (!result || result.path!==selectedMedia) return;
   const url=result.preview_data_url;
   if (typeof url!=='string' || url.length>750000 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(url)) {
     $('segmentation-status').textContent='Bu sonuçta geçerli maske önizlemesi yok. Analizi yeniden başlatın.';return;
@@ -241,6 +249,7 @@ async function retryArchive(segment) {
 function showArchive(data) {
   const container = $('archive-segments'); container.replaceChildren();
   const allSegments = data.segments || [];
+  $('archive-panel').hidden=!data.enabled && !allSegments.length;
   // Arrival is session-relative, so it cannot order clips from different sessions.
   const segments = [...allSegments].sort((a,b) => String(b.session_id).localeCompare(String(a.session_id),undefined,{numeric:true}) || Number(b.segment_index) - Number(a.segment_index)).slice(0,8);
   $('archive-state').textContent = data.enabled ? `${allSegments.length} kayıt parçası` : 'Etkin değil';
@@ -305,8 +314,22 @@ function showResults(job) {
   });
 }
 function showJobs(jobs) {
+  activeJobs=jobs.filter(job=>!terminal(job.state));
+  const running=activeJobs.filter(job=>job.state==='running'), queued=activeJobs.filter(job=>job.state==='queued');
+  $('queue-status').textContent=activeJobs.length ? `${running.map(job=>`${jobName(job)} çalışıyor${job.request.type==='index_video' ? ` · ${job.progress?.decoded_frames || 0} kare okundu, ${job.progress?.indexed_items || 0} nesne kaydı` : ''}`).join('; ') || 'İşler başlatılmayı bekliyor'}. ${queued.length} iş sırada. Sonuçlar tamamlandıkça aşağıda açılır. İptal etmek için İşler bölümünü kullanın.` : '';
+  // Restore once on page load, never overwrite a new request or a user-selected source.
+  if (restorePending && mediaReady && selectedMedia) {
+    restorePending=false;
+    if (!mediaChoiceMade) {
+      const latest=type=>jobs.find(job=>job.request.type===type && job.request.path===selectedMedia);
+      const mask=latest('segment_frame'), text=latest('ocr_frame'), scene=latest('scene_frame');
+      if(mask && !segmentationSubmitting && !segmentationJob && !$('segmentation-status').textContent) segmentationJob=mask.id;
+      if(text && !ocrSubmitting && !ocrJob && !$('ocr-status').textContent) ocrJob=text.id;
+      if(scene && !sceneSubmitting && !sceneJob && !$('scene-status').textContent) sceneJob=scene.id;
+    }
+  }
   const container = $('jobs'); container.replaceChildren();
-  if (!jobs.length) container.append(element('p','Henüz iş yok. Bir video indeksleyerek başlayın.','empty'));
+  if (!jobs.length) container.append(element('p','Henüz iş yok. “İlk kareyi analiz et” ile başlayın; indeksleme gerekmez.','empty'));
   jobs.slice(0,12).forEach(job => {
     const row = element('div',undefined,'job');
     const title = element('div',undefined,'job-title');
@@ -359,7 +382,7 @@ async function refresh() {
     const health=await api('/api/health');segmentationEnabled=health.segmentation_enabled===true;syncSegmentation();
     ocrEnabled=health.ocr_enabled===true;ocrUnicode=health.ocr_unicode===true;syncOcr();
     sceneEnabled=health.vlm_enabled===true;syncScene();
-    $('health').textContent = '● Servis hazır';
+    $('health').textContent = activeJobs.length ? `● Servis çalışıyor · ${activeJobs.length} iş` : '● Servis hazır';
   } catch(error) { segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }
 }
@@ -373,6 +396,12 @@ $('search-form').addEventListener('submit',async event => {
   event.preventDefault(); notice('');
   try { await api('/api/jobs',{type:'search',query:$('query').value,limit:8,scope:$('search-scope').value}); await refresh(); }
   catch(error) { notice(error.message); }
+});
+$('quick-analyze').addEventListener('click',()=> {
+  if ($('quick-analyze').disabled) return;
+  $('segmentation-frame').value='0';
+  $('segmentation-form').requestSubmit();
+  $('segmentation-heading').scrollIntoView({behavior:'smooth',block:'start'});
 });
 $('segmentation-form').addEventListener('submit',async event => {
   event.preventDefault();
@@ -422,6 +451,7 @@ async function start() {
     const live = await api('/api/live/sources');
     live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
     liveEnabled = live.sources.length > 0;
+    $('live-panel').hidden=!liveEnabled;
     $('live-heading').textContent=live.analysis_mode === 'segmentation' ? 'Canlı RTSP maskeleri' : 'Canlı RTSP analizi';
     archiveAvailable = !!live.archive_available;
     $('live-archive').checked = archiveAvailable;

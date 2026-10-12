@@ -6,21 +6,22 @@
 <body>
 <header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
 <main>
-<section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videonun içinde arayın.</h1><p>Kaydı seçin, nesneleri indeksleyin ve aradığınız ana metinle ulaşın.</p></section>
+<section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videodaki nesneleri görün.</h1><p>Önce bir kareyi analiz edin: nesneler renkli maskelerle aşağıda görünür. Bunun için videoyu indekslemek gerekmez.</p><div class="demo-actions"><button id="quick-analyze" type="button" disabled>İlk kareyi analiz et</button><a href="#segmentation-heading">Maske sonucuna git</a><a href="#result-title">Arama sonuçlarına git</a></div><p class="hint">Önceki analizler bu video için otomatik açılır. Yeni bir iş gönderirseniz işlem sırasını aşağıdan izleyin.</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
-<section class="panel live-panel" aria-labelledby="live-heading">
+<p id="queue-status" role="status" aria-live="polite"></p>
+<section id="live-panel" class="panel live-panel" aria-labelledby="live-heading" hidden>
 <div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
 <div class="live-workspace"><div class="live-view"><img id="live-image" alt="Canlı yayındaki nesne tespitleri ve takip kimlikleri" hidden><div id="live-placeholder" class="live-placeholder">Yapılandırılmış kaynağı başlatın.</div></div>
 <div class="live-controls"><label for="live-source">Sunucuda tanımlanan kaynak</label><select id="live-source"></select><label class="archive-opt-in" for="live-archive"><input id="live-archive" type="checkbox" disabled><span>Kaydet ve arşivde ara</span></label><p id="archive-help" class="hint">Arşiv kullanılabilirliği kontrol ediliyor.</p><div class="live-buttons"><button id="live-start" type="button" disabled>Canlı analizi başlat</button><button id="live-stop" type="button" class="secondary" disabled>Durdur</button></div>
 <div id="live-metrics" class="live-metrics" aria-live="polite"></div><p id="live-help" class="hint">Yaklaşık 2 kez/sn yenilenen analiz önizlemesi; sesli/tam hızlı video yayını değildir.</p><p class="hint">Eski kareler biriktirilmez. Kopma sonrası takip kimlikleri yeni oturuma aittir. Görüntü yaşı decode'dan ölçülür; kamera gecikmesi değildir.</p></div></div>
 </section>
-<section class="panel archive-panel" aria-labelledby="archive-heading"><div class="panel-title"><h2 id="archive-heading">Canlı arşiv</h2><span id="archive-state" class="badge subtle">Hazırlanıyor…</span></div><p class="hint archive-description">Yalnızca analiz edilen kareler kaydedilir. Kayıt süresi gerçek yayın süresi değildir; sonuçlara tıklayınca klibin içindeki ana gidilir. Kota dolunca arşiv durur, canlı önizleme devam eder. Kayıtlar otomatik silinmez.</p><div id="archive-segments" class="archive-segments"><p class="empty">Henüz arşiv parçası yok.</p></div></section>
+<section id="archive-panel" class="panel archive-panel" aria-labelledby="archive-heading" hidden><div class="panel-title"><h2 id="archive-heading">Canlı arşiv</h2><span id="archive-state" class="badge subtle">Hazırlanıyor…</span></div><p class="hint archive-description">Yalnızca analiz edilen kareler kaydedilir. Kayıt süresi gerçek yayın süresi değildir; sonuçlara tıklayınca klibin içindeki ana gidilir. Kota dolunca arşiv durur, canlı önizleme devam eder. Kayıtlar otomatik silinmez.</p><div id="archive-segments" class="archive-segments"><p class="empty">Henüz arşiv parçası yok.</p></div></section>
 <div class="workspace">
 <section class="panel player-panel"><div class="panel-title"><h2>Video kaynağı</h2><span id="duration" class="muted"></span></div>
 <label for="media">Yerel video</label><select id="media" aria-label="Yerel video"></select>
 <video id="player" controls muted playsinline preload="metadata"></video>
-<form id="index-form" class="index-controls"><div><label for="stride">Her kaç karede bir?</label><input id="stride" type="number" min="1" max="10000" value="15" required></div><div><label for="max-frames">Kare sınırı · 0 = tümü</label><input id="max-frames" type="number" min="0" max="1000000" value="0" required></div><button type="submit" id="index-button">Videoyu indeksle</button></form>
-<p class="hint">Nesneler otomatik bulunur. Arama sonuçlarından birine tıklayarak o ana gidin.</p></section>
+<form id="index-form" class="index-controls"><div><label for="stride">Her kaç karede bir?</label><input id="stride" type="number" min="1" max="10000" value="15" required></div><div><label for="max-frames">Kare sınırı · 0 = tümü</label><input id="max-frames" type="number" min="0" max="1000000" value="150" required></div><button type="submit" id="index-button">Arama için indeksle</button></form>
+<p class="hint">Yalnızca metinle arama için gerekir. Başlangıçta ilk 150 kare işlenir; tüm video için sınırı 0 yapın. CPU üzerinde uzun sürebilir ve diğer analizleri bekletebilir. Daha önce indekslediyseniz yeniden başlatmayın.</p></section>
 <aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
 </div>
 <section class="panel search-panel" aria-labelledby="segmentation-heading">

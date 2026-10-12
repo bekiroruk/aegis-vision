@@ -11,10 +11,17 @@ kontrol eder. Hazır olanları kullanır, eksik süreçleri gizli pencerelerde b
 Panel: http://127.0.0.1:8090. Komut başka dizinden tam dosya yolu ile de çağrılabilir.
 
 1. `pedestrians.mp4` videosunu seç.
-2. “Seçili kareyi analiz et” ile nesne maskelerini gör.
+2. Üstteki “İlk kareyi analiz et” ile nesne maskelerini gör; indeksleme gerekmez.
 3. “Sahneyi açıkla” ile seçili karenin yerel model yorumunu al.
 4. “Yazıları oku” ile Türkçe destekli OCR çalıştır. Yazı olmayan karede boş sonuç normaldir.
-5. Arama için videoyu indeksle; ardından İngilizce bir arama metni gönder.
+5. Yalnız arama için “Arama için indeksle”yi kullan; ardından İngilizce bir arama metni gönder. Varsayılan sınır ilk 150 karedir; tüm video için 0 gir. Önceden indekslenmiş videoyu tekrar indekslemek gerekmez.
+
+Demo tek işçiyle çalışır: uzun indeksleme sırasında maske/OCR/VLM ve arama işleri
+sırada bekler. Üstteki durum satırı çalışan işi ve bekleyen iş sayısını gösterir;
+gerekirse İşler bölümünden iptal et. Sayfa yenilenince başlangıç videosunun son
+maske, OCR ve VLM işi otomatik açılır (bitmemişse takip edilir). Başka bir sonuç
+için İşler bölümündeki göster düğmelerini kullan. Kaynak tanımlanmayan canlı
+kamera paneli ve devre dışı/boş arşiv paneli gösterilmez; eski arşiv kayıtları korunur.
 
 Arayüzdeki kare numarası kullanılır; videoyu duraklattığın an otomatik seçilmez.
 Model çıktıları hatalı olabilir. Canlı RTSP kaynağı bu demo profilinde etkin değildir;
@@ -61,3 +68,15 @@ Gerçek `scene_frame` işi `1791700823339-3` başarıyla sonuçlandı. `-Stop` y
 başlatıcının açtığı iki süreci kapattı; yeniden açılışta sonuç `attempts=1` ile
 korundu. Qdrant'ın bu başlatıcı üzerinden sıfırdan açılışı ve hata sırasında
 otomatik geri alma bu kontrolde ayrıca denenmedi.
+
+## Görünür sonuç doğrulaması — 2026-10-12
+
+Tarayıcıda sayfa açılışında mevcut maske/OCR/VLM sonuçlarının otomatik geri geldiği
+doğrulandı. “İlk kareyi analiz et” gerçek servis üzerinde `1791700823339-10` işini
+oluşturdu ve 768×576 kare üzerinde 6 maske gösterdi. Önceki tam video indekslemesi
+795 kare okudu, 53 kare örnekledi ve 410 nesne kaydı oluşturdu (benzersiz nesne
+sayısı değildir). Arama 8 eşleşme döndürdü; 3 eski arşiv eşleşmesinin medya dosyası
+bu profilin medya kökünde olmadığı için oynatma düğmeleri devre dışıydı.
+OCR'ın tek karakterlik çıktısı güvenilir metin okuma kanıtı sayılmadı.
+`node tests/test_web_state.cjs` yenileme, kuyruk açıklaması, hızlı analiz,
+kaynak değişimi ve mevcut güvenli çıktı regresyonlarıyla geçti.

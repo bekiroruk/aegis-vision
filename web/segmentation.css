@@ -1,4 +1,9 @@
 #segmentation-image { width:100%; max-height:600px; object-fit:contain; border-radius:9px; background:#050b11; }
+[hidden] { display:none !important; }
+.demo-actions { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-top:18px; }
+.demo-actions a { color:var(--accent); }
+#queue-status:empty { display:none; }
+#queue-status { padding:16px; border:1px solid var(--accent); border-radius:10px; background:#19382f; }
 #segmentation-source, #segmentation-status { overflow-wrap:anywhere; }
 #ocr-image { width:100%; max-height:600px; object-fit:contain; border-radius:9px; background:#050b11; }
 #scene-image { width:100%; max-height:600px; object-fit:contain; border-radius:9px; background:#050b11; }
