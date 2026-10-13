@@ -37,11 +37,15 @@ int run(std::vector<std::filesystem::path> args) {
                 "   Analysis: --analysis-config FILE.toml replaces segmentation/OCR/VLM flags.\n"
                 "   GPU detection: --trt-bundle LOCAL_FP16_BUNDLE (requires TensorRT build; no CPU fallback).\n"
                 "   Applies to file indexing and live detection, not segmentation/OCR/CLIP/VLM.\n"
+                "   Demo: --replay-file treats the live source argument as a local video, not RTSP. Loops at configured output_fps.\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
         std::filesystem::path segmentation_model,ocr_bundle;
         bool live_segmentation=false;
+        bool file_replay=false;
+        const auto replay_flag=std::find(args.begin(),args.end(),std::filesystem::path("--replay-file"));
+        if (replay_flag!=args.end()) {file_replay=true;args.erase(replay_flag);}
         const auto live_flag=std::find(args.begin(),args.end(),std::filesystem::path("--live-segmentation"));
         if (live_flag!=args.end()) {live_segmentation=true;args.erase(live_flag);}
         const auto take_path=[&](const char* flag) {
@@ -73,6 +77,7 @@ int run(std::vector<std::filesystem::path> args) {
         }
         if(!ocr_bundle.empty()&&!multilingual_bundle.empty()) throw std::invalid_argument("Choose one OCR backend");
         if ((args.size() < 5 || args.size() > 7) && args.size() != 9 && args.size()!=10) throw std::invalid_argument("Missing arguments; run --help");
+        if (file_replay && args.size()<9) throw std::invalid_argument("Replay requires stream config and local video arguments");
         if (live_segmentation && (segmentation_model.empty() || args.size()<9))
             throw std::invalid_argument("Live segmentation requires live source arguments and --segment-model");
         int port = 8090;
@@ -141,10 +146,12 @@ int run(std::vector<std::filesystem::path> args) {
             auto live = aegisvision::vision::load_application_settings(args[7]);
             if (live.mode != aegisvision::vision::ApplicationMode::Stream)
                 throw std::invalid_argument("Live preview requires stream-mode TOML");
-            const auto raw = args[8].u8string();
+            live.live.file_replay=file_replay;
+            const auto raw = (file_replay ? std::filesystem::absolute(args[8]) : args[8]).u8string();
             const std::string url(raw.begin(), raw.end());
-            aegisvision::vision::validate_rtsp_url(url);
-            config.live = {{{"local-pedestrians", "Yerel RTSP yayını", url}}, live.live, live.video};
+            aegisvision::vision::validate_live_source(url,live.live);
+            config.live = {{{file_replay ? "local-replay" : "local-pedestrians",
+                file_replay ? "Yerel video demosu (kamera değil)" : "Yerel RTSP yayını", url}}, live.live, live.video};
             config.live.backend=live_segmentation ? nlohmann::json{{"engine","opencv-dnn"},{"device","cpu"},{"precision","fp32"}} : backend;
             config.live.archive.enabled=true;
             if (args.size()==10) config.archive_encoder.executable=args[9];

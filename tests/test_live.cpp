@@ -212,6 +212,29 @@ int main(int argc, char* argv[]) {
         require(argc == 1, "Use --rtsp URL for real transport integration");
         appearance_rejection_checks(root);
         source_checks();
+        {
+            fs::create_directories(root);
+            const auto file=root/"replay.avi";
+            cv::VideoWriter fixture(file.string(),cv::CAP_OPENCV_MJPEG,
+                cv::VideoWriter::fourcc('M','J','P','G'),10,{160,120});
+            require(fixture.isOpened(),"Replay fixture writer failed");
+            for(int i=0;i<3;++i) fixture.write(cv::Mat(120,160,CV_8UC3,cv::Scalar(20+i,40,60)));
+            fixture.release();
+            auto replay=fast_config();replay.file_replay=true;replay.output_fps=10;
+            rejects([&]{validate_live_source(file.string(),fast_config());});
+            rejects([&]{validate_live_source("rtsp://127.0.0.1/test",replay);});
+            rejects([&]{validate_live_source("replay.avi",replay);});
+            rejects([&]{validate_live_source((root/"absent.avi").string(),replay);});
+            rejects([&]{validate_live_source(root.string(),replay);});
+            const auto began=Clock::now();
+            LiveSource source(file.string(),replay);
+            int received=0;std::uint64_t epoch=0;
+            until([&]{auto frame=source.next(100ms);if(frame){++received;epoch=frame->session;}return epoch>=2;});
+            require(received>=3 && Clock::now()-began>=250ms,"Replay not paced or not looped");
+            require(source.stats().queue_high_watermark<=1 && source.stats().read_failures==0,"Replay EOF treated as camera fault");
+            const auto stopping=Clock::now();source.stop();
+            require(Clock::now()-stopping<500ms,"Replay pacing blocked stop");
+        }
         auto state = std::make_shared<State>(); state->unlimited = true;
         SlowDetector detector;
         auto c = fast_config();

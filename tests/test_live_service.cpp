@@ -37,7 +37,7 @@ class LiveDetector : public IDetector {
 public:
     explicit LiveDetector(std::shared_ptr<Control> state) : state_(std::move(state)) { ++state_->model_instances; }
     std::vector<Detection> detect(const Frame& frame) override {
-        require(frame.image && frame.source_id.starts_with("rtsp-session-"), "Real live pixels missing");
+        require(frame.image && (frame.source_id.starts_with("rtsp-session-") || frame.source_id.starts_with("replay-session-")), "Real live pixels missing");
         if (state_->fail_model) throw std::runtime_error("secret model exception: rtsp://private-camera");
         ++state_->analyses; std::this_thread::sleep_for(20ms);
         return {{{10,10,80,90}, "person", .9F, {}, {}}};
@@ -158,13 +158,17 @@ void http_checks(const std::filesystem::path& root,bool masks=false) {
     code(client.Post("/api/live/" + third.at("id").get<std::string>() + "/stop", "{}", "application/json"),202);
     until([&] { return current().at("active") == false; });
 }
-void lifecycle_checks() {
+void lifecycle_checks(const std::filesystem::path& replay_file = {}) {
     auto control = std::make_shared<Control>();
     LiveServiceConfig config;
     config.sources = {{"test", "Test", "rtsp://127.0.0.1/test"}}; config.stream.duration_seconds = 1;
+    if(!replay_file.empty()) {config.stream.file_replay=true;config.sources[0].url=replay_file.string();}
     LiveSessions sessions(config, [control] { return std::make_unique<LiveDetector>(control); },
         [control] { return std::make_unique<Capture>(control); });
+    require(sessions.sources().at("source_kind")== (replay_file.empty() ? "rtsp" : "file_replay"),"Wrong source provenance");
+    if(!replay_file.empty()) require(sessions.sources().dump().find(replay_file.filename().string())==std::string::npos,"Replay filename leaked");
     (void)sessions.start("test");
+    require(sessions.current().at("source_kind")==sessions.sources().at("source_kind"),"Session provenance lost");
     until([&] { return sessions.current().at("state") == "completed"; });
     require(sessions.preview(sessions.current().at("id")).jpeg == nullptr, "Completed session still serves live image");
     (void)sessions.start("test");
@@ -179,6 +183,9 @@ int main() {
     try {
         std::filesystem::create_directories(root);
         http_checks(root); http_checks(root,true); lifecycle_checks();
+        const auto replay_fixture=root/"private-fixture.png";
+        require(cv::imwrite(replay_fixture.string(),cv::Mat(16,16,CV_8UC3,cv::Scalar(0))),"Fixture failed");
+        lifecycle_checks(replay_fixture); // Injected capture; real file decoding is tested in test_live.
         std::filesystem::remove_all(root); // Only this test's newly created scratch directory.
         std::cout << "Live HTTP presets, isolation, preview, reconnect, stop, failure and lifecycle passed\n";
         return 0;

@@ -21,7 +21,7 @@ LiveSessions::LiveSessions(LiveServiceConfig config, LiveDetectorFactory detecto
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::string::npos ||
             source.label.empty() || source.label.size() > 128 || !ids.insert(source.id).second)
             throw std::invalid_argument("Invalid or duplicate live preset");
-        vision::validate_rtsp_url(source.url);
+        vision::validate_live_source(source.url,config_.stream);
     }
 }
 LiveSessions::~LiveSessions() { shutdown(); }
@@ -30,6 +30,7 @@ Json LiveSessions::sources() const {
     for (const auto& s : config_.sources) entries.push_back({{"id", s.id}, {"label", s.label}});
     return {{"sources", entries}, {"max_active", 1}, {"duration_seconds", config_.stream.duration_seconds},
         {"backend",config_.backend},
+        {"source_kind",config_.stream.file_replay ? "file_replay" : "rtsp"},
         {"analysis_mode",segmenter_ ? "segmentation" : "detection"},
         {"tracker",segmenter_ ? "iou-mask-0.30-max-missed-20" : "configured"},
         {"preview_max_age_ms", 2000}, {"persistent", false}, {"archive_available", config_.archive.enabled},
@@ -50,6 +51,7 @@ Json LiveSessions::snapshot_locked() const {
     const auto picture = preview_locked();
     return {{"id", id_}, {"source_id", source_id_}, {"state", state_}, {"active", active_},
         {"backend",config_.backend},
+        {"source_kind",config_.stream.file_replay ? "file_replay" : "rtsp"},
         {"analysis_mode",segmenter_ ? "segmentation" : "detection"},
         {"connection_state", s.connection_state}, {"cancel_requested", cancel_.load()}, {"error", error_},
         {"processed_frames", summary_.processed_frames}, {"decoded_frames", s.decoded_frames},

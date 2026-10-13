@@ -34,7 +34,9 @@ hız kazancı kanıtlanmadı. [INT8 kalibrasyonu da çalıştırıldı](docs/ten
 5,53 puan ve p50 hızlanması yalnızca 1,022× olduğu için kabul edilmedi.
 [Servis/panelde isteğe bağlı FP16 seçimi](docs/gpu-service.md) eklendi; CPU
 varsayılanı korunur. Gerçek GPU dosya indeksleme/arama ve fixture kaynaklı
-canlı worker doğrulandı; gerçek RTSP + GPU birleşik testi ve GPU Docker hâlâ eksik.
+canlı worker doğrulandı. Publisher gerektirmeyen `-ReplayFile` video demosu da
+gerçek GPU'da panel, eşzamanlı indeksleme/arama ve stop ile doğrulandı;
+kamera yayını değildir. Gerçek RTSP + GPU birleşik testi ve GPU Docker hâlâ eksik.
 
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce

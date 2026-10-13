@@ -3,6 +3,7 @@ param(
     [ValidateRange(1, 65535)][int]$Port = 8090,
     [string]$JobDatabase = "artifacts/service/jobs.sqlite",
     [string]$LiveUrl = "",
+    [string]$ReplayFile = "",
     [string]$LiveConfig = "configs/live-preview.toml",
     [string]$Ffmpeg = "ffmpeg",
     [string]$SegmentationModel = "",
@@ -16,6 +17,7 @@ param(
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
 $ErrorActionPreference = "Stop"
+if($LiveUrl -and $ReplayFile){throw 'LiveUrl ve ReplayFile birlikte kullanilamaz.'}
 if($OcrModels -and $OcrMultilingual){throw 'Tek bir OCR backend secin: OcrModels veya OcrMultilingual'}
 if($AnalysisConfig -and ($SegmentationModel -or $OcrModels -or $OcrMultilingual -or $VlmPort)){throw 'AnalysisConfig ile model parametrelerini birlikte kullanmayin.'}
 $repoDirectory = Split-Path $PSScriptRoot -Parent
@@ -44,8 +46,12 @@ try {
     $serverArguments = @($SearchConfig,'configs/image.toml',$MediaDirectory,'web',$Port,$JobDatabase)
     if ($TensorRtBundle) { $serverArguments += @('--trt-bundle',$TensorRtBundle) }
     if($AnalysisConfig){$serverArguments += @('--analysis-config',$AnalysisConfig)}
-    if ($LiveSegmentation -and (-not $LiveUrl -or (-not $SegmentationModel -and -not $AnalysisConfig))) { throw 'LiveSegmentation icin LiveUrl ve segmentation modeli gereklidir.' }
+    if ($LiveSegmentation -and ((-not $LiveUrl -and -not $ReplayFile) -or (-not $SegmentationModel -and -not $AnalysisConfig))) { throw 'LiveSegmentation icin kaynak ve segmentation modeli gereklidir.' }
     if ($LiveUrl) { $serverArguments += @($LiveConfig,$LiveUrl,$Ffmpeg) }
+    if ($ReplayFile) {
+        if(-not(Test-Path -LiteralPath $ReplayFile -PathType Leaf)){throw 'ReplayFile bulunamadi.'}
+        $serverArguments += @($LiveConfig,$ReplayFile,$Ffmpeg,'--replay-file')
+    }
     if ($SegmentationModel) {
         if (-not (Test-Path -LiteralPath $SegmentationModel -PathType Leaf)) { throw "Segmentation modeli bulunamadi: $SegmentationModel" }
         $serverArguments += @('--segment-model',$SegmentationModel)

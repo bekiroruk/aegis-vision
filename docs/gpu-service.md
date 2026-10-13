@@ -78,3 +78,43 @@ Yerel HTTP kayıtları: `outputs/gpu-service-runtime-v1/jobs-evidence.json`
 ekran görüntüsü aynı klasörde `browser-proof.png`. Demo 8091'de ayrı media root,
 SQLite ve collection kullanır; 8090'daki mevcut CPU servisi korunmuştur.
 Bu iş GPU Docker/Linux deployment veya üretim yük testi değildir.
+
+## Kamera yayını olmadan video demosu — 2026-10-14
+
+`-ReplayFile` seçeneği publisher/MediaMTX olmadan **yerel videoyu döngüde analiz
+eder**, gerçek RTSP kamera yayını değildir. Panel bunu açıkça etiketler;
+API kaynak ve oturumlarında `source_kind=file_replay` döner. RTSP için aynı
+alan `rtsp` olur. Tarayıcıdan dosya yolu/URL kabul edilmez.
+
+```powershell
+.\scripts\start_service.ps1 -TensorRtBundle artifacts/models/yolov8n-trt-fp16-v1 -SearchConfig configs/service-search-gpu.toml -Port 8091 -JobDatabase artifacts/service/gpu-jobs.sqlite -ReplayFile artifacts/media/pedestrians.mp4
+```
+
+Qdrant, yerel model dosyaları ve derlenmiş servis ön koşulları değişmez.
+`LiveUrl` ve `ReplayFile` birlikte seçilemez. Native CLI'da stream config ve
+kaynak konumuna video yolu verilip `--replay-file` eklenir. Varsayılan RTSP
+doğrulaması korunur. Replay yalnız mevcut mutlak yerel dosya kabul eder; server
+başlangıcında göreli yol mutlaklaştırılır. UNC ve URL kaynakları reddedilir.
+
+Dosya `stream.output_fps` hızında (varsayılan 10 kare/sn) okunur. Bu hız kamera
+FPS'i veya dosyanın özgün PTS akışı değildir. Dosya sonunda yeniden açılır,
+yeni kaynak oturumu/takip epoch'u oluşur; normal döngü kamera okuma hatası
+sayılmaz. Açılmayan/çözülemeyen dosyada mevcut outage sınırı geçerlidir.
+Oturum 180 saniye sonra biter; **Video demosunu başlat** ile yeniden açılabilir.
+Arşiv demo modunda varsayılan kapalıdır; isteğe bağlı sınırlı analiz-kare arşivi
+aynı kurallarla kullanılabilir. Bekleme durdurulabilir; kuyruk sınırı değişmez.
+
+```powershell
+.\scripts\test_gpu_service.ps1 -Replay -Port 8091 -Output outputs/gpu-replay-test-v1
+```
+
+Gerçek RTX 3060 / FP16 koşusu geçti: demo analiz sayacı 4'ten 20'ye ilerlerken
+aynı GPU'da ayrı worker dosyadan 16 nesne indeksledi, CLIP/Qdrant 4 sonuç döndürdü.
+Kuyruk tepe değeri 1; stop sonrası durum `stopped`, eski JPEG yok.
+Rapor: `outputs/gpu-replay-test-v1/report.json`, SHA256
+`5ffbde123a79d827012c7e8630d31514734ce00f3474adec320c62359c952325`.
+Tarayıcıda gerçek 768×576 kutulu görüntü görüldü ve sayaç ilerledi;
+ekran görüntüsü aynı klasörde `browser-proof.png`.
+Gerçek dosya decode/döngü/pacing/stop testi, HTTP kaynak türü ve yaşam döngüsü,
+GPU izolasyonu ve web etiket testleri geçti.
+`-Replay` olmadan test dosya demosunu reddeder; bu sonuç RTSP testi yerine geçmez.

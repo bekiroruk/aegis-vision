@@ -1,4 +1,4 @@
-param([int]$Port=8091,[string]$Output='outputs/gpu-service-test-v1')
+param([int]$Port=8091,[string]$Output='outputs/gpu-service-test-v1',[switch]$Replay)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 $destination=[IO.Path]::GetFullPath($Output,$repo)
@@ -14,11 +14,14 @@ RequireGpu $health.detector_backend
 $presets=Invoke-RestMethod "$base/api/live/sources"
 RequireGpu $presets.backend
 if($presets.analysis_mode -ne 'detection'){throw 'This test requires live detection, not CPU live masks'}
+$sourceKind=if($Replay){'file_replay'}else{'rtsp'}
+$sourceId=if($Replay){'local-replay'}else{'local-pedestrians'}
+if($presets.source_kind -ne $sourceKind){throw "Expected $sourceKind source; replay is not RTSP evidence"}
 if((Invoke-RestMethod "$base/api/live").session.active){throw 'Existing live session will not be interrupted'}
 New-Item -ItemType Directory -Path $destination | Out-Null
 $sessionId=''
 try {
-    $live=Invoke-RestMethod "$base/api/live/start" -Method Post -ContentType application/json -Body '{"source_id":"local-pedestrians","archive":false}'
+    $live=Invoke-RestMethod "$base/api/live/start" -Method Post -ContentType application/json -Body (@{source_id=$sourceId;archive=$false}|ConvertTo-Json)
     $sessionId=$live.id
     $deadline=[DateTime]::UtcNow.AddSeconds(35)
     do {
@@ -28,6 +31,7 @@ try {
         Start-Sleep -Milliseconds 200
     } while($true)
     RequireGpu $first.backend
+    if($first.source_kind -ne $sourceKind){throw 'Session source kind changed'}
     Invoke-WebRequest "$base/api/live/$sessionId/preview.jpg" -OutFile (Join-Path $destination 'gpu-live.jpg')
     $job=Invoke-RestMethod "$base/api/jobs" -Method Post -ContentType application/json -Body '{"type":"index_video","path":"pedestrians.mp4","stride":10,"max_frames":30}'
     $deadline=[DateTime]::UtcNow.AddSeconds(90)
@@ -64,9 +68,9 @@ try {
     } while($true)
     if($stopped.has_preview -or $stopped.state -ne 'stopped'){throw 'GPU preview remained stale after stop'}
     $sessionId=''
-    @{health=$health;first=$first;after=$after;index_job=$result;search_job=$found;stopped=$stopped;status='passed'} |
+    @{source_kind=$sourceKind;health=$health;first=$first;after=$after;index_job=$result;search_job=$found;stopped=$stopped;status='passed'} |
         ConvertTo-Json -Depth 16 | Out-File -LiteralPath (Join-Path $destination 'report.json') -Encoding utf8
-    Write-Host "PASS: concurrent native GPU file/live detection, CLIP search, distinct cache identity, clean stop: $destination"
+    Write-Host "PASS ($sourceKind): concurrent native GPU detection, CLIP search, distinct cache identity, clean stop: $destination"
 } finally {
     if($sessionId){Invoke-RestMethod "$base/api/live/$sessionId/stop" -Method Post -ContentType application/json -Body '{}' | Out-Null}
 }

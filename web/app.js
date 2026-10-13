@@ -527,12 +527,14 @@ async function start() {
     live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
     liveEnabled = live.sources.length > 0;
     $('live-panel').hidden=!liveEnabled;
-    $('live-heading').textContent=live.analysis_mode === 'segmentation' ? 'Canlı RTSP maskeleri' : 'Canlı RTSP analizi';
+    $('live-heading').textContent=live.source_kind === 'file_replay' ? 'Video demosu · kamera yayını değil' : live.analysis_mode === 'segmentation' ? 'Canlı RTSP maskeleri' : 'Canlı RTSP analizi';
+    $('live-start').textContent=live.source_kind === 'file_replay' ? 'Video demosunu başlat' : 'Canlı analizi başlat';
     archiveAvailable = !!live.archive_available;
-    $('live-archive').checked = archiveAvailable;
+    $('live-archive').checked = archiveAvailable && live.source_kind !== 'file_replay';
     $('archive-help').textContent = archiveAvailable ? archiveLimits(live.archive_config) : 'Canlı arşiv bu sunucuda etkin değil. Önizleme tek başına kullanılabilir.';
     if (!liveEnabled) { hideLive('Canlı kaynak bu sunucuda etkin değil.'); $('live-help').textContent = 'Sunucuyu -LiveUrl seçeneğiyle başlatın; tarayıcıdan keyfî URL kabul edilmez.'; }
     else $('live-help').textContent = `${live.duration_seconds} saniyelik oturum · yaklaşık 2 önizleme/sn · kayıt ve indeksleme yalnızca seçeneği açarsanız yapılır.`;
+    if (live.source_kind === 'file_replay') $('live-help').textContent += ' Yerel dosya döngüde analiz edilir; RTSP bağlantısı, kamera veya gerçek zaman başarım testi değildir.';
     await refreshLive(); setInterval(refreshLive,500);
     setInterval(() => { if (liveObjectUrl && performance.now() >= liveExpiresAt) hideLive('Güncel analiz karesi bekleniyor…'); },250);
     const data = await api('/api/media');

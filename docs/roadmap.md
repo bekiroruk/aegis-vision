@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-13. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
+Güncelleme: 2026-10-14. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -140,6 +140,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    modeli yok. FP16 adayı korunur; aynı testte eşik ayarı yapılmaz.
    [Panel/servis FP16 seçimi](gpu-service.md) eklendi: gerçek HTTP dosya indeksleme
    ve arama, gerçek GPU + fixture capture ile canlı worker izolasyonu doğrulandı.
+   Publisher olmadan gerçek yerel videoyu döngüde analiz eden panel demosu da
+   GPU üzerinde eşzamanlı dosya indeksleme/arama ve temiz stop ile doğrulandı;
+   `file_replay` olarak açıkça etiketlidir, kamera/RTSP testi değildir.
    Gerçek RTSP + GPU birleşik test, segmentation/diğer modellerin GPU uyarlaması
    ve GPU Docker imajı hâlâ eksik. INT8 için Q/DQ/QAT veya farklı temsilî
    veri deneyi ayrı geliştirme/holdout gerektirir; bu adımda başarı sayılmaz.

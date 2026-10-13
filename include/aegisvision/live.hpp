@@ -21,10 +21,12 @@ struct LiveConfig {
     int tracking_gap_ms{1000};
     int queue_capacity{1};
     double output_fps{10}; // Output contains analyzed frames only, not real-time playback.
+    bool file_replay{false}; // Trusted local demo only; paced at output_fps, loops with a new epoch.
 };
 void validate_live_config(const LiveConfig& config);
 // Credentials/query tokens are deliberately unsupported until a secret-safe adapter exists.
 void validate_rtsp_url(const std::string& url);
+void validate_live_source(const std::string& source, const LiveConfig& config);
 
 class ILiveCapture {
 public:

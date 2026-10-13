@@ -56,7 +56,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[],backend,liveBackend,liveMode='detection'} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[],backend,liveBackend,liveMode='detection',sourceKind='rtsp'} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[...initialJobs];
   const get = id => {
@@ -70,7 +70,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, v
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
     if (pathname === '/api/health') data = {detector_backend:backend,video_analysis_enabled:video,segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
-    else if (pathname === '/api/live/sources') data = {backend:liveBackend,analysis_mode:liveMode,sources:[],archive_available:true,archive_config:catalog.config};
+    else if (pathname === '/api/live/sources') data = {source_kind:sourceKind,backend:liveBackend,analysis_mode:liveMode,sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
     else if (pathname === '/api/jobs' && options.body) {
@@ -305,6 +305,10 @@ async function videoPanel() {
 }
 (async () => {
   const gpu={engine:'tensorrt',device:'cuda:0',precision:'fp16-mixed'};
+  const replay=harness({sourceKind:'file_replay'});await replay.started;
+  assert.match(replay.get('live-heading').textContent,/kamera yayını değil/);
+  assert.equal(replay.get('live-start').textContent,'Video demosunu başlat');
+  assert.match(replay.get('live-help').textContent,/gerçek zaman başarım testi değildir/);
   const cpu={engine:'opencv-dnn',device:'cpu',precision:'fp32'};
   const mixed=harness({backend:gpu,liveBackend:cpu,liveMode:'segmentation'});await mixed.started;
   assert.match(mixed.get('detector-backend').textContent,/GPU · TensorRT FP16/);

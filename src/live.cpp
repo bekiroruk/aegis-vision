@@ -70,6 +70,14 @@ void validate_rtsp_url(const std::string& url) {
     for (unsigned char c : url) if (c < 32 || c >= 127)
         throw std::invalid_argument("RTSP URL must use printable ASCII (encode the path if needed)");
 }
+void validate_live_source(const std::string& source, const LiveConfig& config) {
+    if (!config.file_replay) { validate_rtsp_url(source); return; }
+    const auto path=std::filesystem::u8path(source);
+    if (!path.is_absolute() || source.find("://")!=std::string::npos ||
+        !std::filesystem::is_regular_file(path) ||
+        std::filesystem::canonical(path).generic_string().starts_with("//"))
+        throw std::invalid_argument("Replay requires an absolute, existing local video file");
+}
 
 struct LiveSource::Impl {
     std::string url;
@@ -114,7 +122,8 @@ struct LiveSource::Impl {
                         if (stop_requested()) break;
                         if (!read || image.empty()) {
                             std::lock_guard lock(mutex);
-                            ++stats.read_failures; clear_queue(); stats.connection_state = "reconnecting";
+                            if (!config.file_replay) ++stats.read_failures;
+                            clear_queue(); stats.connection_state = "reconnecting";
                             break;
                         }
                         const auto arrived = Clock::now();
@@ -146,6 +155,12 @@ struct LiveSource::Impl {
                         changed.notify_all();
                         last_arrival = arrived;
                         backoff = config.reconnect_initial_ms;
+                        if (config.file_replay) {
+                            // Interruptible demo pacing, not camera PTS or source FPS playback.
+                            std::unique_lock lock(mutex);
+                            changed.wait_until(lock, arrived + std::chrono::duration<double>(1.0/config.output_fps),
+                                [&] { return stopping; });
+                        }
                     }
                 }
                 capture->close();
@@ -164,7 +179,7 @@ struct LiveSource::Impl {
 };
 
 LiveSource::LiveSource(std::string url, LiveConfig config, LiveCaptureFactory factory) {
-    validate_rtsp_url(url); validate_live_config(config);
+    validate_live_source(url,config); validate_live_config(config);
     impl_ = std::make_unique<Impl>();
     impl_->url = std::move(url); impl_->config = config;
     impl_->factory = factory ? std::move(factory) : [] { return std::make_unique<OpenCvCapture>(); };
@@ -208,12 +223,12 @@ LiveSummary analyze_stream(const std::string& url, IDetector& detector, const Vi
         if (reset) tracker=make_tracker(tracking);
         AnalysisPipeline pipeline(pipeline_config,detector,tracker.get(),nullptr,nullptr,nullptr);
         return pipeline.analyze(image_frame(frame.image,std::to_string(frame.sequence),
-            "rtsp-session-"+std::to_string(frame.session),frame.arrival_ms));
+            (config.file_replay ? "replay-session-" : "rtsp-session-")+std::to_string(frame.session),frame.arrival_ms));
     },std::move(sink),std::move(progress),std::move(factory));
 }
 LiveSummary analyze_live_frames(const std::string& url,const LiveConfig& config,const std::atomic_bool& cancel,
     LiveAnalyzer analyze,LiveFrameSink sink,LiveProgress progress,LiveCaptureFactory factory) {
-    validate_rtsp_url(url);validate_live_config(config);
+    validate_live_source(url,config);validate_live_config(config);
     if (!analyze) throw std::invalid_argument("Live analyzer required");
     if (!sink) throw std::invalid_argument("Live frame sink required");
     if (cancel) { LiveSummary cancelled; cancelled.stop_reason = "cancelled"; return cancelled; }
@@ -265,7 +280,7 @@ LiveSummary process_stream(const std::string& url, const std::filesystem::path& 
     namespace fs = std::filesystem;
     if (tracking.use_appearance)
         throw std::invalid_argument("Appearance tracking requires local video; live appearance is not supported");
-    validate_rtsp_url(url); validate_live_config(config);
+    validate_live_source(url,config); validate_live_config(config);
     (void)make_tracker(tracking);
     if (fs::exists(output) && (!fs::is_directory(output) || !fs::is_empty(output)))
         throw std::invalid_argument("Output directory must be new or empty");
