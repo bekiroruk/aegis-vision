@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-12. Aktif uygulama C++20'dir; Python yalnızca model/veri hazırlama,
+Güncelleme: 2026-10-13. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -129,8 +129,13 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;
    bu projede uygulama katmanını da C++ tutuyoruz.
 
-5. **GPU optimizasyonu ve dağıtım.** TensorRT backend, FP16 eşdeğerlik testi,
-   temsilî calibration verisiyle INT8, model sürümleme ve GPU Docker imajı ekle.
+5. **GPU optimizasyonu ve dağıtım.** İsteğe bağlı native C++ TensorRT YOLO detection
+   backend ve yerel hash/sürüm kontrollü engine builder eklendi. RTX 3060'da CPU,
+   TensorRT FP32 ve FP16 karşılaştırıldı: 64 geliştirme görüntüsünde FP16 p50
+   36,78× hızlı, bbox AP kaybı 0,078 puan; resmi COCO kontrolü geçti.
+   [Ölçüm ve sınırlar](tensorrt.md). FP16, GPU FP32'den ayrıca hızlı diye sunulmaz.
+   Panel/servis backend seçimi, segmentation/diğer modellerin GPU uyarlaması,
+   temsilî calibration verisiyle INT8 ve GPU Docker imajı hâlâ eksik.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,
    throughput ve GPU bellek raporu. CUDA/GPU uyumu doğrulanmadan tamamlandı sayılmaz.
 

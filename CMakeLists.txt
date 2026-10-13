@@ -4,6 +4,7 @@ project(AegisVision VERSION 0.1.0 LANGUAGES CXX)
 option(AEGISVISION_BUILD_TESTS "Build unit tests" ON)
 option(AEGISVISION_WITH_OPENCV "Build image tools and geometric registration" OFF)
 option(AEGISVISION_WITH_SEARCH "Build CLIP/ONNX Runtime and local Qdrant search" OFF)
+option(AEGISVISION_WITH_TENSORRT "Build optional native CUDA/TensorRT YOLO detector" OFF)
 
 add_library(aegisvision
     src/adapters.cpp
@@ -187,5 +188,12 @@ if(AEGISVISION_WITH_SEARCH)
         message(FATAL_ERROR "Search requires AEGISVISION_WITH_OPENCV=ON")
     endif()
     include(cmake/Search.cmake)
+endif()
+
+if(AEGISVISION_WITH_TENSORRT)
+    if(NOT AEGISVISION_WITH_OPENCV)
+        message(FATAL_ERROR "TensorRT requires AEGISVISION_WITH_OPENCV=ON")
+    endif()
+    include(cmake/TensorRT.cmake)
 endif()
 

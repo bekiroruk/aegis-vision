@@ -26,6 +26,11 @@ Gerçek GPU [segmentation fine-tuning deneyi](docs/segmentation-training.md) tam
 80 eğitim / 16 doğrulama / 74 ayrı konum testi. Native C++ maske AP50:95
 %61,73 → %71,06; ancak kaçırmalar arttığı için aday varsayılan model yapılmadı.
 
+İsteğe bağlı [native C++ TensorRT detection](docs/tensorrt.md) RTX 3060'da doğrulandı:
+64 geliştirme sahnesinde CPU tek-thread p50 478,22 ms → GPU FP16 13,00 ms;
+bbox AP50:95 %63,6516 → %63,5736. GPU FP32 de ölçüldü; FP16'nın ona göre ek
+hız kazancı kanıtlanmadı. Bu ayrı CLI/backend'dir; panel varsayılanı, INT8 ve GPU Docker değildir.
+
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce
 harf/rakamlarla sınırlıdır; kalıcı `ocr_frame` işi ve web paneli vardır.
