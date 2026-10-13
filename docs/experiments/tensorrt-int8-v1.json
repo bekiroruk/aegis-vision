@@ -1,0 +1,222 @@
+{
+  "gates": {
+    "max_ap_drop": 0.005,
+    "max_class_ap_drop": 0.02,
+    "min_p50_speedup": 1.1,
+    "p95_must_not_regress": true
+  },
+  "ap_deltas_vs_fp16": {
+    "ap50": -0.034154936739476116,
+    "ap50_95": -0.05529962576284475
+  },
+  "class_ap_deltas_vs_fp16": {
+    "bicycle": -0.05538236869810198,
+    "bus": -0.09434262107529456,
+    "cat": -0.09900829368651076,
+    "dog": 0.01855118845217918,
+    "giraffe": -0.05412896943444778,
+    "motorcycle": -0.02273335251930869,
+    "train": -0.01301408712299923,
+    "zebra": -0.12233850201827434
+  },
+  "p50_speedup_vs_fp16": 1.0222809058410958,
+  "quality_gate_passed": false,
+  "speed_gate_passed": false,
+  "quality_and_speed_gate_passed": false,
+  "deployment_approved": false,
+  "panels": {
+    "fp16": {
+      "ap50": 0.8314657678302634,
+      "ap50_95": 0.6357361346387752,
+      "operating_point": {
+        "fn": 54,
+        "fp": 16,
+        "ignored": 6,
+        "precision": 0.8677685950413223,
+        "recall": 0.660377358490566,
+        "tp": 105
+      },
+      "detector_latency": {
+        "max_ms": 45.1313,
+        "mean_ms": 15.051614062500002,
+        "min_ms": 9.713,
+        "p50_ms": 12.0393,
+        "p95_ms": 31.5094,
+        "samples": 64
+      },
+      "serial_detector_fps": 66.43805746331398
+    },
+    "int8": {
+      "ap50": 0.7973108310907873,
+      "ap50_95": 0.5804365088759305,
+      "operating_point": {
+        "fn": 63,
+        "fp": 6,
+        "ignored": 2,
+        "precision": 0.9411764705882353,
+        "recall": 0.6037735849056604,
+        "tp": 96
+      },
+      "detector_latency": {
+        "max_ms": 25.7563,
+        "mean_ms": 12.536540624999997,
+        "min_ms": 9.5821,
+        "p50_ms": 11.7769,
+        "p95_ms": 17.7208,
+        "samples": 64
+      },
+      "serial_detector_fps": 79.76682163864486
+    }
+  },
+  "limitations": [
+    "Calibration and evaluation images disjoint by ID, byte hash and decoded pixels.",
+    "COCO val2017 subset; pretrained-model independence not claimed. Evaluation set was previously observed.",
+    "Eight-category scene coverage, not representative of all 80 classes or production cameras.",
+    "Single sequential local measurement, not production camera FPS.",
+    "Mixed precision with FP32 I/O and CPU preprocessing/NMS. No automatic deployment."
+  ],
+  "inspector_output_definitions": {
+    "Float": 24,
+    "Int8": 97,
+    "Half": 20
+  },
+  "inspector_sha256": "3fbccbd9d7f77f6560c371a87dda5071d432e40eb574b397ae905bd0742d70ae",
+  "model_sha256": "0ce2a36db63861d17a81866856ee37283a1e18eeb062369352267f3404239781",
+  "manifest_sha256": "b68d404fc44c1ffe133250b80a5848a2272ace28ab69e8ef33e9f1a933235a1b",
+  "gpu": {
+    "build_ms": 805333.3049,
+    "calibration": {
+      "algorithm": "entropy2",
+      "batch_size": 1,
+      "cache_sha256": "6ba8a91370fd9e34227d5c535f2bb3a60b6c113c3a8869b65ca9449505fc2184",
+      "evaluation_manifest_sha256": "b68d404fc44c1ffe133250b80a5848a2272ace28ab69e8ef33e9f1a933235a1b",
+      "images": 128,
+      "manifest_sha256": "57903570b360be60d97984e86e49b21bcef604a2eb59297884334191c7866798"
+    },
+    "class_labels": [
+      "person",
+      "bicycle",
+      "car",
+      "motorcycle",
+      "airplane",
+      "bus",
+      "train",
+      "truck",
+      "boat",
+      "traffic light",
+      "fire hydrant",
+      "stop sign",
+      "parking meter",
+      "bench",
+      "bird",
+      "cat",
+      "dog",
+      "horse",
+      "sheep",
+      "cow",
+      "elephant",
+      "bear",
+      "zebra",
+      "giraffe",
+      "backpack",
+      "umbrella",
+      "handbag",
+      "tie",
+      "suitcase",
+      "frisbee",
+      "skis",
+      "snowboard",
+      "sports ball",
+      "kite",
+      "baseball bat",
+      "baseball glove",
+      "skateboard",
+      "surfboard",
+      "tennis racket",
+      "bottle",
+      "wine glass",
+      "cup",
+      "fork",
+      "knife",
+      "spoon",
+      "bowl",
+      "banana",
+      "apple",
+      "sandwich",
+      "orange",
+      "broccoli",
+      "carrot",
+      "hot dog",
+      "pizza",
+      "donut",
+      "cake",
+      "chair",
+      "couch",
+      "potted plant",
+      "bed",
+      "dining table",
+      "toilet",
+      "tv",
+      "laptop",
+      "mouse",
+      "remote",
+      "keyboard",
+      "cell phone",
+      "microwave",
+      "oven",
+      "toaster",
+      "sink",
+      "refrigerator",
+      "book",
+      "clock",
+      "vase",
+      "scissors",
+      "teddy bear",
+      "hair drier",
+      "toothbrush"
+    ],
+    "compute_major": 8,
+    "compute_minor": 6,
+    "cuda_driver": 13040,
+    "cuda_runtime": 13040,
+    "current_cuda_driver": 13040,
+    "deployment_approved": false,
+    "device": 0,
+    "device_free_after_load_bytes": 5347737600,
+    "device_free_before_load_bytes": 5379194880,
+    "engine_sha256": "b9a7f6bf06fd7b2501f78d30847fc5f44117754ca2c1112a0edd55d224a6baba",
+    "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "gpu_total_bytes": 6441926656,
+    "input": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "io_allocation_bytes": 7737600,
+    "memory_note": "Device-wide free-memory snapshots, not isolated process peak",
+    "model_sha256": "0ce2a36db63861d17a81866856ee37283a1e18eeb062369352267f3404239781",
+    "output": [
+      1,
+      84,
+      8400
+    ],
+    "precision": "int8-mixed",
+    "tensorrt": 101303,
+    "tf32": false,
+    "version": 1,
+    "workspace_limit_bytes": 536870912
+  },
+  "provenance": {
+    "fp16": {
+      "report.json": "71b2d2baa182775536015c392040dc68c3fda6bae166a7d7ec4a21171d14245a",
+      "predictions.json": "27dc49171d56a48ec990ba1481e8eea215b580d9355353c2a1a57634fd81dd52",
+      "reference-validation.json": "502d9018168b38d489c2661a1332eac9688bf8e79a778c396cf0678a5f8f2970"
+    },
+    "int8": {
+      "report.json": "a5d8f57201f6912e14c1504cb240781bb189be8f11ec13a12cb9c5256d58d0bf",
+      "predictions.json": "01610625e8852afe31cd8b7b0367816096b52f1c0407d533f6b6cfc4c212b4a6",
+      "reference-validation.json": "5f02a3c6eb3e0516a4d15dc572589551b9ebb01df14e5592bfed7868b018dc69"
+    }
+  }
+}

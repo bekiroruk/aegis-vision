@@ -21,6 +21,9 @@ int run(const std::vector<std::filesystem::path>& args) {
         auto info=detector.metadata();
         if(info.at("model_sha256")!=aegisvision::evaluation::quality_file_sha256(settings.detector_model))
             throw std::invalid_argument("Engine source differs from CPU reference ONNX");
+        if(info.at("precision")=="int8-mixed" && info.at("calibration").at("evaluation_manifest_sha256")!=
+            aegisvision::evaluation::quality_file_sha256(args[3]))
+            throw std::invalid_argument("INT8 evaluation differs from excluded calibration holdout");
         aegisvision::evaluation::QualityRunConfig config;
         config.provenance={{"model_sha256",info.at("model_sha256")},
             {"config_sha256",aegisvision::evaluation::quality_file_sha256(args[2])},

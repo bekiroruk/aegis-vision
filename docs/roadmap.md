@@ -134,8 +134,13 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    TensorRT FP32 ve FP16 karşılaştırıldı: 64 geliştirme görüntüsünde FP16 p50
    36,78× hızlı, bbox AP kaybı 0,078 puan; resmi COCO kontrolü geçti.
    [Ölçüm ve sınırlar](tensorrt.md). FP16, GPU FP32'den ayrıca hızlı diye sunulmaz.
-   Panel/servis backend seçimi, segmentation/diğer modellerin GPU uyarlaması,
-   temsilî calibration verisiyle INT8 ve GPU Docker imajı hâlâ eksik.
+   [INT8 kalibrasyon/ölçüm adımı](tensorrt-int8.md) de uygulandı: testten ayrı
+   128 sahneyle engine üretildi, ancak AP kaybı 5,53 puan ve p50 hızlanması
+   1,022×; kalite/hız kapısı geçmedi. INT8 desteği var, kabul edilmiş üretim
+   modeli yok. FP16 adayı korunur; aynı testte eşik ayarı yapılmaz.
+   Panel/servis backend seçimi, segmentation/diğer modellerin GPU uyarlaması
+   ve GPU Docker imajı hâlâ eksik. INT8 için Q/DQ/QAT veya farklı temsilî
+   veri deneyi ayrı geliştirme/holdout gerektirir; bu adımda başarı sayılmaz.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,
    throughput ve GPU bellek raporu. CUDA/GPU uyumu doğrulanmadan tamamlandı sayılmaz.
 

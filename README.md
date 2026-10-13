@@ -29,7 +29,10 @@ Gerçek GPU [segmentation fine-tuning deneyi](docs/segmentation-training.md) tam
 İsteğe bağlı [native C++ TensorRT detection](docs/tensorrt.md) RTX 3060'da doğrulandı:
 64 geliştirme sahnesinde CPU tek-thread p50 478,22 ms → GPU FP16 13,00 ms;
 bbox AP50:95 %63,6516 → %63,5736. GPU FP32 de ölçüldü; FP16'nın ona göre ek
-hız kazancı kanıtlanmadı. Bu ayrı CLI/backend'dir; panel varsayılanı, INT8 ve GPU Docker değildir.
+hız kazancı kanıtlanmadı. [INT8 kalibrasyonu da çalıştırıldı](docs/tensorrt-int8.md):
+128 ayrı kalibrasyon görüntüsüyle engine üretildi; 64 sahnede AP50:95 kaybı
+5,53 puan ve p50 hızlanması yalnızca 1,022× olduğu için kabul edilmedi.
+Bu ayrı CLI/backend'dir; panel varsayılanı ve GPU Docker değildir.
 
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce
