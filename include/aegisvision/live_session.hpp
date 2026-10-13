@@ -15,6 +15,7 @@ struct LiveServiceConfig {
     vision::LiveConfig stream;
     vision::VideoConfig tracking;
     vision::LiveArchiveConfig archive;
+    nlohmann::json backend={{"engine","custom"},{"device","unknown"},{"precision","unknown"}};
 };
 using LiveDetectorFactory = std::function<std::unique_ptr<IDetector>()>;
 using LiveSegmenterFactory = std::function<std::unique_ptr<vision::ISegmenter>()>;

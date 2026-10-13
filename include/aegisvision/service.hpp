@@ -26,6 +26,7 @@ struct ServiceConfig {
     std::string ocr_signature;
     vision::IVlm* vlm{}; // Optional local scene captioner; worker-owned use, must outlive service.
     std::string vlm_signature;
+    nlohmann::json detector_backend={{"engine","custom"},{"device","unknown"},{"precision","unknown"}};
 };
 class ArchiveJobBusy : public std::runtime_error {
 public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an active indexing job") {}

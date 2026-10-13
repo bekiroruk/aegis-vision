@@ -3,8 +3,11 @@
 Bu backend mevcut CPU servisini değiştirmez. `TensorRtYoloDetector`, aynı
 `IDetector` arayüzünü ve CPU YOLO adaptöründeki letterbox/NMS kodunu kullanır.
 İlk kapsam **YOLOv8n detection**, statik 640×640, batch 1, 80 COCO sınıfıdır.
-Segmentation, CLIP/OCR/VLM GPU dönüşümü, web panelinde backend seçimi ve
+Segmentation, CLIP/OCR/VLM GPU dönüşümü ve
 GPU Docker bu adımın kapsamında tamamlanmış sayılmaz.
+
+[Servis/panel FP16 seçimi](gpu-service.md) sonraki adımda eklendi. CPU varsayılanı
+korunur; aşağıdaki ilk benchmark kayıtları ayrı CLI koşularına aittir.
 
 Sonraki [INT8 kalibrasyon deneyi](tensorrt-int8.md), ayrı 128 görüntüyle aynı
 backend'i genişletir; aşağıdaki FP16 ölçümleri kendi ilk koşusuna aittir.

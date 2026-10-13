@@ -5,8 +5,26 @@
 #include <charconv>
 #include <algorithm>
 #include <iostream>
+#ifdef AEGISVISION_SERVICE_TENSORRT
+#include "aegisvision/tensorrt.hpp"
+#include "aegisvision/quality_benchmark.hpp"
+#endif
 
 namespace {
+std::unique_ptr<aegisvision::IDetector> server_detector(
+    const aegisvision::vision::ApplicationSettings& settings,const std::filesystem::path& bundle) {
+    if(bundle.empty()) return aegisvision::vision::make_configured_detector(settings);
+#ifdef AEGISVISION_SERVICE_TENSORRT
+    auto detector=std::make_unique<aegisvision::vision::TensorRtYoloDetector>(bundle,settings.detector);
+    const auto info=detector->metadata();
+    if(info.at("precision")!="fp16-mixed") throw std::invalid_argument("Service accepts only FP16-mixed TensorRT engines; INT8 is not approved");
+    if(info.at("model_sha256")!=aegisvision::evaluation::quality_file_sha256(settings.detector_model))
+        throw std::invalid_argument("TensorRT engine source differs from configured ONNX");
+    return detector;
+#else
+    throw std::invalid_argument("This server was built without TensorRT; use a TensorRT-enabled build");
+#endif
+}
 int run(std::vector<std::filesystem::path> args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
@@ -17,6 +35,8 @@ int run(std::vector<std::filesystem::path> args) {
                 "   OCR: --ocr-models BUNDLE_DIR (CRNN EN) OR --ocr-multilingual BUNDLE_DIR (PP-OCRv6 UTF-8).\n"
                 "   VLM: --vlm-port PORT enables queued scene_frame jobs through local llama.cpp.\n"
                 "   Analysis: --analysis-config FILE.toml replaces segmentation/OCR/VLM flags.\n"
+                "   GPU detection: --trt-bundle LOCAL_FP16_BUNDLE (requires TensorRT build; no CPU fallback).\n"
+                "   Applies to file indexing and live detection, not segmentation/OCR/CLIP/VLM.\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
             return 0;
         }
@@ -36,6 +56,10 @@ int run(std::vector<std::filesystem::path> args) {
         auto multilingual_bundle=take_path("--ocr-multilingual");
         auto vlm_port_text=take_path("--vlm-port");
         const auto analysis_file=take_path("--analysis-config");
+        const auto trt_bundle=take_path("--trt-bundle");
+#ifndef AEGISVISION_SERVICE_TENSORRT
+        if(!trt_bundle.empty()) throw std::invalid_argument("This server was built without TensorRT");
+#endif
         int vlm_timeout_ms=60000;
         if(!analysis_file.empty()) {
             if(!segmentation_model.empty()||!ocr_bundle.empty()||!multilingual_bundle.empty()||!vlm_port_text.empty())
@@ -62,13 +86,24 @@ int run(std::vector<std::filesystem::path> args) {
         auto detection = aegisvision::vision::load_application_settings(args[2]);
         if (search.mode != aegisvision::vision::ApplicationMode::Search || detection.mode != aegisvision::vision::ApplicationMode::Image)
             throw std::invalid_argument("Expected search-mode and image-mode TOML configurations");
-        std::cout << "Loading CLIP and YOLO models..." << std::endl;
+        auto detector = server_detector(detection,trt_bundle);
+        nlohmann::json backend={{"engine","opencv-dnn"},{"device","cpu"},{"precision","fp32"}};
+        auto signature=aegisvision::yolo_index_signature(detection.detector_model,detection.detector);
+#ifdef AEGISVISION_SERVICE_TENSORRT
+        if(!trt_bundle.empty()) {
+            const auto info=dynamic_cast<aegisvision::vision::TensorRtYoloDetector&>(*detector).metadata();
+            backend={{"engine","tensorrt"},{"device","cuda:0"},{"precision",info.at("precision")},
+                {"gpu",info.at("gpu")},{"engine_sha256",info.at("engine_sha256")}};
+            // Separate cache/index identities from CPU and from other engine builds.
+            signature="tensorrt-fp16-v1:"+info.at("engine_sha256").get<std::string>()+":"+signature;
+        }
+#endif
+        std::cout << "Detection backend: " << backend.dump() << "\nLoading CLIP..." << std::endl;
         aegisvision::ClipEmbedder clip(search.clip_bundle);
         search.qdrant.embedding_space = clip.space_id();
         aegisvision::QdrantVectorStore store(search.qdrant, true);
-        auto detector = aegisvision::vision::make_configured_detector(detection);
-        aegisvision::ServiceConfig config{args[3], args[4],
-            aegisvision::yolo_index_signature(detection.detector_model, detection.detector)};
+        aegisvision::ServiceConfig config{args[3], args[4],signature};
+        config.detector_backend=backend;
         std::unique_ptr<aegisvision::vision::YoloSegmenter> segmenter;
         std::unique_ptr<aegisvision::vision::IOcr> ocr;
         std::unique_ptr<aegisvision::vision::LocalVlm> vlm;
@@ -110,9 +145,18 @@ int run(std::vector<std::filesystem::path> args) {
             const std::string url(raw.begin(), raw.end());
             aegisvision::vision::validate_rtsp_url(url);
             config.live = {{{"local-pedestrians", "Yerel RTSP yayını", url}}, live.live, live.video};
+            config.live.backend=live_segmentation ? nlohmann::json{{"engine","opencv-dnn"},{"device","cpu"},{"precision","fp32"}} : backend;
             config.live.archive.enabled=true;
             if (args.size()==10) config.archive_encoder.executable=args[9];
-            live_detector = [live] { return aegisvision::vision::make_configured_detector(live); };
+            // Each live worker loads and validates its own context/stream. Never shares queue-worker GPU state.
+            live_detector = [live,trt_bundle,backend] {
+                auto instance=server_detector(live,trt_bundle);
+#ifdef AEGISVISION_SERVICE_TENSORRT
+                if(!trt_bundle.empty() && dynamic_cast<aegisvision::vision::TensorRtYoloDetector&>(*instance).metadata().at("engine_sha256")!=backend.at("engine_sha256"))
+                    throw std::invalid_argument("Live TensorRT engine changed since server startup");
+#endif
+                return instance;
+            };
             if (live_segmentation) live_segmenter=[segmentation_model] {
                 return std::make_unique<aegisvision::vision::YoloSegmenter>(segmentation_model);
             };

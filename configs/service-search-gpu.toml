@@ -1,0 +1,19 @@
+# Separate demonstration collection: existing CPU results stay untouched.
+version = 1
+[pipeline]
+mode = "search"
+[embedding]
+backend = "clip_onnx"
+bundle = "../artifacts/models/clip-vit-b32"
+dimension = 512
+[vector_store]
+backend = "qdrant"
+host = "127.0.0.1"
+port = 6333
+collection = "aegis_service_gpu"
+dimension = 512
+timeout_seconds = 10
+[runtime]
+device = "cpu"
+precision = "fp32"
+engine = "onnxruntime"

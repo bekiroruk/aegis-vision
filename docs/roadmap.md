@@ -138,7 +138,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    128 sahneyle engine üretildi, ancak AP kaybı 5,53 puan ve p50 hızlanması
    1,022×; kalite/hız kapısı geçmedi. INT8 desteği var, kabul edilmiş üretim
    modeli yok. FP16 adayı korunur; aynı testte eşik ayarı yapılmaz.
-   Panel/servis backend seçimi, segmentation/diğer modellerin GPU uyarlaması
+   [Panel/servis FP16 seçimi](gpu-service.md) eklendi: gerçek HTTP dosya indeksleme
+   ve arama, gerçek GPU + fixture capture ile canlı worker izolasyonu doğrulandı.
+   Gerçek RTSP + GPU birleşik test, segmentation/diğer modellerin GPU uyarlaması
    ve GPU Docker imajı hâlâ eksik. INT8 için Q/DQ/QAT veya farklı temsilî
    veri deneyi ayrı geliştirme/holdout gerektirir; bu adımda başarı sayılmaz.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,

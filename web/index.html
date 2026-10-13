@@ -8,10 +8,12 @@
 <main>
 <section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videodaki nesneleri görün.</h1><p>Önce bir kareyi analiz edin: nesneler renkli maskelerle aşağıda görünür. Bunun için videoyu indekslemek gerekmez.</p><div class="demo-actions"><button id="quick-analyze" type="button" disabled>İlk kareyi analiz et</button><a href="#segmentation-heading">Maske sonucuna git</a><a href="#result-title">Arama sonuçlarına git</a></div><p class="hint">Önceki analizler bu video için otomatik açılır. Yeni bir iş gönderirseniz işlem sırasını aşağıdan izleyin.</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
+<p id="detector-backend" class="hint" role="status">Nesne tespiti motoru kontrol ediliyor…</p>
 <p class="demo-actions"><a href="#video-heading">Videonun tamamını maskeli ve takip numaralı işle →</a></p>
 <p id="queue-status" role="status" aria-live="polite"></p>
 <section id="live-panel" class="panel live-panel" aria-labelledby="live-heading" hidden>
 <div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
+<p id="live-backend" class="hint">Canlı analiz motoru kontrol ediliyor…</p>
 <div class="live-workspace"><div class="live-view"><img id="live-image" alt="Canlı yayındaki nesne tespitleri ve takip kimlikleri" hidden><div id="live-placeholder" class="live-placeholder">Yapılandırılmış kaynağı başlatın.</div></div>
 <div class="live-controls"><label for="live-source">Sunucuda tanımlanan kaynak</label><select id="live-source"></select><label class="archive-opt-in" for="live-archive"><input id="live-archive" type="checkbox" disabled><span>Kaydet ve arşivde ara</span></label><p id="archive-help" class="hint">Arşiv kullanılabilirliği kontrol ediliyor.</p><div class="live-buttons"><button id="live-start" type="button" disabled>Canlı analizi başlat</button><button id="live-stop" type="button" class="secondary" disabled>Durdur</button></div>
 <div id="live-metrics" class="live-metrics" aria-live="polite"></div><p id="live-help" class="hint">Yaklaşık 2 kez/sn yenilenen analiz önizlemesi; sesli/tam hızlı video yayını değildir.</p><p class="hint">Eski kareler biriktirilmez. Kopma sonrası takip kimlikleri yeni oturuma aittir. Görüntü yaşı decode'dan ölçülür; kamera gecikmesi değildir.</p></div></div>

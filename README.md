@@ -32,7 +32,9 @@ bbox AP50:95 %63,6516 → %63,5736. GPU FP32 de ölçüldü; FP16'nın ona göre
 hız kazancı kanıtlanmadı. [INT8 kalibrasyonu da çalıştırıldı](docs/tensorrt-int8.md):
 128 ayrı kalibrasyon görüntüsüyle engine üretildi; 64 sahnede AP50:95 kaybı
 5,53 puan ve p50 hızlanması yalnızca 1,022× olduğu için kabul edilmedi.
-Bu ayrı CLI/backend'dir; panel varsayılanı ve GPU Docker değildir.
+[Servis/panelde isteğe bağlı FP16 seçimi](docs/gpu-service.md) eklendi; CPU
+varsayılanı korunur. Gerçek GPU dosya indeksleme/arama ve fixture kaynaklı
+canlı worker doğrulandı; gerçek RTSP + GPU birleşik testi ve GPU Docker hâlâ eksik.
 
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce

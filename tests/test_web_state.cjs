@@ -56,7 +56,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[]} = {}) {
+function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[],backend,liveBackend,liveMode='detection'} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[...initialJobs];
   const get = id => {
@@ -69,8 +69,8 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, v
   const fetch = async (pathname,options = {}) => {
     calls.push({pathname,body:options.body ? JSON.parse(options.body) : undefined});
     let data;
-    if (pathname === '/api/health') data = {video_analysis_enabled:video,segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
-    else if (pathname === '/api/live/sources') data = {sources:[],archive_available:true,archive_config:catalog.config};
+    if (pathname === '/api/health') data = {detector_backend:backend,video_analysis_enabled:video,segmentation_enabled:segmentation,ocr_enabled:ocr,ocr_unicode:ocrUnicode,vlm_enabled:vlm};
+    else if (pathname === '/api/live/sources') data = {backend:liveBackend,analysis_mode:liveMode,sources:[],archive_available:true,archive_config:catalog.config};
     else if (pathname === '/api/live') data = {session:null};
     else if (pathname === '/api/live/archive') data = catalog;
     else if (pathname === '/api/jobs' && options.body) {
@@ -304,6 +304,14 @@ async function videoPanel() {
   assert.equal(malicious.get('video-result').hidden,true);assert.equal(malicious.get('video-download').hidden,true);
 }
 (async () => {
+  const gpu={engine:'tensorrt',device:'cuda:0',precision:'fp16-mixed'};
+  const cpu={engine:'opencv-dnn',device:'cpu',precision:'fp32'};
+  const mixed=harness({backend:gpu,liveBackend:cpu,liveMode:'segmentation'});await mixed.started;
+  assert.match(mixed.get('detector-backend').textContent,/GPU · TensorRT FP16/);
+  assert.match(mixed.get('live-backend').textContent,/maskeleme: CPU/);
+  const unsupported=harness({backend:{...gpu,precision:'int8-mixed'}});await unsupported.started;
+  assert.match(unsupported.get('detector-backend').textContent,/Motor bilgisi yok/);
+  console.log('Backend UI passed: separate file/live engines, CPU masks and no false INT8 GPU claim.');
   await videoPanel();console.log('Video UI passed: submission, progress, encoding, playback URL, download, cancel, failure, restore, stale source and invalid ID.');
   await visibleResultsOnReload();
   console.log('First-use UI passed: restored results, hidden inactive panels, queue explanation, quick analysis.');

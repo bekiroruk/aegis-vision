@@ -374,6 +374,7 @@ void LocalService::routes() {
     http_.Get("/api/health", [this](const auto&, auto& response) {
         const auto error = jobs_.storage_error();
         reply(response, {{"status", error.empty() ? "ready" : "storage_error"}, {"worker_count", 1}, {"queue_capacity", config_.max_pending},
+            {"detector_backend",config_.detector_backend},
             {"history_capacity", config_.max_retained}, {"history_persistent", !config_.persistence.database.empty()},
             {"segmentation_enabled", config_.segmenter != nullptr}, {"ocr_enabled",config_.ocr != nullptr},
             {"video_analysis_enabled",config_.segmenter != nullptr}, {"video_analysis_max_frames",1000},

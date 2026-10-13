@@ -77,6 +77,7 @@ void http_checks(const std::filesystem::path& root,bool masks=false) {
     FileDetector detector; Embedder embedder; Store store;
     ServiceConfig config{root, std::filesystem::path(__FILE__).parent_path().parent_path() / "web", "fixture"};
     config.live.sources = {{"test", "Test source", "rtsp://127.0.0.1/preset-only"}};
+    config.live.backend={{"engine","test-isolated-live"},{"device","fixture"},{"precision","fixture"}};
     config.live.stream.duration_seconds = 20; config.live.stream.max_outage_ms = 5000;
     config.live.stream.read_timeout_ms = 5000;
     config.live.stream.reconnect_initial_ms = 10; config.live.stream.reconnect_max_ms = 20;
@@ -91,6 +92,7 @@ void http_checks(const std::filesystem::path& root,bool masks=false) {
     httplib::Client client("127.0.0.1",port); client.set_read_timeout(10);
     until([&] { auto r = client.Get("/api/health"); return r && r->status == 200; });
     const auto presets = json(client.Get("/api/live/sources"));
+    require(presets.at("backend")==config.live.backend,"Live backend metadata lost");
     require(presets.at("analysis_mode")== (masks ? "segmentation" : "detection"),"Wrong advertised live mode");
     require(presets.at("sources").size() == 1 && presets.dump().find("rtsp://") == std::string::npos,
         "Source URL leaked through API");
@@ -101,6 +103,7 @@ void http_checks(const std::filesystem::path& root,bool masks=false) {
     (void)json(client.Post("/api/live/start", R"({"source_id":"unknown"})", "application/json"),400);
     (void)json(client.Post("/api/live/start", "[1]", "application/json"),400);
     const auto accepted = json(client.Post("/api/live/start", R"({"source_id":"test"})", "application/json"),202);
+    require(accepted.at("backend")==config.live.backend,"Live session backend metadata differs");
     const std::string id = accepted.at("id");
     (void)json(client.Post("/api/live/start", R"({"source_id":"test"})", "application/json"),409);
     const auto current = [&] { return json(client.Get("/api/live")).at("session"); };

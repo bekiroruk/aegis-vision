@@ -159,6 +159,7 @@ std::string http_checks(const fs::path& root) {
     httplib::Client client("127.0.0.1", port); client.set_connection_timeout(2); client.set_read_timeout(10);
     until([&] { const auto result = client.Get("/api/health"); return result && result->status == 200; });
     require(response(client.Get("/api/health")).at("history_persistent") == true, "HTTP persistence disabled");
+    require(response(client.Get("/api/health")).at("detector_backend").at("engine")=="custom","Unknown fixture mislabeled as CPU/GPU");
     require(response(client.Get("/api/health")).at("segmentation_enabled") == true,"Segmentation capability missing");
     require(response(client.Get("/api/health")).at("ocr_enabled")==true,"OCR capability missing");
     require(response(client.Get("/api/health")).at("vlm_enabled")==true,"VLM capability missing");

@@ -1,5 +1,10 @@
 const $ = id => document.getElementById(id);
 const terminal = state => ['succeeded', 'failed', 'cancelled'].includes(state);
+function backendText(backend) {
+  if (backend?.engine === 'tensorrt' && backend.device === 'cuda:0' && backend.precision === 'fp16-mixed') return 'GPU · TensorRT FP16';
+  if (backend?.engine === 'opencv-dnn' && backend.device === 'cpu' && backend.precision === 'fp32') return 'CPU · OpenCV FP32';
+  return 'Motor bilgisi yok';
+}
 const stateText = {queued:'Sırada',running:'Çalışıyor',succeeded:'Tamamlandı',failed:'Hata',cancelled:'İptal edildi'};
 let displayedSearch = '', polling = false;
 let liveSession = null, livePolling = false, liveSequence = '', liveObjectUrl = '', liveEnabled = false, liveAction = false, liveRevision = 0, liveExpiresAt = 0;
@@ -171,6 +176,7 @@ function hideLive(text) {
 }
 function showLive(session) {
   liveSession = session;
+  if (session) $('live-backend').textContent = `Canlı ${session.analysis_mode === 'segmentation' ? 'maskeleme' : 'nesne tespiti'}: ${backendText(session.backend)}`;
   const active = !!session?.active;
   $('live-start').disabled = !liveEnabled || active || liveAction;
   $('live-stop').disabled = !active || !!session?.cancel_requested || liveAction;
@@ -427,11 +433,12 @@ async function refresh() {
   try {
     const data = await api('/api/jobs'); showJobs(data.jobs);
     const health=await api('/api/health');segmentationEnabled=health.segmentation_enabled===true;syncSegmentation();
+    $('detector-backend').textContent = `Dosya/arşiv nesne tespiti: ${backendText(health.detector_backend)} · Maskeleme, OCR ve arama motorundan bağımsızdır.`;
     videoEnabled=health.video_analysis_enabled===true;syncVideo();
     ocrEnabled=health.ocr_enabled===true;ocrUnicode=health.ocr_unicode===true;syncOcr();
     sceneEnabled=health.vlm_enabled===true;syncScene();
     $('health').textContent = activeJobs.length ? `● Servis çalışıyor · ${activeJobs.length} iş` : '● Servis hazır';
-  } catch(error) { videoEnabled=false;syncVideo();segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
+  } catch(error) { $('detector-backend').textContent='Nesne tespiti motoru doğrulanamıyor — servis bağlantısı yok.';videoEnabled=false;syncVideo();segmentationEnabled=false;syncSegmentation();ocrEnabled=false;syncOcr();sceneEnabled=false;syncScene();$('health').textContent = 'Servise ulaşılamıyor'; notice(error.message); }
   finally { polling = false; }
 }
 $('index-form').addEventListener('submit',async event => {
@@ -516,6 +523,7 @@ async function start() {
   try {
     await api('/api/health');
     const live = await api('/api/live/sources');
+    $('live-backend').textContent = `Canlı ${live.analysis_mode === 'segmentation' ? 'maskeleme' : 'nesne tespiti'}: ${backendText(live.backend)}`;
     live.sources.forEach(source => { const option = element('option',source.label); option.value = source.id; $('live-source').append(option); });
     liveEnabled = live.sources.length > 0;
     $('live-panel').hidden=!liveEnabled;
