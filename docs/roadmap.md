@@ -95,7 +95,11 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    ancak kaçırma ve küçük nesne başarısı geriledi; aday yayına alınmadı.
    Daha geniş fine-tuning, metric learning, tam ByteTrack ve appearance ablation/kalibrasyonunu genişlet. Mevcut
    Kalman backend resmi ByteTrack değildir; canlıda zaman-adımı desteği de gerekir. Çoklu kamera için
-   zaman eşleme ve kamera bazlı ID alanları gerekir. Kabul: baseline karşılaştırması
+   doğrulanmış zaman eşleme gerekir.
+   İlk [çevrimdışı çoklu-kamera ilişkilendirme](multicamera.md) çekirdeği/CLI'ı
+   kamera-epoch-ID alanı, yön/süre kapıları ve çift yönlü belirsizlik reddiyle eklendi;
+   sentetik sözleşme testleri geçti. Gerçek iki-kamera veri/saat eşleme, tracklet
+   çıkarımı ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 
 3. **Segmentation, OCR ve VLM.** İlk C++ segmentation adaptörü, ayrı video CLI'ı

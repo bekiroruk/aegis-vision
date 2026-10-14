@@ -20,7 +20,7 @@ nitelikler kod yazarak tamamlanamaz.
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
 | Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI kontrolü | Redis dağıtık worker/lease yok; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |
-| Çoklu kamera/Re-ID | OSNet görünüşü ve yerel tek-video association deneyleri | Kamera zaman eşleme, kamera alanları ve global Re-ID eksik |
+| Çoklu kamera/Re-ID | OSNet tek-video deneyleri; kamera/epoch alanlı çevrimdışı eşleştirme çekirdeği ve CLI | Gerçek tracklet çıkarımı, saat eşleme, etiketli çoklu-kamera ölçümü ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |
 | Triton/Jetson | Doğrulanmış deployment yok | Uygun ortam/donanım ve gerçek ölçüm gerekli |
 | Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI ve hazır kurulum demosu | Sıfır makine kurulumu, lisans notlarının son kontrolü, kısa demo videosu |

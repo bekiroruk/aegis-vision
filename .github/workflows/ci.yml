@@ -89,6 +89,8 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract
         run: ctest --test-dir build --output-on-failure
+      - name: Offline multicamera CLI contract (synthetic, no model)
+        run: python3 scripts/test_multicamera_cli.py build/aegisvision_multicamera
       - name: Repeat live archive concurrency contract
         timeout-minutes: 3
         run: ctest --test-dir build -R '^aegisvision_archive_service$' --repeat until-fail:20 --output-on-failure

@@ -20,6 +20,10 @@ Kullanım ve ilk kurulum sınırları: [tek komutluk demo](docs/demo.md).
 [HTTP API/OpenAPI sözleşmesi](docs/api.md): iş gönderme, sonuç/iptal, canlı oturum,
 arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sınır uyumunu denetler.
 
+[Deneysel çoklu-kamera eşleştirme](docs/multicamera.md): kapanmış takip parçaları
+için C++ çekirdek/CLI, kamera-epoch alanları ve belirsizlik reddi. Henüz gerçek
+iki-kamera doğruluk testi, saat senkronizasyonu veya canlı entegrasyon değildir.
+
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.

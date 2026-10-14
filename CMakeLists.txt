@@ -13,6 +13,7 @@ add_library(aegisvision
     src/evaluation.cpp
     src/geometry.cpp
     src/kalman_tracker.cpp
+    src/multicamera.cpp
     src/pipeline.cpp
     src/tracking.cpp
     src/tracking_evaluation.cpp
@@ -52,6 +53,9 @@ if(AEGISVISION_BUILD_TESTS)
     add_executable(aegisvision_tracking_evaluation_tests tests/test_tracking_evaluation.cpp)
     target_link_libraries(aegisvision_tracking_evaluation_tests PRIVATE aegisvision)
     add_test(NAME aegisvision_tracking_evaluation COMMAND aegisvision_tracking_evaluation_tests)
+    add_executable(aegisvision_multicamera_tests tests/test_multicamera.cpp)
+    target_link_libraries(aegisvision_multicamera_tests PRIVATE aegisvision)
+    add_test(NAME aegisvision_multicamera COMMAND aegisvision_multicamera_tests)
 endif()
 
 install(TARGETS aegisvision aegisvision_demo)
