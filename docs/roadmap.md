@@ -100,7 +100,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    kamera-epoch-ID alanı, yön/süre kapıları ve çift yönlü belirsizlik reddiyle eklendi;
    sentetik sözleşme testleri geçti. [C++ video tracklet çıkarıcı](person-tracklets.md),
    OSNet prototipleri ve açık saat eşleme beyanıyla CLI aktarımı eklendi.
-   Gerçek iki-kamera veri/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
+   [WILDTRACK iki-view görünüm teşhisi](crossview-evaluation.md) yapıldı: GT kutularda
+   Rank-1 %25,52 ve mevcut eşikte sıfır kabul; aday kalite açısından kabul edilmedi.
+   Non-overlap iki-kamera geçişi/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 
 3. **Segmentation, OCR ve VLM.** İlk C++ segmentation adaptörü, ayrı video CLI'ı

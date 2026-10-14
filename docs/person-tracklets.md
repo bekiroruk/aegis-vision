@@ -125,4 +125,7 @@ kapanış, ID tekrarları, kapasite, boş kare ve kötü özellikleri kapsar.
 Bridge testleri gerçek iki CLI'ı **sentetik** exportlarla birbirine bağlar;
 bu testler model doğruluğunu ölçmez. Etiketli senkronize çoklu kamera veriyle
 geliştirme/holdout ölçümü, eşik kalibrasyonu ve canlı/UI entegrasyonu açık iştir.
+İlk [gerçek iki-view görünüm teşhisi](crossview-evaluation.md) eklendi; GT kutularda
+Rank-1 %25,52 ve sıfır kabul ile mevcut model/eşik uygun bulunmadı. Tracklet
+geçiş doğruluğu değil, kişi temsili için ayrı bir teşhis deneyidir.
 Kişi özelliklerini içeren gerçek çıktılar yerelde `outputs/` altında, Git dışında tutulur.

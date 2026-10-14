@@ -7,6 +7,9 @@ Gerçek yerel videodan [C++ tracklet/prototip çıkarımı](person-tracklets.md)
 açık saat eşleme beyanıyla bu CLI'a aktarım eklendi. Canlı iki-kamera capture,
 saat senkronizasyonu veya gerçek çoklu-kamera doğruluk değerlendirmesi tamamlanmadı.
 Mevcut tek-video/HTTP/GPU demo davranışı değiştirilmedi.
+İlk [aynı-an iki-view görünüm teşhisi](crossview-evaluation.md) ayrıca yapıldı;
+GT kutularıyla Rank-1 %25,52 ve sıfır kabul, mevcut OSNet/eşiğin bu kamera
+çiftinde yetersiz olduğunu gösterdi. Bu teşhis temporal handoff doğruluğu değildir.
 
 ## Giriş sözleşmesi
 

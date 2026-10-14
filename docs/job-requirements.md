@@ -20,7 +20,7 @@ nitelikler kod yazarak tamamlanamaz.
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
 | Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI kontrolü | Redis dağıtık worker/lease yok; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |
-| Çoklu kamera/Re-ID | OSNet tek-video deneyleri; gerçek videodan C++ kişi tracklet/prototip çıkarımı ve çevrimdışı eşleştirmeye aktarım | Doğrulanmış saat eşleme, etiketli çoklu-kamera ölçümü ve canlı entegrasyon eksik |
+| Çoklu kamera/Re-ID | C++ tracklet/prototip çıkarımı ve aktarım; WILDTRACK iki-view GT-kutu teşhisi: Rank-1 %25,52, sıfır kabul | Görünüm kalitesi yetersiz; geliştirme/holdout kalibrasyonu, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |
 | Triton/Jetson | Doğrulanmış deployment yok | Uygun ortam/donanım ve gerçek ölçüm gerekli |
 | Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI ve hazır kurulum demosu | Sıfır makine kurulumu, lisans notlarının son kontrolü, kısa demo videosu |

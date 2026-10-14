@@ -22,10 +22,14 @@ arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sı
 
 [Deneysel çoklu-kamera eşleştirme](docs/multicamera.md): kapanmış takip parçaları
 için C++ çekirdek/CLI, kamera-epoch alanları ve belirsizlik reddi. Henüz gerçek
-iki-kamera doğruluk testi, saat senkronizasyonu veya canlı entegrasyon değildir.
+uçtan uca iki-kamera doğruluk testi, saat senkronizasyonu veya canlı entegrasyon değildir.
 
 [Gerçek videodan kişi takip parçaları](docs/person-tracklets.md): C++ YOLO + OSNet,
 ID etiketli video, 512 boyutlu kişi prototipleri ve açık saat eşlemeli CLI aktarımı.
+
+[Gerçek iki-kamera görünüm testi](docs/crossview-evaluation.md): WILDTRACK C1→C2,
+342 sorgu; karşılığı bulunan 286 sorguda Rank-1 %25,52. Mevcut eşik hiçbir
+eşleşmeyi kabul etmedi; aday bu sonuçla üretime uygun sayılmıyor.
 
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;

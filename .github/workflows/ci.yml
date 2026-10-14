@@ -85,6 +85,8 @@ jobs:
         run: python3 scripts/test_int8.py
       - name: Re-ID export helper tests (no downloads or torch)
         run: python3 scripts/test_reid_export.py
+      - name: Cross-camera dataset preparation tests (no downloads)
+        run: python3 scripts/test_crossview_data.py
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract
@@ -93,6 +95,8 @@ jobs:
         run: python3 scripts/test_multicamera_cli.py build/aegisvision_multicamera
       - name: Tracklet export bridge contract (synthetic, no model)
         run: python3 scripts/test_tracklets_cli.py build/aegisvision_tracklets build/aegisvision_multicamera
+      - name: Cross-camera evaluator input contract (no model)
+        run: python3 scripts/test_crossview_cli.py build/aegisvision_crossview
       - name: Repeat live archive concurrency contract
         timeout-minutes: 3
         run: ctest --test-dir build -R '^aegisvision_archive_service$' --repeat until-fail:20 --output-on-failure

@@ -9,6 +9,7 @@ option(AEGISVISION_WITH_TENSORRT "Build optional native CUDA/TensorRT YOLO detec
 add_library(aegisvision
     src/adapters.cpp
     src/assignment.cpp
+    src/crossview.cpp
     src/domain.cpp
     src/evaluation.cpp
     src/geometry.cpp
@@ -56,6 +57,9 @@ if(AEGISVISION_BUILD_TESTS)
     add_executable(aegisvision_multicamera_tests tests/test_multicamera.cpp)
     target_link_libraries(aegisvision_multicamera_tests PRIVATE aegisvision)
     add_test(NAME aegisvision_multicamera COMMAND aegisvision_multicamera_tests)
+    add_executable(aegisvision_crossview_tests tests/test_crossview.cpp)
+    target_link_libraries(aegisvision_crossview_tests PRIVATE aegisvision)
+    add_test(NAME aegisvision_crossview COMMAND aegisvision_crossview_tests)
 endif()
 
 install(TARGETS aegisvision aegisvision_demo)
