@@ -1,0 +1,2670 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "AegisVision local C++ API",
+    "version": "0.1.0",
+    "description": "Local-only service, no authentication/TLS. Do not expose publicly. Host must be localhost:<port> or 127.0.0.1:<port>; Origin, if present, must equal http://Host. POST requires application/json, maximum 8192 bytes. One finite-job worker; live sessions are separate and nonpersistent. Models/features vary: inspect /api/health. Schemas describe the contract, not runtime schema enforcement. No file-upload endpoint."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same origin as this document (8090 CPU or configured port)"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Read capabilities and queue storage health",
+        "responses": {
+          "200": {
+            "description": "Health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/health",
+        "description": "Not a fresh Qdrant, GPU, decoder or VLM readiness probe."
+      }
+    },
+    "/api/media": {
+      "get": {
+        "operationId": "listMedia",
+        "summary": "List top-level local video files",
+        "responses": {
+          "200": {
+            "description": "Media",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Media"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/media"
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "operationId": "listJobs",
+        "summary": "List retained jobs, newest first",
+        "responses": {
+          "200": {
+            "description": "Jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Jobs"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/jobs"
+      },
+      "post": {
+        "operationId": "submitJob",
+        "summary": "Enqueue finite analysis or search",
+        "responses": {
+          "202": {
+            "description": "Job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Job status URL"
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "2 seconds"
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 8192 bytes; framework response, not necessarily JSON."
+          }
+        },
+        "x-cpp-route": "/api/jobs",
+        "description": "202 is acceptance, not completion. Requires enabled model. Paths stay inside media_root; no uploads or URLs. Poll job state. max_frames=0 means all subject to job-specific limits.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "operationId": "getJob",
+        "summary": "Read job status/result",
+        "responses": {
+          "200": {
+            "description": "Job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/jobs/([0-9]+-[0-9]+)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelJob",
+        "summary": "Request cooperative cancellation",
+        "responses": {
+          "200": {
+            "description": "Job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 8192 bytes; framework response, not necessarily JSON."
+          }
+        },
+        "x-cpp-route": "/api/jobs/([0-9]+-[0-9]+)/cancel",
+        "description": "Send {} with application/json. Body is ignored by this endpoint. Completed writes are not rolled back; terminal jobs remain terminal.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/live/sources": {
+      "get": {
+        "operationId": "liveSources",
+        "summary": "Read configured presets and source provenance",
+        "responses": {
+          "200": {
+            "description": "Sources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sources"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/live/sources"
+      }
+    },
+    "/api/live": {
+      "get": {
+        "operationId": "liveStatus",
+        "summary": "Read active or last session",
+        "responses": {
+          "200": {
+            "description": "LiveStatus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/live"
+      }
+    },
+    "/api/live/start": {
+      "post": {
+        "operationId": "startLive",
+        "summary": "Start one nonpersistent analysis session",
+        "responses": {
+          "202": {
+            "description": "LiveSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveSession"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 8192 bytes; framework response, not necessarily JSON."
+          }
+        },
+        "x-cpp-route": "/api/live/start",
+        "description": "Select server preset ID only. source_kind=file_replay is a local demo, not RTSP evidence. No source URL/path in request.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveStart"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/live/{id}/stop": {
+      "post": {
+        "operationId": "stopLive",
+        "summary": "Request session stop",
+        "responses": {
+          "202": {
+            "description": "LiveSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveSession"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 8192 bytes; framework response, not necessarily JSON."
+          }
+        },
+        "x-cpp-route": "/api/live/(live-[0-9]+-[0-9]+)/stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^live-[0-9]+-[0-9]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/live/archive": {
+      "get": {
+        "operationId": "listArchive",
+        "summary": "List sealed analysis-frame clips",
+        "responses": {
+          "200": {
+            "description": "ArchiveCatalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveCatalog"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/live/archive"
+      }
+    },
+    "/api/live/archive/index": {
+      "post": {
+        "operationId": "indexArchive",
+        "summary": "Retry indexing one sealed archive segment",
+        "responses": {
+          "202": {
+            "description": "Job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "2 seconds"
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 8192 bytes; framework response, not necessarily JSON."
+          }
+        },
+        "x-cpp-route": "/api/live/archive/index",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveIndex"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/live/{id}/preview.jpg": {
+      "get": {
+        "operationId": "livePreview",
+        "summary": "Read current shared JPEG",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "image/jpeg": {}
+            },
+            "headers": {
+              "X-Live-Sequence": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "X-Live-Sequence"
+              },
+              "X-Live-Source-Session": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "X-Live-Source-Session"
+              },
+              "X-Live-Epoch": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "X-Live-Epoch"
+              },
+              "X-Decode-Age-Ms": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "X-Decode-Age-Ms"
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No current frame, stopped, disconnected or decode-arrival age exceeds 2 seconds. Empty body; clear stale UI."
+          }
+        },
+        "x-cpp-route": "/api/live/(live-[0-9]+-[0-9]+)/preview.jpg",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^live-[0-9]+-[0-9]+$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/preview/{id}/{index}.jpg": {
+      "get": {
+        "operationId": "searchPreview",
+        "summary": "Render a completed search result",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "image/jpeg": {}
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-cpp-route": "/api/preview/([0-9]+-[0-9]+)/([0-9]+)\\.jpg",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      }
+    },
+    "/media/{path}": {
+      "get": {
+        "operationId": "mediaVideo",
+        "summary": "Read a permitted local video",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "video/*": {}
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Byte range content; multiple ranges may use multipart/byteranges.",
+            "content": {
+              "video/*": {},
+              "multipart/byteranges": {}
+            }
+          },
+          "416": {
+            "description": "Unsatisfiable range; framework response."
+          }
+        },
+        "x-cpp-route": "/media/(.+)",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Relative media path; encode each segment. Nested archive clip paths supported; no traversal."
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{id}/video.mp4": {
+      "get": {
+        "operationId": "analysis_video_mp4",
+        "summary": "Read completed segment_video output: video.mp4",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "video/mp4": {}
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Byte range content; multiple ranges may use multipart/byteranges.",
+            "content": {
+              "video/mp4": {},
+              "multipart/byteranges": {}
+            }
+          },
+          "416": {
+            "description": "Unsatisfiable range; framework response."
+          }
+        },
+        "x-cpp-route": "/api/jobs/([0-9]+-[0-9]+)/(video\\.mp4|tracks\\.csv|preview\\.jpg)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Presence forces attachment. CSV always downloads."
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{id}/tracks.csv": {
+      "get": {
+        "operationId": "analysis_tracks_csv",
+        "summary": "Read completed segment_video output: tracks.csv",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "text/csv": {}
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Byte range content; multiple ranges may use multipart/byteranges.",
+            "content": {
+              "text/csv": {},
+              "multipart/byteranges": {}
+            }
+          },
+          "416": {
+            "description": "Unsatisfiable range; framework response."
+          }
+        },
+        "x-cpp-route": "/api/jobs/([0-9]+-[0-9]+)/(video\\.mp4|tracks\\.csv|preview\\.jpg)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Presence forces attachment. CSV always downloads."
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{id}/preview.jpg": {
+      "get": {
+        "operationId": "analysis_preview_jpg",
+        "summary": "Read completed segment_video output: preview.jpg",
+        "responses": {
+          "200": {
+            "description": "Binary or CSV content",
+            "content": {
+              "image/jpeg": {}
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Byte range content; multiple ranges may use multipart/byteranges.",
+            "content": {
+              "image/jpeg": {},
+              "multipart/byteranges": {}
+            }
+          },
+          "416": {
+            "description": "Unsatisfiable range; framework response."
+          }
+        },
+        "x-cpp-route": "/api/jobs/([0-9]+-[0-9]+)/(video\\.mp4|tracks\\.csv|preview\\.jpg)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+-[0-9]+$"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Presence forces attachment. CSV always downloads."
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      "Backend": {
+        "type": "object",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "precision": {
+            "type": "string"
+          },
+          "gpu": {
+            "type": "string"
+          },
+          "engine_sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "device",
+          "precision"
+        ],
+        "additionalProperties": true
+      },
+      "Empty": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "IndexVideo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "index_video"
+          },
+          "path": {
+            "type": "string"
+          },
+          "stride": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000,
+            "default": 15
+          },
+          "max_frames": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "default": 0
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "SegmentVideo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "segment_video"
+          },
+          "path": {
+            "type": "string"
+          },
+          "max_frames": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 0
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "FrameAnalysis": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "segment_frame",
+              "ocr_frame",
+              "scene_frame"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "frame_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 0
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Search": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "search"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "[^ \\r\\n\\t]",
+            "description": "Server limit is 1024 UTF-8 BYTES, not characters. Whitespace-only rejected.",
+            "x-max-utf8-bytes": 1024
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          },
+          "scope": {
+            "enum": [
+              "all",
+              "live"
+            ],
+            "default": "all"
+          }
+        },
+        "required": [
+          "type",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "JobRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/IndexVideo"
+          },
+          {
+            "$ref": "#/components/schemas/SegmentVideo"
+          },
+          {
+            "$ref": "#/components/schemas/FrameAnalysis"
+          },
+          {
+            "$ref": "#/components/schemas/Search"
+          }
+        ]
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9]+-[0-9]+$"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "request": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": true
+          },
+          "progress": {
+            "type": "object"
+          },
+          "created_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recoveries": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "result": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Type-specific result; see result schemas."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "request",
+          "progress",
+          "created_ms",
+          "updated_ms",
+          "cancel_requested",
+          "attempts",
+          "recoveries",
+          "result",
+          "error"
+        ],
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "index_video"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/IndexResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "index_live_archive"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/IndexResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "search"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "segment_frame"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/SegmentResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "ocr_frame"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/OcrResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "scene_frame"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/SceneResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "segment_video"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "state",
+                "request"
+              ],
+              "additionalProperties": true
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/VideoResult"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "additionalProperties": true
+            }
+          }
+        ]
+      },
+      "Jobs": {
+        "type": "object",
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          }
+        },
+        "required": [
+          "jobs"
+        ],
+        "additionalProperties": true
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "ready",
+              "storage_error"
+            ]
+          },
+          "worker_count": {
+            "const": 1
+          },
+          "queue_capacity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "history_capacity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "history_persistent": {
+            "type": "boolean"
+          },
+          "detector_backend": {
+            "$ref": "#/components/schemas/Backend"
+          },
+          "segmentation_enabled": {
+            "type": "boolean"
+          },
+          "video_analysis_enabled": {
+            "type": "boolean"
+          },
+          "video_analysis_max_frames": {
+            "const": 1000
+          },
+          "ocr_enabled": {
+            "type": "boolean"
+          },
+          "ocr_unicode": {
+            "type": "boolean"
+          },
+          "vlm_enabled": {
+            "type": "boolean"
+          },
+          "storage_error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "worker_count",
+          "queue_capacity",
+          "history_capacity",
+          "history_persistent",
+          "detector_backend",
+          "segmentation_enabled",
+          "video_analysis_enabled",
+          "video_analysis_max_frames",
+          "ocr_enabled",
+          "ocr_unicode",
+          "vlm_enabled",
+          "storage_error"
+        ],
+        "additionalProperties": true
+      },
+      "Media": {
+        "type": "object",
+        "properties": {
+          "videos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "videos"
+        ],
+        "additionalProperties": true
+      },
+      "ArchiveConfig": {
+        "type": "object",
+        "properties": {
+          "segment_seconds": {
+            "type": "number"
+          },
+          "max_segments_per_session": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_total_segments": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "segment_seconds",
+          "max_segments_per_session",
+          "max_total_segments",
+          "max_bytes"
+        ],
+        "additionalProperties": true
+      },
+      "Sources": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "max_active": {
+            "const": 1
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "backend": {
+            "$ref": "#/components/schemas/Backend"
+          },
+          "source_kind": {
+            "enum": [
+              "rtsp",
+              "file_replay"
+            ]
+          },
+          "analysis_mode": {
+            "enum": [
+              "detection",
+              "segmentation"
+            ]
+          },
+          "tracker": {
+            "type": "string"
+          },
+          "preview_max_age_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "persistent": {
+            "const": false
+          },
+          "archive_available": {
+            "type": "boolean"
+          },
+          "archive_config": {
+            "$ref": "#/components/schemas/ArchiveConfig"
+          }
+        },
+        "required": [
+          "sources",
+          "max_active",
+          "duration_seconds",
+          "backend",
+          "source_kind",
+          "analysis_mode",
+          "tracker",
+          "preview_max_age_ms",
+          "persistent",
+          "archive_available",
+          "archive_config"
+        ],
+        "additionalProperties": true
+      },
+      "LiveStart": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "archive": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "source_id"
+        ],
+        "additionalProperties": false
+      },
+      "ArchiveIndex": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "pattern": "^live-[0-9]+-[0-9]+$"
+          },
+          "segment_index": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        },
+        "required": [
+          "session_id",
+          "segment_index"
+        ],
+        "additionalProperties": false
+      },
+      "LiveSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^live-[0-9]+-[0-9]+$"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "rtsp",
+              "file_replay"
+            ]
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "completed",
+              "failed"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "backend": {
+            "$ref": "#/components/schemas/Backend"
+          },
+          "analysis_mode": {
+            "enum": [
+              "detection",
+              "segmentation"
+            ]
+          },
+          "connection_state": {
+            "enum": [
+              "connecting",
+              "live",
+              "reconnecting",
+              "stopped"
+            ]
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "has_preview": {
+            "type": "boolean"
+          },
+          "preview_sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "decode_age_ms": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "processed_frames": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "decoded_frames": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "connection_attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "read_failures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dropped_frames": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queue_high_watermark": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queue_capacity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tracking_epochs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mean_analysis_ms": {
+            "type": "number"
+          },
+          "stop_reason": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "archive": {
+            "type": "object"
+          },
+          "timestamp_basis": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "source_kind",
+          "state",
+          "active",
+          "backend",
+          "analysis_mode",
+          "connection_state",
+          "cancel_requested",
+          "error",
+          "has_preview",
+          "preview_sequence",
+          "decode_age_ms",
+          "processed_frames",
+          "decoded_frames",
+          "sessions",
+          "connection_attempts",
+          "read_failures",
+          "dropped_frames",
+          "queue_high_watermark",
+          "queue_capacity",
+          "tracking_epochs",
+          "mean_analysis_ms",
+          "stop_reason",
+          "duration_seconds",
+          "elapsed_ms",
+          "archive",
+          "timestamp_basis"
+        ],
+        "additionalProperties": true
+      },
+      "LiveStatus": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSession"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": true
+      },
+      "ArchiveCatalog": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ArchiveConfig"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "session_id": {
+                  "type": "string",
+                  "pattern": "^live-[0-9]+-[0-9]+$"
+                },
+                "segment_index": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "media_path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "index_state": {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "cancelled",
+                    "pending"
+                  ]
+                },
+                "job_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "session_id",
+                "segment_index",
+                "index_state",
+                "error"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "enabled",
+          "config",
+          "segments"
+        ],
+        "additionalProperties": true
+      },
+      "IndexResult": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "decoded_frames": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sampled_frames": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "indexed_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_fps": {
+            "type": "number"
+          },
+          "used_fallback_fps": {
+            "type": "boolean"
+          },
+          "stop_reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "decoded_frames",
+          "sampled_frames",
+          "indexed_items",
+          "source_fps",
+          "used_fallback_fps",
+          "stop_reason"
+        ],
+        "additionalProperties": true
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "all",
+              "live"
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                },
+                "metadata": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "media_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "score",
+                "metadata"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "query",
+          "scope",
+          "results"
+        ],
+        "additionalProperties": true
+      },
+      "FrameResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "frame_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "model_signature": {
+            "type": "string"
+          },
+          "preview_data_url": {
+            "type": "string",
+            "pattern": "^data:image/jpeg;base64,"
+          }
+        },
+        "required": [
+          "path",
+          "frame_index",
+          "width",
+          "height",
+          "model_signature",
+          "preview_data_url"
+        ],
+        "additionalProperties": true
+      },
+      "SegmentResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FrameResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tracking": {
+                "const": false
+              },
+              "mask_format": {
+                "const": "COCO uncompressed column-major RLE"
+              },
+              "instances": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "bbox": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 4,
+                      "maxItems": 4
+                    },
+                    "mask_pixels": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "segmentation": {
+                      "type": "object",
+                      "properties": {
+                        "size": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "counts": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "required": [
+                        "size",
+                        "counts"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "score",
+                    "bbox",
+                    "mask_pixels",
+                    "segmentation"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": [
+              "tracking",
+              "mask_format",
+              "instances"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      },
+      "OcrResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FrameResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "regions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "polygon": {
+                      "type": "array",
+                      "minItems": 4,
+                      "maxItems": 4,
+                      "items": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "detection_confidence": {
+                      "type": "number"
+                    },
+                    "recognition_confidence": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "polygon",
+                    "detection_confidence",
+                    "recognition_confidence"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "charset": {
+                "type": "string"
+              },
+              "polygon_order": {
+                "const": "BL,TL,TR,BR"
+              },
+              "recognition_confidence_kind": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "regions",
+              "charset",
+              "polygon_order",
+              "recognition_confidence_kind"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      },
+      "SceneResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FrameResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string"
+              },
+              "verified": {
+                "const": false
+              },
+              "warning": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "summary",
+              "verified",
+              "warning"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      },
+      "VideoResult": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "export_id": {
+            "type": "string"
+          },
+          "frames": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fps": {
+            "type": "number"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "instances": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "track_ids": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tracking": {
+            "const": true
+          },
+          "tracker": {
+            "type": "string"
+          },
+          "audio": {
+            "const": false
+          },
+          "stop_reason": {
+            "type": "string"
+          },
+          "model_signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "export_id",
+          "frames",
+          "fps",
+          "duration_seconds",
+          "width",
+          "height",
+          "bytes",
+          "instances",
+          "track_ids",
+          "tracking",
+          "tracker",
+          "audio",
+          "stop_reason",
+          "model_signature"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "externalDocs": {
+    "url": "https://github.com/bekiroruk/aegis-vision/blob/main/docs/api.md"
+  }
+}

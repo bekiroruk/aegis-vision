@@ -120,6 +120,9 @@ yazım raporlandı ve koleksiyon 410 kayıtta kaldı. Bunlar bu dosya/model/ayar
 
 ## API
 
+[OpenAPI sözleşmesi ve istemci örnekleri](api.md) hazırdır. Çalışan serviste
+`/openapi.json`; kaynak dosya [web/openapi.json](../web/openapi.json).
+
 Tüm POST istekleri `Content-Type: application/json` gerektirir.
 
 | İstek | Sonuç |

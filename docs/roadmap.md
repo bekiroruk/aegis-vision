@@ -149,9 +149,11 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,
    throughput ve GPU bellek raporu. CUDA/GPU uyumu doğrulanmadan tamamlandı sayılmaz.
 
-6. **Portföy teslimi ve ileri deployment.** Tek komutlu tekrar üretilebilir demo,
-   API/OpenAPI dokümanı, mimari karar kayıtları, model/veri lisans notları ve kısa
-   demo videosu hazırla. Triton/Jetson profilleri uygun donanım varsa son aşamadır;
+6. **Portföy teslimi ve ileri deployment.** [API/OpenAPI sözleşmesi](api.md), route
+   ve sayı sınırı uyum testleri eklendi; mevcut GPU servisinde gerçek GET yanıtları
+   doğrulandı. Hazır kurulum için demo başlatıcısı mevcut; sıfır makinede tekrar
+   üretilebilir kurulumu, mimari karar/model-veri lisans notlarını ve kısa demo
+   videosunu tamamla. Triton/Jetson profilleri uygun donanım varsa son aşamadır;
    cihazda ölçülmeyen hız için iddiada bulunulmaz.
 
 İş ilanındaki diğer adımlar için kalite ölçümü ve operasyon katmanları genişletilecek.

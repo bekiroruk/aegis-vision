@@ -11,8 +11,14 @@ içinde birleştirmektir.
 
 ## Mevcut özellikler
 
+İlandaki maddelerle mevcut kanıtları ve eksikleri karşılaştır:
+[iş ilanı teslim kontrolü](docs/job-requirements.md).
+
 Hazır Windows kurulumunda tüm demo servislerini aç: `./scripts/demo.ps1 -OpenBrowser`.
 Kullanım ve ilk kurulum sınırları: [tek komutluk demo](docs/demo.md).
+
+[HTTP API/OpenAPI sözleşmesi](docs/api.md): iş gönderme, sonuç/iptal, canlı oturum,
+arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sınır uyumunu denetler.
 
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
