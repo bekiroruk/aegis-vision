@@ -3,8 +3,9 @@
 İlk kapsam (2026-10-14): native C++20 `associate_cameras` ve JSON alan
 `aegisvision_multicamera` CLI'ı. Aynı kişiye ait olabilecek **kapanmış takip
 parçalarını** açık kamera geçişleri ve kişi özellikleriyle ilişkilendirir.
-Canlı iki-kamera capture, saat senkronizasyonu, otomatik tracklet çıkarımı veya
-gerçek çoklu-kamera doğruluk değerlendirmesi bu adımda tamamlanmadı.
+Gerçek yerel videodan [C++ tracklet/prototip çıkarımı](person-tracklets.md) ve
+açık saat eşleme beyanıyla bu CLI'a aktarım eklendi. Canlı iki-kamera capture,
+saat senkronizasyonu veya gerçek çoklu-kamera doğruluk değerlendirmesi tamamlanmadı.
 Mevcut tek-video/HTTP/GPU demo davranışı değiştirilmedi.
 
 ## Giriş sözleşmesi
@@ -106,8 +107,7 @@ Yerel örnek `outputs/multicamera-synthetic-v1/synthetic-result/report.json`.
 Bu sayılar **kamera/model doğruluk metriği değildir**. CI'a core ve CLI testleri
 eklendi; bu belge uzak CI koşusunun başarılı olduğunu iddia etmez.
 
-Sıradaki entegrasyon: gerçek videodan kapanmış tracklet/prototip çıkarımı,
-iki kamera için doğrulanmış ortak zaman ekseni, etiketli kamera-geçiş verisiyle
+Sıradaki entegrasyon: iki kamera için doğrulanmış ortak zaman ekseni, etiketli kamera-geçiş verisiyle
 eşiklerin geliştirme kümesinde ayarı ve ayrık test ölçümü. Sonra canlı capture,
 durable kimlik kataloğu ve UI entegrasyonu. Mevcut OSNet'in tek-kamera testleri
 çoklu-kamera kalitesinin kanıtı olarak kullanılmaz.

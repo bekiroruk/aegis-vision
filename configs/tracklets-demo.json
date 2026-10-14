@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "input": "../artifacts/media/pedestrians.mp4",
+  "detector_model": "../artifacts/models/yolov8n.onnx",
+  "reid_bundle": "../artifacts/models/osnet-x0-25-msmt17",
+  "camera": "pedestrians",
+  "epoch": 1,
+  "max_frames": 300,
+  "max_missed_frames": 20,
+  "iou_threshold": 0.3,
+  "min_observations": 3
+}

@@ -91,6 +91,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Offline multicamera CLI contract (synthetic, no model)
         run: python3 scripts/test_multicamera_cli.py build/aegisvision_multicamera
+      - name: Tracklet export bridge contract (synthetic, no model)
+        run: python3 scripts/test_tracklets_cli.py build/aegisvision_tracklets build/aegisvision_multicamera
       - name: Repeat live archive concurrency contract
         timeout-minutes: 3
         run: ctest --test-dir build -R '^aegisvision_archive_service$' --repeat until-fail:20 --output-on-failure

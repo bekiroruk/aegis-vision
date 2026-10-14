@@ -24,6 +24,9 @@ arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sı
 için C++ çekirdek/CLI, kamera-epoch alanları ve belirsizlik reddi. Henüz gerçek
 iki-kamera doğruluk testi, saat senkronizasyonu veya canlı entegrasyon değildir.
 
+[Gerçek videodan kişi takip parçaları](docs/person-tracklets.md): C++ YOLO + OSNet,
+ID etiketli video, 512 boyutlu kişi prototipleri ve açık saat eşlemeli CLI aktarımı.
+
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;
 takip kimlikleri (`--track`) ve 64 görüntülük etiketli maske değerlendirmesi vardır.

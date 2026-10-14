@@ -98,8 +98,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    doğrulanmış zaman eşleme gerekir.
    İlk [çevrimdışı çoklu-kamera ilişkilendirme](multicamera.md) çekirdeği/CLI'ı
    kamera-epoch-ID alanı, yön/süre kapıları ve çift yönlü belirsizlik reddiyle eklendi;
-   sentetik sözleşme testleri geçti. Gerçek iki-kamera veri/saat eşleme, tracklet
-   çıkarımı ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
+   sentetik sözleşme testleri geçti. [C++ video tracklet çıkarıcı](person-tracklets.md),
+   OSNet prototipleri ve açık saat eşleme beyanıyla CLI aktarımı eklendi.
+   Gerçek iki-kamera veri/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 
 3. **Segmentation, OCR ve VLM.** İlk C++ segmentation adaptörü, ayrı video CLI'ı
