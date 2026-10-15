@@ -19,6 +19,11 @@ SIZE = 6807496358
 ETAG = '"5b86d551-195c226a6"'
 FRAMES = tuple(range(0, 2000, 125))  # frozen before model inference, 16 timestamps
 CAMERAS = (1, 2)
+PROFILES = {
+    "diagnostic": (FRAMES, CAMERAS, None, "wildtrack-c1-c2-same-frame-gt-crops-v1"),
+    "development": (tuple(range(60, 2000, 50)), (3, 4), 0, "wildtrack-flip-development-v1"),
+    "holdout": (tuple(range(60, 2000, 200)), (5, 6), 1, "wildtrack-flip-holdout-v1"),
+}
 
 
 class RemoteZip(io.RawIOBase):
@@ -115,7 +120,8 @@ def boxes(annotation, view, width=1920, height=1080):
     return sorted(result, key=lambda row: row["identity"])
 
 
-def prepare(output, inventory=False):
+def prepare(output, inventory=False, profile="diagnostic"):
+    selected_frames, cameras, parity, protocol = PROFILES[profile]
     remote = RemoteZip()
     with zipfile.ZipFile(remote) as archive:
         names = archive.namelist()
@@ -137,7 +143,7 @@ def prepare(output, inventory=False):
             info = resolve_header(remote, info)
             content = archive.read(info)  # validates ZIP CRC; paths are never extracted
             relative = suffix.lstrip("/")
-            if not re.fullmatch(r"(?:Image_subsets/C[12]/\d{8}\.png|annotations_positions/\d{8}\.json)", relative):
+            if not re.fullmatch(r"(?:Image_subsets/C[1-7]/\d{8}\.png|annotations_positions/\d{8}\.json)", relative):
                 raise ValueError("Unexpected output member")
             target = output / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -145,19 +151,22 @@ def prepare(output, inventory=False):
             assets.append(dict(path=relative, sha256=digest(content), bytes=len(content), archive_member=info.filename))
             return relative, content
 
-        for frame in FRAMES:
+        for frame in selected_frames:
             _, annotation = fetch(f"/annotations_positions/{frame:08d}.json")
             labels = json.loads(annotation)
             views = []
-            for camera in CAMERAS:
+            for camera in cameras:
                 name, content = fetch(f"/Image_subsets/C{camera}/{frame:08d}.png")
+                people = boxes(labels, camera - 1)
+                if parity is not None:
+                    people = [p for p in people if p["identity"] % 2 == parity]
                 views.append(dict(camera=f"C{camera}", image=name, sha256=digest(content),
-                                  persons=boxes(labels, camera - 1)))
+                                  persons=people))
             frames.append(dict(frame=frame, views=views))
             print(f"Prepared synchronized frame {frame}, camera boxes {[len(v['persons']) for v in views]}", flush=True)
-        manifest = dict(version=1, protocol="wildtrack-c1-c2-same-frame-gt-crops-v1",
+        manifest = dict(version=1, protocol=protocol,
             source_url=URL, archive_size=SIZE, archive_etag=ETAG,
-            subset_frames=list(FRAMES), cameras=["C1", "C2"], frames=frames,
+            subset_frames=list(selected_frames), cameras=[f"C{c}" for c in cameras], frames=frames,
             min_similarity=.85, ambiguity_margin=.05,
             warning="Diagnostic fixed subset with oracle boxes. Not detector, tracker, handoff or full-dataset accuracy.")
         (output / "provenance.json").write_text(json.dumps(dict(assets=assets, transferred_bytes=remote.transferred), indent=2), encoding="utf-8")
@@ -170,7 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("output", type=Path)
     parser.add_argument("--download", action="store_true")
     parser.add_argument("--inventory", action="store_true")
+    parser.add_argument("--profile", choices=PROFILES, default="diagnostic")
     args = parser.parse_args()
     if not args.download:
         parser.error("Explicit --download is required")
-    prepare(args.output, args.inventory)
+    prepare(args.output, args.inventory, args.profile)

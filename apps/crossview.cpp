@@ -9,6 +9,7 @@
 #include <iostream>
 #include <set>
 #include <cmath>
+#include <chrono>
 
 namespace {
 using namespace aegisvision;
@@ -117,11 +118,13 @@ void review(const fs::path& path, const cv::Mat& left, const cv::Mat& right,
 int run(const std::vector<fs::path>& args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
-            std::cout << "aegisvision_crossview MANIFEST.json OSNET_BUNDLE NEW_OUTPUT_DIR\n"
+            std::cout << "aegisvision_crossview MANIFEST.json OSNET_BUNDLE NEW_OUTPUT_DIR [--flip-mean]\n"
                          "Same-frame C1->C2 oracle-crop diagnostic. No detection/tracking/handoff score.\n";
             return 0;
         }
-        if (args.size() != 4) throw std::invalid_argument("Use --help");
+        if (args.size() != 4 && args.size() != 5) throw std::invalid_argument("Use --help");
+        if (args.size() == 5 && args[4] != "--flip-mean") throw std::invalid_argument("Unknown feature option");
+        const bool flip = args.size() == 5;
         if (fs::exists(args[3])) throw std::invalid_argument("Output directory must not exist");
         const auto manifest_hash = hash(args[1]);
         std::ifstream input(args[1]);
@@ -129,34 +132,46 @@ int run(const std::vector<fs::path>& args) {
             if (depth > 16) throw std::invalid_argument("JSON nesting too deep"); return true;
         });
         integer(j.at("version"), 1, 1);
-        if (j.at("protocol") != "wildtrack-c1-c2-same-frame-gt-crops-v1" ||
-            j.at("cameras") != Json::array({"C1", "C2"}) || j.at("min_similarity") != .85 || j.at("ambiguity_margin") != .05)
+        const bool diagnostic = j.at("protocol") == "wildtrack-c1-c2-same-frame-gt-crops-v1";
+        const bool development = j.at("protocol") == "wildtrack-flip-development-v1";
+        const bool holdout = j.at("protocol") == "wildtrack-flip-holdout-v1";
+        const auto cameras = diagnostic ? Json::array({"C1", "C2"}) : development ? Json::array({"C3", "C4"}) : Json::array({"C5", "C6"});
+        if ((!diagnostic && !development && !holdout) || (diagnostic && flip) ||
+            j.at("cameras") != cameras || j.at("min_similarity") != .85 || j.at("ambiguity_margin") != .05)
             throw std::invalid_argument("Unsupported protocol or changed frozen thresholds");
         const auto& frames = j.at("frames");
-        if (!frames.is_array() || frames.size() != 16) throw std::invalid_argument("Expected fixed 16-frame subset");
+        if (!frames.is_array() || frames.size() != (diagnostic ? 16U : development ? 39U : 10U)) throw std::invalid_argument("Expected fixed 16-frame diagnostic, 39-frame development or 10-frame holdout subset");
         const auto base = fs::absolute(args[1]).parent_path();
         std::vector<std::pair<fs::path, fs::path>> paths;
         for (std::size_t i = 0; i < frames.size(); ++i) {
-            if (integer(frames[i].at("frame"), 0, 1999) != static_cast<std::int64_t>(i * 125))
+            if (integer(frames[i].at("frame"), 0, 1999) != static_cast<std::int64_t>(diagnostic ? i * 125 : 60 + i * (development ? 50 : 200)))
                 throw std::invalid_argument("Unexpected subset frame");
             const auto& views = frames[i].at("views");
-            if (!views.is_array() || views.size() != 2 || views[0].at("camera") != "C1" || views[1].at("camera") != "C2")
-                throw std::invalid_argument("Expected C1 and C2 views in order");
+            if (!views.is_array() || views.size() != 2 || views[0].at("camera") != cameras[0] || views[1].at("camera") != cameras[1])
+                throw std::invalid_argument("Expected protocol camera views in order (diagnostic: C1 and C2)");
             validate_people(views[0]); validate_people(views[1]);
+            if (!diagnostic) for (const auto& view : views) for (const auto& p : view.at("persons"))
+                if (integer(p.at("identity"), 0, INT64_MAX) % 2 != (development ? 0 : 1))
+                    throw std::invalid_argument("Identity crossed experiment split");
             paths.emplace_back(asset(base, views[0]), asset(base, views[1]));
         }
         cv::setNumThreads(1);
-        ReIdEmbedder encoder(args[2]);
+        ReIdEmbedder encoder(args[2], flip ? ReIdAugmentation::HorizontalFlipMean : ReIdAugmentation::None);
         const auto output = fs::absolute(args[3]);
         fs::create_directories(output.parent_path());
         if (!fs::create_directory(output)) throw std::runtime_error("Cannot reserve output");
         Counts total;
         Json cases = Json::array();
+        double feature_ms = 0;
+        std::size_t feature_count = 0;
         for (std::size_t i = 0; i < frames.size(); ++i) {
             const auto left = vision::load_image(paths[i].first), right = vision::load_image(paths[i].second);
             if (left.size() != cv::Size(1920, 1080) || right.size() != left.size()) throw std::invalid_argument("Unexpected image resolution");
             const auto& views = frames[i].at("views");
+            const auto start = std::chrono::steady_clock::now();
             const auto q = embed(views[0], left, encoder), g = embed(views[1], right, encoder);
+            feature_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            feature_count += q.size() + g.size();
             const auto decisions = evaluate_crossview(q, g, .85, .05);
             Counts counts;
             Json queries = Json::array();
@@ -169,11 +184,13 @@ int run(const std::vector<fs::path>& args) {
                     {"rank1_correct", d.rank1_correct}, {"reason", d.reason}});
             }
             cases.push_back({{"frame", frames[i].at("frame")}, {"gallery_size", g.size()}, {"metrics", counts.json()}, {"queries", queries}});
-            if (i == 0) review(output / "review.jpg", left, right, views[0].at("persons"), views[1].at("persons"), decisions);
+            if (i == 0 && diagnostic) review(output / "review.jpg", left, right, views[0].at("persons"), views[1].at("persons"), decisions);
             std::cout << "frame=" << frames[i].at("frame") << " queries=" << q.size() << " accepted_correct=" << counts.tp
                       << " accepted_wrong=" << counts.fp << std::endl;
         }
         Json report{{"version", 1}, {"complete", true}, {"protocol", j.at("protocol")}, {"manifest_sha256", manifest_hash},
+            {"feature_variant", flip ? "flip_mean" : "single"}, {"model_sha256", hash(args[2] / "model.onnx")},
+            {"feature_count", feature_count}, {"mean_feature_ms", feature_count ? Json(feature_ms / feature_count) : Json(nullptr)},
             {"embedding_space", encoder.space_id()}, {"min_similarity", .85}, {"ambiguity_margin", .05},
             {"metrics", total.json()}, {"frames", cases}, {"handoff_evaluated", false}, {"detector_evaluated", false},
             {"warning", "Fixed diagnostic subset; oracle GT boxes; same-frame cross-camera appearance only. Correlated repeated persons. No threshold tuning or production acceptance."}};

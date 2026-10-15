@@ -30,6 +30,8 @@ ID etiketli video, 512 boyutlu kişi prototipleri ve açık saat eşlemeli CLI a
 [Gerçek iki-kamera görünüm testi](docs/crossview-evaluation.md): WILDTRACK C1→C2,
 342 sorgu; karşılığı bulunan 286 sorguda Rank-1 %25,52. Mevcut eşik hiçbir
 eşleşmeyi kabul etmedi; aday bu sonuçla üretime uygun sayılmıyor.
+[Ayrı geliştirme verisindeki iyileştirme deneyi](docs/reid-flip-experiment.md):
+flip-ortalama yalnız +1,06 puan verdi, kabul kapısını geçmedi; varsayılan korundu.
 
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;

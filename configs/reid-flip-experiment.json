@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "frozen_before_development_inference": "2026-10-15",
+  "development_protocol": "wildtrack-flip-development-v1",
+  "holdout_protocol": "wildtrack-flip-holdout-v1",
+  "development_cameras": ["C3", "C4"],
+  "holdout_cameras": ["C5", "C6"],
+  "development_identity_parity": 0,
+  "holdout_identity_parity": 1,
+  "development_frames": {"first": 60, "step": 50, "count": 39},
+  "holdout_frames": {"first": 60, "step": 200, "count": 10},
+  "variants": ["single", "flip_mean"],
+  "min_similarity": 0.85,
+  "ambiguity_margin": 0.05,
+  "minimum_counterpart_queries": 30,
+  "minimum_rank1_gain": 0.02,
+  "maximum_extra_wrong_accepts": 0,
+  "production_promotion": false,
+  "limitations": "Development and holdout use disjoint cameras and identity parity in this experiment, but some identities may have appeared in earlier C1/C2 diagnostics. This is not a completely identity-unseen external benchmark. No model weight training or threshold fitting."
+}

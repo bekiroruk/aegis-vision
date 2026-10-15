@@ -77,6 +77,24 @@ class InputTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((result_dir / "existing.txt").read_text(), "keep")
 
+    def development(self):
+        self.job.update(protocol="wildtrack-flip-development-v1", cameras=["C3", "C4"])
+        views = self.job["frames"][0]["views"]
+        for camera, view in zip(("C3", "C4"), views):
+            view["camera"] = camera
+            view["persons"][0]["identity"] = 2
+        self.job["frames"] = [dict(frame=i, views=copy.deepcopy(views)) for i in range(60, 2000, 50)]
+
+    def test_identity_split(self):
+        self.development()
+        self.job["frames"][0]["views"][0]["persons"][0]["identity"] = 3
+        self.rejects("Identity crossed experiment split")
+
+    def test_development_frame_selection(self):
+        self.development()
+        self.job["frames"][1]["frame"] = 125
+        self.rejects("subset frame")
+
 
 if __name__ == "__main__":
     unittest.main()

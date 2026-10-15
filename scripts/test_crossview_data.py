@@ -88,6 +88,13 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(data.FRAMES, tuple(range(0, 2000, 125)))
         self.assertEqual(data.CAMERAS, (1, 2))
 
+    def test_experiment_camera_and_identity_split(self):
+        dev, holdout = data.PROFILES["development"], data.PROFILES["holdout"]
+        self.assertFalse(set(dev[1]) & set(holdout[1]))
+        self.assertEqual((dev[2], holdout[2]), (0, 1))
+        self.assertEqual(dev[0], tuple(range(60, 2000, 50)))
+        self.assertFalse(set(dev[0]) & set(data.FRAMES))
+
 
 if __name__ == "__main__":
     unittest.main()

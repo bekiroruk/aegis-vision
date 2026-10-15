@@ -124,3 +124,9 @@ daha uygun kişi temsili veya metric-learning adayını karşılaştırmak, ard�
 henüz görülmemiş kamera/kimlik verisinde kalibrasyon ve test. Aynı deneyin
 eşiğini düşürmek bu sonucu düzeltmiş sayılmaz. Non-overlap kamera geçişi,
 canlı çoklu kamera capture ve UI entegrasyonu ayrı açık işlerdir.
+
+2026-10-15: ayrı C3/C4 geliştirme protokolünde [flip-ortalama adayı](reid-flip-experiment.md)
+denendi. 94 karşılıklı sorguda 59→60 doğru ilk aday (+1,06 puan), yaklaşık
+1,92× maliyet; önceden tanımlanan kazanç kapısını geçmedi. Aday seçilmedi,
+son kontrol verisi açılmadı. Yukarıdaki C1/C2 sonucu değişmedi; farklı
+kamera/galeri protokollerinin yüzdeleri doğrudan birbirine kıyaslanmaz.

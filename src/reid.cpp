@@ -170,10 +170,30 @@ std::vector<float> normalize_reid(std::vector<float> embedding) {
     return embedding;
 }
 
+cv::Mat flip_reid_input(const cv::Mat& input) {
+    if (input.type() != CV_32F || input.dims != 4 || input.size[0] != 1 || input.size[1] != 3 ||
+        input.size[2] != height || input.size[3] != width || !input.isContinuous() || !cv::checkRange(input))
+        throw std::invalid_argument("Invalid Re-ID flip input");
+    auto result = input.clone();
+    const auto* source = input.ptr<float>();
+    auto* target = result.ptr<float>();
+    for (int row = 0; row < 3 * height; ++row)
+        std::reverse_copy(source + row * width, source + (row + 1) * width, target + row * width);
+    return result;
+}
+std::vector<float> mean_reid_features(std::vector<float> first, std::vector<float> second) {
+    first = normalize_reid(std::move(first)); second = normalize_reid(std::move(second));
+    for (std::size_t i = 0; i < first.size(); ++i) first[i] = (first[i] + second[i]) * .5F;
+    return normalize_reid(std::move(first));
+}
+
 struct ReIdEmbedder::Impl {
     cv::dnn::Net network;
     std::string space;
-    explicit Impl(const fs::path& bundle) {
+    ReIdAugmentation augmentation;
+    explicit Impl(const fs::path& bundle, ReIdAugmentation mode) : augmentation(mode) {
+        if (mode != ReIdAugmentation::None && mode != ReIdAugmentation::HorizontalFlipMean)
+            throw std::invalid_argument("Unknown Re-ID augmentation");
         if (!fs::is_directory(bundle)) throw std::invalid_argument("Missing Re-ID bundle directory");
         const auto root = fs::canonical(bundle);
         const auto manifest_path = root / "manifest.json", model_path = root / "model.onnx";
@@ -187,9 +207,10 @@ struct ReIdEmbedder::Impl {
             throw std::invalid_argument("Re-ID model size differs from manifest");
         if (picosha2::hash256_hex_string(model) != settings.at("model_sha256").get<std::string>())
             throw std::invalid_argument("Re-ID model SHA256 differs from manifest");
-        const Json identity = {{"model_sha256", settings.at("model_sha256")},
+        Json identity = {{"model_sha256", settings.at("model_sha256")},
                                {"architecture", settings.at("architecture")}, {"dimension", dimension},
                                {"preprocessing", settings.at("preprocessing")}, {"normalize_output", true}};
+        if (mode == ReIdAugmentation::HorizontalFlipMean) identity["aggregation"] = "unit-mean-original-flip-v1";
         space = "reid:" + picosha2::hash256_hex_string(identity.dump());
         network = cv::dnn::readNetFromONNX(model);
         network.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
@@ -202,7 +223,7 @@ struct ReIdEmbedder::Impl {
     }
 };
 
-ReIdEmbedder::ReIdEmbedder(const fs::path& bundle) : impl_(std::make_unique<Impl>(bundle)) {}
+ReIdEmbedder::ReIdEmbedder(const fs::path& bundle, ReIdAugmentation mode) : impl_(std::make_unique<Impl>(bundle, mode)) {}
 ReIdEmbedder::~ReIdEmbedder() = default;
 const std::string& ReIdEmbedder::space_id() const noexcept { return impl_->space; }
 std::vector<float> ReIdEmbedder::embed_text(std::string_view) {
@@ -210,11 +231,16 @@ std::vector<float> ReIdEmbedder::embed_text(std::string_view) {
 }
 std::vector<float> ReIdEmbedder::embed_image(const Frame& frame, const Detection& detection) {
     const auto input = prepare_reid(frame, detection);
-    impl_->network.setInput(input, "images");
-    const auto output = impl_->network.forward("features");
-    output_contract(output);
-    const auto* data = output.ptr<float>();
-    return normalize_reid({data, data + dimension});
+    auto infer = [&](const cv::Mat& blob) {
+        impl_->network.setInput(blob, "images");
+        const auto output = impl_->network.forward("features");
+        output_contract(output);
+        const auto* data = output.ptr<float>();
+        return normalize_reid({data, data + dimension});
+    };
+    auto first = infer(input);
+    if (impl_->augmentation == ReIdAugmentation::None) return first;
+    return mean_reid_features(std::move(first), infer(flip_reid_input(input)));
 }
 
 }  // namespace aegisvision

@@ -139,6 +139,26 @@ void normalization() {
     require(std::isfinite(large[0]) && std::abs(large[0] - 1.0 / std::sqrt(512.0)) < 1e-6,
             "Large finite embeddings overflowed normalization");
 }
+void flip_augmentation() {
+    const int shape[]{1, 3, 256, 128};
+    cv::Mat input(4, shape, CV_32F);
+    for (std::size_t i = 0; i < input.total(); ++i) input.ptr<float>()[i] = static_cast<float>(i);
+    const auto flipped = flip_reid_input(input);
+    require(flipped.ptr<float>()[0] == 127 && flipped.ptr<float>()[128] == 255 &&
+        flipped.ptr<float>()[256 * 128] == 256 * 128 + 127, "Flip changed row/channel axis");
+    const auto restored = flip_reid_input(flipped);
+    require(std::equal(input.ptr<float>(), input.ptr<float>() + input.total(), restored.ptr<float>()), "Double flip changed tensor");
+    require(input.ptr<float>()[0] == 0, "Flip mutated input");
+    rejects([] { (void)flip_reid_input(cv::Mat(256, 128, CV_32F)); }, "Wrong flip layout accepted");
+    input.ptr<float>()[0] = std::numeric_limits<float>::quiet_NaN();
+    rejects([&] { (void)flip_reid_input(input); }, "Nonfinite flip input accepted");
+    std::vector<float> a(512), b(512); a[0] = 100; b[1] = 2;
+    const auto mean = mean_reid_features(a, b);
+    require(std::abs(mean[0] - std::sqrt(.5F)) < 1e-6 && std::abs(mean[1] - std::sqrt(.5F)) < 1e-6,
+        "Flip feature mean is not equal-weight unit-feature mean");
+    b = a; b[0] *= -1;
+    rejects([&] { (void)mean_reid_features(a, b); }, "Cancelled features accepted");
+}
 Json fixture_manifest() {
     const std::vector<unsigned char> fake{1, 2, 3};
     return {{"version", 1}, {"architecture", "osnet_x0_25"}, {"training_dataset", "MSMT17-combineall"},
@@ -220,6 +240,8 @@ void reference(const fs::path& bundle) {
     require(encoder.space_id() == second.space_id() && encoder.space_id().starts_with("reid:"),
             "Re-ID model space is unstable");
     double minimum_cosine = 1, maximum_error = 0, maximum_blob_error = 0;
+    ReIdEmbedder augmented(bundle, ReIdAugmentation::HorizontalFlipMean);
+    require(augmented.space_id() != encoder.space_id(), "Flip and baseline share a feature space");
     for (const auto& fixture : fixtures.at("fixtures")) {
         const auto image_file = bundle / fixture.at("image_file").get<std::string>();
         const auto blob_file = bundle / fixture.at("input_blob_file").get<std::string>();
@@ -230,6 +252,12 @@ void reference(const fs::path& bundle) {
         const auto frame = vision::image_frame(image, "reference", "local");
         const auto observation = person({0, 0, static_cast<float>(image.cols), static_cast<float>(image.rows)});
         const auto actual = encoder.embed_image(frame, observation);
+        cv::Mat mirrored; cv::flip(image, mirrored, 1);
+        const auto mirror_frame = vision::image_frame(mirrored, "mirror", "local");
+        const auto combined = mean_reid_features(actual, encoder.embed_image(mirror_frame, observation));
+        const auto flip_actual = augmented.embed_image(frame, observation);
+        for (std::size_t i = 0; i < combined.size(); ++i)
+            require(std::abs(combined[i] - flip_actual[i]) < 1e-4, "Flip inference differs from independent two-crop mean");
         const auto blob = prepare_reid(frame, observation);
         std::ifstream input(blob_file, std::ios::binary | std::ios::ate);
         require(input && input.tellg() == static_cast<std::streamoff>(blob.total() * sizeof(float)),
@@ -270,7 +298,7 @@ void reference(const fs::path& bundle) {
 int main(int argc, char* argv[]) {
     try {
         cv::setNumThreads(1);
-        preprocessing(); frame_validation(); normalization(); bundle_validation();
+        preprocessing(); frame_validation(); normalization(); flip_augmentation(); bundle_validation();
         if (argc == 3 && std::string(argv[1]) == "--bundle") reference(argv[2]);
         else if (argc != 1) throw std::invalid_argument("Usage: aegisvision_reid_tests [--bundle BUNDLE]");
         std::cout << "Re-ID preprocessing, normalization, malformed-input and bundle validation tests passed\n";
