@@ -188,6 +188,16 @@ void bundle_validation() {
         // Correct metadata and checksum reach graph parsing; random bytes cannot be a model.
         rejects([&] { ReIdEmbedder bad(root); }, "Invalid ONNX accepted");
         auto bad = valid;
+        bad["architecture"] = "osnet_x1_0"; save(root / "manifest.json", bad);
+        rejects([&] { ReIdEmbedder rejected(root); }, "Architecture/checkpoint mismatch accepted", "provenance");
+        bad["source"]["checkpoint_filename"] = "osnet_x1_0_msmt17_combineall_256x128_amsgrad_ep150_stp60_lr0.0015_b64_fb10_softmax_labelsmooth_flip_jitter.pth";
+        bad["source"]["checkpoint_sha256"] = "48df972f72887b95cf3b43b3a07c3a7d2398381aea0f9cae64a7ef11d512b727";
+        bad["source"]["checkpoint_size_bytes"] = 17'273'805;
+        bad["model_sha256"] = std::string(64, '0'); save(root / "manifest.json", bad);
+        rejects([&] { ReIdEmbedder rejected(root); }, "Large-model hash mismatch accepted", "SHA256");
+        bad["source"]["checkpoint_size_bytes"] = 9'336'983; save(root / "manifest.json", bad);
+        rejects([&] { ReIdEmbedder rejected(root); }, "Mixed checkpoint sizes accepted", "provenance");
+        bad = valid;
         bad["model_sha256"] = std::string(64, '0'); save(root / "manifest.json", bad);
         rejects([&] { ReIdEmbedder rejected(root); }, "Model hash mismatch accepted", "SHA256");
         bad = valid; bad["model_size_bytes"] = 4; save(root / "manifest.json", bad);

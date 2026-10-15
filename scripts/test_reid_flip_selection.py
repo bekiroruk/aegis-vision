@@ -61,4 +61,33 @@ class SelectionTests(unittest.TestCase):
             with self.assertRaises(ValueError): select(self.policy, self.base, self.candidate)
 
 
+class ModelSelectionTests(SelectionTests):
+    def setUp(self):
+        super().setUp()
+        self.policy.update(comparison="model", baseline_model_sha256="a" * 64,
+            candidate_model_sha256="b" * 64, development_manifest_sha256="c" * 64)
+        self.base.update(model_sha256="a" * 64, manifest_sha256="c" * 64)
+        self.candidate.update(model_sha256="b" * 64, manifest_sha256="c" * 64, feature_variant="single")
+
+    def test_selected_model_is_recorded_without_promotion(self):
+        self.candidate["metrics"]["rank1_correct"] = 21
+        result = select(self.policy, self.base, self.candidate)
+        self.assertEqual(result["selected_model_sha256"], "b" * 64)
+        self.assertEqual(result["selected_variant"], "single")
+        self.assertFalse(result["production_promoted"])
+
+    def test_weights_cannot_be_swapped_or_substituted(self):
+        for key, value in (("model_sha256", "d" * 64), ("feature_variant", "flip_mean"),
+                           ("embedding_space", "base")):
+            candidate = copy.deepcopy(self.candidate)
+            candidate[key] = value
+            with self.assertRaises(ValueError): select(self.policy, self.base, candidate)
+
+    def test_policy_pins_must_be_valid_and_distinct(self):
+        for key, value in (("candidate_model_sha256", "a" * 64), ("candidate_model_sha256", "x" * 64),
+                           ("development_manifest_sha256", "d" * 64), ("comparison", "unknown")):
+            policy = dict(self.policy, **{key: value})
+            with self.assertRaises(ValueError): select(policy, self.base, self.candidate)
+
+
 if __name__ == "__main__": unittest.main()

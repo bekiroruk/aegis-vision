@@ -104,7 +104,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    Rank-1 %25,52 ve mevcut eşikte sıfır kabul; aday kalite açısından kabul edilmedi.
    [Flip-ortalama deneyi](reid-flip-experiment.md) ayrı C3/C4 geliştirme verisinde
    59/94→60/94 kazanç ve yaklaşık 1,92× maliyet verdi; +2 puan kapısını
-   geçmediği için varsayılan modele alınmadı. Güçlü temsil/metric-learning hâlâ eksik.
+   geçmediği için varsayılan modele alınmadı. [OSNet x1.0 karşılaştırması](reid-model-experiment.md)
+   geliştirmede 59/94→66/94, ayrılmış C5/C6 kontrolde 22/54→27/54 Rank-1 verdi.
+   Kabul hâlâ sıfır; varsayılan korundu. Geliştirme-verisi eşik kalibrasyonu,
+   dokunulmamış yeni son test ve gerekirse metric-learning hâlâ eksik.
    Non-overlap iki-kamera geçişi/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 

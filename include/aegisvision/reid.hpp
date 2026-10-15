@@ -10,7 +10,7 @@ namespace aegisvision {
 // Experimental augmentation is opt-in; deployment defaults stay unchanged.
 enum class ReIdAugmentation { None, HorizontalFlipMean };
 
-// OSNet x0.25, MSMT17-combineall, CPU/FP32 OpenCV DNN. The immutable bundle
+// Pinned OSNet x0.25/x1.0, MSMT17-combineall, CPU/FP32 OpenCV DNN. The immutable bundle
 // contains manifest.json and model.onnx. One instance is not thread-safe.
 // Person appearance only: neither language embeddings nor cross-camera/global
 // identity guarantees are provided by this encoder.

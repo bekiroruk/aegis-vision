@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from export_reid import (ARCHITECTURE_REVISION, ARCHITECTURE_SHA256, CHECKPOINT_FILENAME,
-    CHECKPOINT_SHA256, CHECKPOINT_SIZE, HF_REVISION, architecture_tree, checkpoint_state,
+    CHECKPOINT_SHA256, CHECKPOINT_SIZE, HF_REVISION, MODEL_PROFILES, architecture_tree, checkpoint_state,
     download_pinned, load_reid_weights, manifest, normalized_feature, preprocessing, restricted_checkpoint,
     verify_file, write_json)
 
@@ -186,7 +186,7 @@ class ExportProtocolTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     download_pinned("https://fixed.example/model", self.base / name, 4, digest)
         with patch("export_reid.urllib.request.urlopen") as fetch:
-            for url, size in (("http://fixed.example/model", 4), ("https://fixed.example/model", 20_000_000)):
+            for url, size in (("http://fixed.example/model", 4), ("https://fixed.example/model", 33_554_433)):
                 with self.assertRaises(ValueError):
                     download_pinned(url, self.base / "invalid", size, digest)
             fetch.assert_not_called()
@@ -211,6 +211,19 @@ class ExportProtocolTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             write_json(result, data)
         self.assertEqual(result.read_bytes(), before)
+
+    def test_large_model_profile_is_pinned_and_distinct(self):
+        model = self.base / "model.onnx"
+        model.write_bytes(b"fixture")
+        data = manifest(model, "osnet_x1_0")
+        self.assertEqual(data["architecture"], "osnet_x1_0")
+        filename, digest, size = MODEL_PROFILES["osnet_x1_0"]
+        self.assertEqual(size, 17273805)
+        self.assertEqual(data["source"]["checkpoint_filename"], filename)
+        self.assertEqual(data["source"]["checkpoint_sha256"], digest)
+        self.assertNotEqual(digest, CHECKPOINT_SHA256)
+        with self.assertRaisesRegex(ValueError, "Unsupported pinned"):
+            architecture_tree("", "untrusted")
 
 
 @unittest.skipUnless(importlib.util.find_spec("numpy") and importlib.util.find_spec("cv2"),

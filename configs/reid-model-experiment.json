@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "date": "2026-10-15",
+  "comparison": "model",
+  "baseline": "osnet_x0_25 MSMT17-combineall, single",
+  "candidate": "osnet_x1_0 MSMT17-combineall, single",
+  "baseline_model_sha256": "32d0f46f48f7a6dd783dc17e4715ad262ad95195ff8496f6c8a1f95cdba730b5",
+  "candidate_model_sha256": "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a",
+  "development_manifest_sha256": "bdd3583c4db7b8d7c4038cdfa4f59dfcf6c649811b523fb795e5617b247d785c",
+  "development_protocol": "wildtrack-flip-development-v1",
+  "holdout_protocol": "wildtrack-flip-holdout-v1",
+  "min_similarity": 0.85,
+  "ambiguity_margin": 0.05,
+  "minimum_counterpart_queries": 30,
+  "minimum_rank1_gain": 0.02,
+  "maximum_extra_wrong_accepts": 0,
+  "production_promotion": false,
+  "holdout_rule": "Only open C5/C6 odd-ID holdout after development gates pass. Compare both models once at unchanged thresholds; no automatic production promotion.",
+  "limitations": [
+    "Development data were already seen in the flip experiment; this is model selection, not blind testing.",
+    "C5/C6 holdout uses odd IDs and separate cameras, but the same recording; some identities appeared in older C1/C2 diagnostics.",
+    "GT crops only: no detector, tracking or end-to-end camera handoff evaluation.",
+    "Pretrained model comparison only; no project-specific training or metric learning."
+  ]
+}

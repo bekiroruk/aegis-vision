@@ -27,6 +27,13 @@ CHECKPOINT_FILENAME = (
 )
 CHECKPOINT_SHA256 = "cf55163d78fc44c62c82f85ab62d39f10438679b5abe8c698ae08cfa84aa6e18"
 CHECKPOINT_SIZE = 9336983
+MODEL_PROFILES = {
+    "osnet_x0_25": (CHECKPOINT_FILENAME, CHECKPOINT_SHA256, CHECKPOINT_SIZE),
+    "osnet_x1_0": (
+        "osnet_x1_0_msmt17_combineall_256x128_amsgrad_ep150_stp60_lr0.0015_"
+        "b64_fb10_softmax_labelsmooth_flip_jitter.pth",
+        "48df972f72887b95cf3b43b3a07c3a7d2398381aea0f9cae64a7ef11d512b727", 17273805),
+}
 ARCHITECTURE_REVISION = "f8cd150fdf77e8d9e1ed143b7f308c2c609ded50"
 ARCHITECTURE_SHA256 = "c7c1c29187d6330f859c91da229271531920464c7011aec13842a086b2263cae"
 ARCHITECTURE_SIZE = 17037
@@ -73,7 +80,7 @@ def download_pinned(url: str, output: Path, size: int, digest: str) -> None:
     if output.exists():
         verify_file(output, size, digest)
         return
-    if not url.startswith("https://") or size <= 0 or size > 16 * 1024 * 1024:
+    if not url.startswith("https://") or size <= 0 or size > MODEL_LIMIT:
         raise ValueError("Invalid fixed download URL or bound")
     request = urllib.request.Request(url, headers={"User-Agent": "AegisVision-ReID-preparation/1"})
     with urllib.request.urlopen(request, timeout=60) as response:
@@ -95,8 +102,10 @@ def download_pinned(url: str, output: Path, size: int, digest: str) -> None:
     verify_file(output, size, digest)
 
 
-def architecture_tree(source: str) -> ast.Module:
+def architecture_tree(source: str, architecture: str = "osnet_x0_25") -> ast.Module:
     """Only inspected tensor-layer definitions; no package/loader/downloader."""
+    if architecture not in MODEL_PROFILES:
+        raise ValueError("Unsupported pinned architecture")
     if hashlib.sha256(source.encode("utf-8")).hexdigest() != ARCHITECTURE_SHA256:
         raise ValueError("Standalone architecture source must match pinned SHA256")
     original = ast.parse(source, filename="osnet-pinned.py")
@@ -111,7 +120,7 @@ def architecture_tree(source: str) -> ast.Module:
         elif isinstance(node, ast.ClassDef) and node.name in ARCHITECTURE_CLASSES:
             selected.append(node)
             classes.add(node.name)
-        elif isinstance(node, ast.FunctionDef) and node.name == "osnet_x0_25":
+        elif isinstance(node, ast.FunctionDef) and node.name == architecture:
             factory = copy.deepcopy(node)
             # Calling the original factory with pretrained=False would already
             # avoid its loader, but remove that branch entirely as a second guard.
@@ -203,19 +212,20 @@ def normalized_feature(raw: object) -> object:
     return (feature[0].astype(np.float64) / norm).astype(np.float32)
 
 
-def manifest(model_path: Path) -> dict:
+def manifest(model_path: Path, architecture: str = "osnet_x0_25") -> dict:
+    filename, digest, checkpoint_size = MODEL_PROFILES[architecture]
     size = model_path.stat().st_size
     if not 1 <= size <= MODEL_LIMIT:
         raise ValueError("Exported model exceeds native encoder limit")
     return {
-        "version": 1, "architecture": "osnet_x0_25", "training_dataset": "MSMT17-combineall",
+        "version": 1, "architecture": architecture, "training_dataset": "MSMT17-combineall",
         "model_file": "model.onnx", "model_sha256": file_sha256(model_path), "model_size_bytes": size,
         "input_name": "images", "input_shape": INPUT_SHAPE, "output_name": "features",
         "output_shape": OUTPUT_SHAPE, "dimension": 512, "preprocessing": "opencv-linear-rgb-imagenet-v1",
         "mean": MEAN, "std": STD, "normalize_output": True, "license": "MIT",
         "source": {"hf_repository": HF_REPOSITORY, "hf_revision": HF_REVISION,
-                   "checkpoint_filename": CHECKPOINT_FILENAME, "checkpoint_sha256": CHECKPOINT_SHA256,
-                   "checkpoint_size_bytes": CHECKPOINT_SIZE, "architecture_revision": ARCHITECTURE_REVISION,
+                   "checkpoint_filename": filename, "checkpoint_sha256": digest,
+                   "checkpoint_size_bytes": checkpoint_size, "architecture_revision": ARCHITECTURE_REVISION,
                    "source_sha256": ARCHITECTURE_SHA256},
     }
 
@@ -253,25 +263,27 @@ def reference_crops(video: Path, manifest_path: Path) -> list:
     return result
 
 
-def export_bundle(output: Path, video: Path, reference_manifest: Path) -> None:
+def export_bundle(output: Path, video: Path, reference_manifest: Path, architecture: str = "osnet_x0_25") -> None:
     import cv2
     import numpy as np
     import onnx
     import torch
+    filename, digest, checkpoint_size = MODEL_PROFILES[architecture]
     if output.exists():
         raise ValueError("Output already exists; choose a new bundle directory")
     output.mkdir(parents=True)
     download_pinned(ARCHITECTURE_URL, output / "osnet-source.py", ARCHITECTURE_SIZE, ARCHITECTURE_SHA256)
     download_pinned(LICENSE_URL, output / "LICENSE-MIT.txt", LICENSE_SIZE, LICENSE_SHA256)
-    checkpoint_path = output / CHECKPOINT_FILENAME
-    download_pinned(CHECKPOINT_URL, checkpoint_path, CHECKPOINT_SIZE, CHECKPOINT_SHA256)
+    checkpoint_path = output / filename
+    download_pinned(f"https://huggingface.co/{HF_REPOSITORY}/resolve/{HF_REVISION}/{filename}",
+                    checkpoint_path, checkpoint_size, digest)
     source = (output / "osnet-source.py").read_text(encoding="utf-8")
-    tree = architecture_tree(source)
+    tree = architecture_tree(source, architecture)
     namespace = {"__name__": "aegisvision_pinned_osnet"}
     exec(compile(tree, "osnet-pinned.py", "exec"), namespace)
     torch.set_num_threads(2)
     torch.manual_seed(0)
-    model = namespace["osnet_x0_25"](num_classes=1, pretrained=False).eval()
+    model = namespace[architecture](num_classes=1, pretrained=False).eval()
     # weights_only is mandatory; never retry using unrestricted pickle.
     checkpoint = restricted_checkpoint(checkpoint_path, torch)
     loaded = load_reid_weights(model, checkpoint, torch)
@@ -328,7 +340,7 @@ def export_bundle(output: Path, video: Path, reference_manifest: Path) -> None:
         "version": 1, "status": "passed", "torch": torch.__version__, "opencv": cv2.__version__,
         "numpy": np.__version__, "onnx": onnx.__version__, "opset": 13,
         "loaded_backbone_tensors": loaded, "checkpoint_loader": "torch.load(weights_only=True,map_location=cpu)",
-        "architecture_selection": "pinned standalone tensor classes and x0.25 factory; no package/loaders",
+        "architecture_selection": f"pinned standalone tensor classes and {architecture} factory; no package/loaders",
         "model_sha256": file_sha256(model_path), "fixtures": errors,
         "reference_video_sha256": file_sha256(video), "reference_manifest_sha256": file_sha256(reference_manifest),
         "reference_crop_policy": "first two distinct GT identities at frame 1; floor/ceil and clip to image",
@@ -338,7 +350,7 @@ def export_bundle(output: Path, video: Path, reference_manifest: Path) -> None:
     })
     # Publish the successful runtime contract last; failed partial bundles have
     # no manifest and cannot be mistaken for verified native encoder artifacts.
-    write_json(output / "manifest.json", manifest(model_path))
+    write_json(output / "manifest.json", manifest(model_path, architecture))
     print(f"Prepared {output}; static FP32 OSNet, 3 golden inputs and PyTorch/OpenCV parity passed.")
     print(f"ONNX SHA256 {file_sha256(model_path)}; {model_path.stat().st_size} bytes")
 
@@ -354,9 +366,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("output", type=Path)
     parser.add_argument("--reference-video", required=True, type=Path)
     parser.add_argument("--reference-manifest", required=True, type=Path)
+    parser.add_argument("--architecture", choices=sorted(MODEL_PROFILES), default="osnet_x0_25")
     args = parser.parse_args(argv)
     try:
-        export_bundle(args.output, args.reference_video, args.reference_manifest)
+        export_bundle(args.output, args.reference_video, args.reference_manifest, args.architecture)
     except (OSError, ValueError, RuntimeError, ImportError, KeyError, TypeError) as error:
         parser.exit(1, f"ReID preparation failed: {error}\n")
     return 0

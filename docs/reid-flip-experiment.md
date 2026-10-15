@@ -33,8 +33,8 @@ Geliştirme manifesti SHA256:
 Ölçüm öncesi politika SHA256:
 `58c32b129255b60abafeeaf8985759895eedac01e2320a6cfeaeb11fc11b41aa`.
 
-**Sonraki aday:** daha güçlü Re-ID ağırlığı veya ayrı kimliklerle metric-learning
-fine-tuning. Bu deney ağırlıkları eğitmedi; mevcut çoklu-kamera kalite açığını
+**Sonraki aday denendi:** [OSNet x1.0 model karşılaştırması](reid-model-experiment.md).
+Ayrı kimliklerle metric-learning fine-tuning hâlâ yapılmadı. Bu deney ağırlıkları eğitmedi; mevcut çoklu-kamera kalite açığını
 kapatmış sayılmaz. Geliştirme kümesi artık görülmüştür, gelecek aday seçiminde
 kullanılabilir fakat kör test diye raporlanamaz.
 

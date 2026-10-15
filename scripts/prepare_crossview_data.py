@@ -68,28 +68,54 @@ def digest(content):
     return hashlib.sha256(content).hexdigest()
 
 
+def header_matches(stream, info, offset):
+    if not 0 <= offset < SIZE - 30:
+        return False
+    stream.seek(offset)
+    header = stream.read(30)
+    if len(header) != 30 or header[:4] != b"PK\x03\x04":
+        return False
+    name_size, extra_size = struct.unpack_from("<HH", header, 26)
+    if not 0 < name_size <= 1024 or offset + 30 + name_size + extra_size + info.compress_size > SIZE:
+        return False
+    return stream.read(name_size) == info.filename.encode("utf-8")
+
+
 def resolve_header(stream, info):
     # This legacy >4 GiB archive wraps classic ZIP offsets without ZIP64.
     # Resolve only bounded candidates, verifying the complete member name;
     # ZipFile subsequently verifies decompression and the member CRC.
     candidates = [info.header_offset, info.header_offset - 2**32]
-    valid = []
-    for offset in candidates:
-        if not 0 <= offset < SIZE - 30:
-            continue
-        stream.seek(offset)
-        header = stream.read(30)
-        if header[:4] != b"PK\x03\x04":
-            continue
-        name_size, extra_size = struct.unpack_from("<HH", header, 26)
-        if not 0 < name_size <= 1024 or offset + 30 + name_size + extra_size + info.compress_size > SIZE:
-            continue
-        if stream.read(name_size) == info.filename.encode("utf-8"):
-            valid.append(offset)
+    valid = [offset for offset in candidates if header_matches(stream, info, offset)]
     if len(valid) != 1:
         raise ValueError("Cannot uniquely resolve legacy ZIP member header")
     resolved = copy.copy(info)
     resolved.header_offset = valid[0]
+    return resolved
+
+
+def resolve_member(stream, info, entries, directory_start):
+    resolved = resolve_header(stream, info)
+    if not resolved.header_offset < directory_start <= SIZE:
+        raise ValueError("Invalid central directory boundary")
+    # ZIP32 rollover makes ZipFile's sorted raw-offset _end_offset unreliable:
+    # early members shifted by 4 GiB appear inside genuine C6 payloads. Find the
+    # next *verified* local header, not merely the next raw central-directory
+    # offset. Retain ZipFile's overlap rejection against that physical boundary.
+    candidates = []
+    for other in entries:
+        for offset in (other.header_offset, other.header_offset - 2**32):
+            if resolved.header_offset < offset < directory_start:
+                candidates.append((offset, other))
+    candidates.sort(key=lambda pair: pair[0])
+    boundary = directory_start
+    for probe, (offset, other) in enumerate(candidates):
+        if probe >= 32:
+            raise ValueError("Cannot establish bounded next ZIP member header")
+        if header_matches(stream, other, offset):
+            boundary = offset
+            break
+    resolved._end_offset = boundary
     return resolved
 
 
@@ -140,7 +166,7 @@ def prepare(output, inventory=False, profile="diagnostic"):
             info = archive.getinfo(matches[0])
             if info.file_size > 16 * 1024 * 1024 or info.compress_size > 16 * 1024 * 1024:
                 raise ValueError("Oversized ZIP member")
-            info = resolve_header(remote, info)
+            info = resolve_member(remote, info, archive.infolist(), archive.start_dir)
             content = archive.read(info)  # validates ZIP CRC; paths are never extracted
             relative = suffix.lstrip("/")
             if not re.fullmatch(r"(?:Image_subsets/C[1-7]/\d{8}\.png|annotations_positions/\d{8}\.json)", relative):

@@ -3,7 +3,7 @@ import io
 import struct
 import unittest
 from unittest.mock import patch
-from zipfile import ZipInfo
+from zipfile import ZipInfo, ZipFile, BadZipFile
 import prepare_crossview_data as data
 
 
@@ -83,6 +83,55 @@ class PreparationTests(unittest.TestCase):
         entry = ZipInfo("test"); entry.header_offset = 0; entry.compress_size = 0
         with self.assertRaises(ValueError):
             data.resolve_header(io.BytesIO(b"x" * 100), entry)
+
+    def test_phantom_boundary_repaired_without_removing_overlap_guard(self):
+        stream = io.BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("first", b"x" * 200)
+            archive.writestr("second", b"y" * 20)
+        stream.seek(0)
+        with ZipFile(stream) as archive:
+            first, second = archive.infolist()
+            first._end_offset = 100  # phantom earlier member shifted by 4 GiB
+            phantom = ZipInfo("phantom"); phantom.header_offset = 100
+            entries = [first, phantom, second]
+            fixed = data.resolve_member(stream, first, entries, archive.start_dir)
+            self.assertEqual(fixed._end_offset, second.header_offset)
+            self.assertEqual(first._end_offset, 100)  # original metadata unmodified
+            self.assertEqual(archive.read(fixed), b"x" * 200)
+            # Oversized payload still overlaps the next verified real header.
+            first.compress_size += 20
+            overlapping = data.resolve_member(stream, first, entries, archive.start_dir)
+            with self.assertRaisesRegex(BadZipFile, "Overlapped"):
+                archive.read(overlapping)
+
+    def test_corrupt_crc_still_rejected_after_boundary_repair(self):
+        stream = io.BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("first", b"xxxx")
+        stream.seek(0)
+        with ZipFile(stream) as archive:
+            entry = archive.infolist()[0]
+            fixed = data.resolve_member(stream, entry, archive.infolist(), archive.start_dir)
+            stream.seek(30 + len(entry.filename)); stream.write(b"yyyy")
+            with self.assertRaisesRegex(BadZipFile, "CRC"):
+                archive.read(fixed)
+
+    def test_invalid_directory_and_probe_budget_rejected(self):
+        stream = io.BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("first", b"x" * 200)
+        stream.seek(0)
+        with ZipFile(stream) as archive:
+            entry = archive.infolist()[0]
+            with self.assertRaises(ValueError):
+                data.resolve_member(stream, entry, [entry], 0)
+            phantoms = []
+            for offset in range(40, 73):
+                phantom = ZipInfo("phantom"); phantom.header_offset = offset
+                phantoms.append(phantom)
+            with self.assertRaisesRegex(ValueError, "bounded next"):
+                data.resolve_member(stream, entry, phantoms, archive.start_dir)
 
     def test_frozen_subset(self):
         self.assertEqual(data.FRAMES, tuple(range(0, 2000, 125)))

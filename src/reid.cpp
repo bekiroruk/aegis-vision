@@ -84,7 +84,8 @@ Json manifest(const std::vector<unsigned char>& bytes) {
                         "model_size_bytes", "input_name", "input_shape", "output_name", "output_shape",
                         "dimension", "preprocessing", "mean", "std", "normalize_output", "source", "license"});
     if (!result.at("version").is_number_integer() || result.at("version") != 1 ||
-        result.at("architecture") != "osnet_x0_25" || result.at("training_dataset") != "MSMT17-combineall" ||
+        (result.at("architecture") != "osnet_x0_25" && result.at("architecture") != "osnet_x1_0") ||
+        result.at("training_dataset") != "MSMT17-combineall" ||
         result.at("model_file") != "model.onnx" || !hash_string(result.at("model_sha256")) ||
         !result.at("model_size_bytes").is_number_unsigned() ||
         result.at("model_size_bytes").get<std::uint64_t>() == 0 ||
@@ -100,11 +101,17 @@ Json manifest(const std::vector<unsigned char>& bytes) {
     const auto& source = result.at("source");
     exact_keys(source, {"hf_repository", "hf_revision", "checkpoint_filename", "checkpoint_sha256",
                         "checkpoint_size_bytes", "architecture_revision", "source_sha256"});
+    const bool large = result.at("architecture") == "osnet_x1_0";
+    const std::string checkpoint = std::string(large ? "osnet_x1_0" : "osnet_x0_25") +
+        "_msmt17_combineall_256x128_amsgrad_ep150_stp60_lr0.0015_b64_fb10_softmax_labelsmooth_flip_jitter.pth";
+    const char* checkpoint_hash = large ?
+        "48df972f72887b95cf3b43b3a07c3a7d2398381aea0f9cae64a7ef11d512b727" :
+        "cf55163d78fc44c62c82f85ab62d39f10438679b5abe8c698ae08cfa84aa6e18";
     if (source.at("hf_repository") != "kaiyangzhou/osnet" ||
         source.at("hf_revision") != "a5c5cc037c24235cda3b21085b93ad77c9616224" ||
-        source.at("checkpoint_sha256") != "cf55163d78fc44c62c82f85ab62d39f10438679b5abe8c698ae08cfa84aa6e18" ||
-        source.at("checkpoint_filename") != "osnet_x0_25_msmt17_combineall_256x128_amsgrad_ep150_stp60_lr0.0015_b64_fb10_softmax_labelsmooth_flip_jitter.pth" ||
-        !source.at("checkpoint_size_bytes").is_number_integer() || source.at("checkpoint_size_bytes") != 9'336'983 ||
+        source.at("checkpoint_sha256") != checkpoint_hash || source.at("checkpoint_filename") != checkpoint ||
+        !source.at("checkpoint_size_bytes").is_number_integer() ||
+        source.at("checkpoint_size_bytes") != (large ? 17'273'805 : 9'336'983) ||
         source.at("architecture_revision") != "f8cd150fdf77e8d9e1ed143b7f308c2c609ded50" ||
         source.at("source_sha256") != "c7c1c29187d6330f859c91da229271531920464c7011aec13842a086b2263cae")
         throw std::invalid_argument("Unsupported Re-ID checkpoint provenance");
