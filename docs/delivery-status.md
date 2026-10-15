@@ -23,8 +23,11 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
 ## Bu turda kapatılan küçük işler
 
 - Linux CI derlemesini durduran VLM HTTP fixture generic-lambda tür belirsizliği
-  giderildi. Windows'ta VLM taşıma/sınır/timeout/iptal testi geçti. Linux sonucu
-  ayrıca CI üzerinden kontrol edilir; Windows başarısından çıkarılmaz.
+  giderildi. Windows'ta VLM taşıma/sınır/timeout/iptal testi geçti.
+  `78fb968` için [GitHub çalışmasında](https://github.com/bekiroruk/aegis-vision/actions/runs/38696609083)
+  5/5 grup başarılı: API, Windows/Linux temel, OpenCV Linux, arama/servis Linux.
+  Son grup 20 tekrarlı arşiv kontrolünü de geçti. Bu sonuç sonraki teslim
+  belgesi/ön kontrol commit'lerinin CI sonucunu otomatik olarak doğrulamaz.
 - Demo dosya envanteri tek listede toplandı; eksikler topluca gösteriliyor.
   `-CheckOnly` Windows PowerShell 5.1 ve PowerShell 7'de boş/tam/eksik kurulum,
   dosya yerine klasör, farklı çalışma klasörü, çelişen seçenekler ve yan

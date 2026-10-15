@@ -73,7 +73,10 @@ Gözlenmiş iki sahnede eşik denemeleri burada durduruldu. Linux arşiv testind
 aralıklı durma, 20 tekrarlı CI kontrolünde `archive_unsupported_entry` olarak
 yakalandı: geçici dosya yayını sırasında dizin taramasındaki giriş kaybolabiliyor.
 Kaybolma için tüm kota taramasını en fazla üç kez yeniden başlatan düzeltme
-eklendi; kısmi sayaç kabul edilmiyor. Uzak Linux tekrar testi doğrulaması bekleniyor.
+eklendi; kısmi sayaç kabul edilmiyor. 2026-10-15 tarihinde `78fb968` için
+[uzak Linux CI](https://github.com/bekiroruk/aegis-vision/actions/runs/38696609083)
+ve 20 tekrarlı arşiv kontrolü geçti. Derlemeyi engelleyen ayrı VLM test-fixture
+tür belirsizliği de düzeltildi; aynı çalışmadaki 5/5 kontrol grubu başarılı.
 Bu incelemede yerelde ayrıca manifest/mühür yayın yarışı yakalandı ve katalog
 yalnız atomik `sealed.json` sonrasında listeleyecek şekilde düzeltildi; araya
 okuma giren durum için deterministik test eklendi. Bu düzeltme, önceki Linux
