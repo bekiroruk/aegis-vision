@@ -10,6 +10,7 @@
 #include <set>
 #include <cmath>
 #include <chrono>
+#include <map>
 
 namespace {
 using namespace aegisvision;
@@ -115,16 +116,36 @@ void review(const fs::path& path, const cv::Mat& left, const cv::Mat& right,
     }
     vision::save_image(path, sheet);
 }
+std::vector<double> grid(const Json& values) {
+    if (!values.is_array() || values.empty() || values.size() > 8)
+        throw std::invalid_argument("Calibration grid must contain 1..8 values per axis");
+    std::vector<double> result;
+    for (const auto& value : values) {
+        if (!value.is_number()) throw std::invalid_argument("Calibration value must be numeric");
+        const auto x = value.get<double>();
+        if (!std::isfinite(x) || x <= 0 || x > 1 || (!result.empty() && x <= result.back()))
+            throw std::invalid_argument("Calibration grid must be finite, increasing and in (0,1]");
+        result.push_back(x);
+    }
+    return result;
+}
+struct CalibrationCell {
+    double threshold, margin;
+    Counts counts;
+    std::map<std::string, std::size_t> reasons;
+};
 int run(const std::vector<fs::path>& args) {
     try {
         if (args.size() == 2 && args[1] == "--help") {
-            std::cout << "aegisvision_crossview MANIFEST.json OSNET_BUNDLE NEW_OUTPUT_DIR [--flip-mean]\n"
-                         "Same-frame C1->C2 oracle-crop diagnostic. No detection/tracking/handoff score.\n";
+            std::cout << "aegisvision_crossview MANIFEST.json OSNET_BUNDLE NEW_OUTPUT_DIR [--flip-mean | --calibrate-dev POLICY.json]\n"
+                         "Fixed camera/identity splits with oracle crops. Calibration is development-only. No detection/tracking/handoff score.\n";
             return 0;
         }
-        if (args.size() != 4 && args.size() != 5) throw std::invalid_argument("Use --help");
+        if (args.size() != 4 && args.size() != 5 && args.size() != 6) throw std::invalid_argument("Use --help");
         if (args.size() == 5 && args[4] != "--flip-mean") throw std::invalid_argument("Unknown feature option");
+        if (args.size() == 6 && args[4] != "--calibrate-dev") throw std::invalid_argument("Unknown calibration option");
         const bool flip = args.size() == 5;
+        const bool calibrate = args.size() == 6;
         if (fs::exists(args[3])) throw std::invalid_argument("Output directory must not exist");
         const auto manifest_hash = hash(args[1]);
         std::ifstream input(args[1]);
@@ -135,6 +156,29 @@ int run(const std::vector<fs::path>& args) {
         const bool diagnostic = j.at("protocol") == "wildtrack-c1-c2-same-frame-gt-crops-v1";
         const bool development = j.at("protocol") == "wildtrack-flip-development-v1";
         const bool holdout = j.at("protocol") == "wildtrack-flip-holdout-v1";
+        std::vector<CalibrationCell> sweep;
+        std::string policy_hash;
+        if (calibrate) {
+            if (!development) throw std::invalid_argument("Calibration requires development data; diagnostic/holdout forbidden");
+            if (!fs::is_regular_file(args[5]) || fs::file_size(args[5]) > 65536)
+                throw std::invalid_argument("Missing or oversized calibration policy");
+            policy_hash = hash(args[5]);
+            std::ifstream policy_input(args[5]);
+            const auto policy = Json::parse(policy_input, [](int depth, Json::parse_event_t, Json&) {
+                if (depth > 16) throw std::invalid_argument("Calibration policy nesting too deep"); return true;
+            });
+            integer(policy.at("version"), 1, 1);
+            if (policy.at("purpose") != "development-threshold-calibration-only" ||
+                policy.at("development_protocol") != j.at("protocol") ||
+                policy.at("feature_variant") != "single" || policy.at("production_promotion") != false ||
+                policy.at("manifest_sha256") != manifest_hash)
+                throw std::invalid_argument("Calibration policy/data contract mismatch");
+            const auto thresholds = grid(policy.at("thresholds")), margins = grid(policy.at("margins"));
+            if (policy.at("model_sha256") != hash(args[2] / "model.onnx"))
+                throw std::invalid_argument("Calibration model SHA256 mismatch");
+            for (const double threshold : thresholds) for (const double margin : margins)
+                sweep.push_back({threshold, margin, {}, {}});
+        }
         const auto cameras = diagnostic ? Json::array({"C1", "C2"}) : development ? Json::array({"C3", "C4"}) : Json::array({"C5", "C6"});
         if ((!diagnostic && !development && !holdout) || (diagnostic && flip) ||
             j.at("cameras") != cameras || j.at("min_similarity") != .85 || j.at("ambiguity_margin") != .05)
@@ -173,6 +217,12 @@ int run(const std::vector<fs::path>& args) {
             feature_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
             feature_count += q.size() + g.size();
             const auto decisions = evaluate_crossview(q, g, .85, .05);
+            for (auto& cell : sweep) {
+                for (const auto& decision : evaluate_crossview(q, g, cell.threshold, cell.margin)) {
+                    cell.counts.add(decision);
+                    ++cell.reasons[decision.reason];
+                }
+            }
             Counts counts;
             Json queries = Json::array();
             for (std::size_t k = 0; k < decisions.size(); ++k) {
@@ -197,6 +247,19 @@ int run(const std::vector<fs::path>& args) {
         std::ofstream out(output / "report.json.part"); out << report.dump(2) << '\n'; out.close();
         if (!out) throw std::runtime_error("Cannot write report");
         fs::rename(output / "report.json.part", output / "report.json");
+        if (calibrate) {
+            Json cells = Json::array();
+            for (const auto& cell : sweep) cells.push_back({{"min_similarity", cell.threshold},
+                {"ambiguity_margin", cell.margin}, {"metrics", cell.counts.json()}, {"rejection_reasons", cell.reasons}});
+            Json calibration{{"version", 1}, {"complete", true}, {"development_only", true},
+                {"protocol", j.at("protocol")}, {"manifest_sha256", manifest_hash}, {"policy_sha256", policy_hash},
+                {"model_sha256", report.at("model_sha256")}, {"embedding_space", encoder.space_id()},
+                {"feature_variant", "single"}, {"baseline_report_sha256", hash(output / "report.json")},
+                {"cells", cells}, {"production_promoted", false}, {"holdout_evaluated", false}};
+            std::ofstream sweep_out(output / "calibration.json.part"); sweep_out << calibration.dump(2) << '\n'; sweep_out.close();
+            if (!sweep_out) throw std::runtime_error("Cannot write calibration report");
+            fs::rename(output / "calibration.json.part", output / "calibration.json");
+        }
         std::cout << total.json().dump(2) << '\n';
         return 0;
     } catch (const std::exception& e) { std::cerr << "Error: " << e.what() << '\n'; return 1; }

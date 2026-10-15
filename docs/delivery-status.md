@@ -54,10 +54,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
 2. **Linux GPU Docker dağıtımı.** GPU servis imajı ve çalışan NVIDIA
    konteynerinde sağlık/inference/kapanış testi. Yerel Docker Linux motoru bu
    kontrolde erişilemiyordu; CPU CI başarısı GPU Docker kanıtı değildir.
-3. **Çoklu kamera/Re-ID.** Geliştirme-verisi eşik kalibrasyonu, gerekirse ayrı
-   kimliklerde metric learning, yeni son test; saat eşleme, gerçek kamera
-   geçişleri ve canlı kimlik ilişkilendirmesi. x1.0 sıralamayı iyileştirdi ama
-   mevcut eşikte kabul sayısı hâlâ sıfır.
+3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
+   tamamlandı; hiçbir ayar kalite koşullarını birlikte geçmedi, varsayılan korundu.
+   Ayrı eğitim kimliklerinde temsil/metric-learning iyileştirmesi ve yeni son test;
+   saat eşleme, gerçek kamera geçişleri ve canlı kimlik ilişkilendirmesi gerekiyor.
 4. **INT8 ve diğer GPU modelleri.** INT8 engine üretimi var fakat ilk aday
    kalite/hız kapısını geçmedi. Ayrı veriyle yeni kalibrasyon/QAT ve ölçüm;
    segmentation/diğer modellerin TensorRT uyarlaması gerekiyor. FP16 detection var.

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "purpose": "development-threshold-calibration-only",
+  "development_protocol": "wildtrack-flip-development-v1",
+  "manifest_sha256": "bdd3583c4db7b8d7c4038cdfa4f59dfcf6c649811b523fb795e5617b247d785c",
+  "model_sha256": "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a",
+  "feature_variant": "single",
+  "thresholds": [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85],
+  "margins": [0.02, 0.05, 0.1, 0.15],
+  "minimum_counterpart_queries": 30,
+  "minimum_unknown_queries": 30,
+  "minimum_correct_accepts": 20,
+  "minimum_precision": 0.95,
+  "minimum_recall": 0.2,
+  "maximum_wrong_accepts": 1,
+  "maximum_unknown_accepts": 0,
+  "tie_break": "maximum correct accepts, minimum wrong accepts, higher threshold, higher margin",
+  "production_promotion": false,
+  "limitations": "Frozen before this sweep. Development data already seen; correlated repeated people and oracle boxes. C5/C6 was already evaluated and must not be reused to validate new thresholds. A new untouched final test is required."
+}

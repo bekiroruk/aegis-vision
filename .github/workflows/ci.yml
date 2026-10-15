@@ -93,6 +93,8 @@ jobs:
         run: python3 scripts/test_crossview_data.py
       - name: Re-ID augmentation and model development selection (no downloads)
         run: python3 scripts/test_reid_flip_selection.py
+      - name: Re-ID threshold calibration selection (no downloads)
+        run: python3 scripts/test_reid_thresholds.py
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract

@@ -45,8 +45,8 @@ başarısı değerlendirilemez. Sıfır kabul nedeniyle precision da hesaplanama
 Geliştirme ve son kontrol yüzdeleri farklı galeriler nedeniyle birbirleriyle
 doğrudan kıyaslanmaz; yalnız her kümedeki iki modelin farkı anlamlıdır.
 
-Sıradaki kalite işi: geliştirme verisinde hata analizi ve önceden tanımlı
-yanlış-kabul/recall hedefleriyle eşik kalibrasyonu. Bu C5/C6 sonuçları artık
+Sonraki [32-ayarlı geliştirme eşik kalibrasyonu](reid-calibration.md) tamamlandı;
+hiçbir ayar yanlış-kabul/recall hedeflerini birlikte geçmedi. Bu C5/C6 sonuçları artık
 görülmüştür; yeni ayarlar için dokunulmamış bir son test gerekir. Gerekirse
 ayrı eğitim kimliklerinde metric-learning yapılır. Kamera saatleri ve gerçek
 tracklet geçişleri ölçülmeden canlı çoklu-kamera desteği tamamlanmış sayılmaz.

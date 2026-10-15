@@ -37,6 +37,8 @@ flip-ortalama yalnız +1,06 puan verdi, kabul kapısını geçmedi; varsayılan 
 [Büyük Re-ID modeli karşılaştırması](docs/reid-model-experiment.md): x1.0 aynı
 geliştirme verisinde %62,77→%70,21; ayrılmış C5/C6 son kontrolde %40,74→%50,00
 Rank-1 verdi. Her iki modelde de kabul sıfır; varsayılan değiştirilmedi.
+[Eşik kalibrasyonu](docs/reid-calibration.md): 32 geliştirme ayarı ölçüldü;
+hiçbiri sabit precision/recall ve yanlış-kabul koşullarını birlikte geçmedi.
 
 Gerçek YOLOv8n-seg modeliyle C++ instance segmentation ve yan yana maske videosu:
 [adaptör, video CLI'ı ve demo](docs/segmentation.md). Ayrı video giriş noktasıdır;

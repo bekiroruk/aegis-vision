@@ -111,8 +111,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    59/94→60/94 kazanç ve yaklaşık 1,92× maliyet verdi; +2 puan kapısını
    geçmediği için varsayılan modele alınmadı. [OSNet x1.0 karşılaştırması](reid-model-experiment.md)
    geliştirmede 59/94→66/94, ayrılmış C5/C6 kontrolde 22/54→27/54 Rank-1 verdi.
-   Kabul hâlâ sıfır; varsayılan korundu. Geliştirme-verisi eşik kalibrasyonu,
-   dokunulmamış yeni son test ve gerekirse metric-learning hâlâ eksik.
+   Kabul hâlâ sıfır; varsayılan korundu. [32-ayarlı geliştirme eşik kalibrasyonu](reid-calibration.md)
+   tamamlandı: 37 doğru/9 yanlış ile 7 doğru/0 yanlış arasında kalite-recall ödünleşimi;
+   hiçbir ayar sabit kapıları geçmedi. Ayrı eğitim kimliklerinde temsil/metric-learning
+   iyileştirmesi ve dokunulmamış yeni son test hâlâ eksik.
    Non-overlap iki-kamera geçişi/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 

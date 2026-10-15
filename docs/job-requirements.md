@@ -20,7 +20,7 @@ nitelikler kod yazarak tamamlanamaz.
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
 | Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI kontrolü | Redis dağıtık worker/lease yok; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |
-| Çoklu kamera/Re-ID | C++ tracklet/prototip çıkarımı; [x1.0 model karşılaştırması](reid-model-experiment.md): aynı C5/C6 GT-kutularında Rank-1 %40,74→%50,00, sıfır kabul | Görünüm/kabul kalitesi yetersiz; geliştirme-verisi kalibrasyonu ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
+| Çoklu kamera/Re-ID | C++ tracklet/prototip; [x1.0 karşılaştırması](reid-model-experiment.md) ve [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md); kabul kapısını geçen ayar yok | Temsil/metric-learning iyileştirmesi ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |
 | Triton/Jetson | Doğrulanmış deployment yok | Uygun ortam/donanım ve gerçek ölçüm gerekli |
 | Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI, hazır kurulum demosu, salt okunur dosya ön kontrolü ve 20 saniyelik yerel demo videosu | Sıfır makine kurulumu, tam model/veri/bağımlılık lisans incelemesi ve yük/operasyon doğrulaması |
