@@ -195,6 +195,33 @@ void bundle_validation() {
         bad["source"]["checkpoint_size_bytes"] = 17'273'805;
         bad["model_sha256"] = std::string(64, '0'); save(root / "manifest.json", bad);
         rejects([&] { ReIdEmbedder rejected(root); }, "Large-model hash mismatch accepted", "SHA256");
+        auto adapted = bad;
+        adapted["version"] = 2;
+        adapted["training_dataset"] = "MSMT17-combineall+MOT15-TUD-linear";
+        adapted["license"] = "research-only-see-provenance";
+        adapted["adaptation"] = {{"method", "linear-triplet-v1"},
+            {"base_model_sha256", "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a"},
+            {"training_policy_sha256", std::string(64, 'a')},
+            {"training_data_sha256", std::string(64, 'b')}, {"head_sha256", std::string(64, 'c')}};
+        save(root / "manifest.json", adapted);
+        rejects([&] { ReIdEmbedder rejected(root); }, "Adapted model hash mismatch accepted", "SHA256");
+        for (int field = 0; field < 10; ++field) {
+            auto malformed = adapted;
+            switch (field) {
+            case 0: malformed["adaptation"]["method"] = "unknown"; break;
+            case 1: malformed["adaptation"]["base_model_sha256"] = std::string(64, '0'); break;
+            case 2: malformed["adaptation"]["training_policy_sha256"] = "invalid"; break;
+            case 3: malformed["adaptation"]["training_data_sha256"] = 123; break;
+            case 4: malformed["adaptation"].erase("head_sha256"); break;
+            case 5: malformed["adaptation"]["extra"] = true; break;
+            case 6: malformed["license"] = "MIT"; break;
+            case 7: malformed["version"] = 2.0; break;
+            case 8: malformed["architecture"] = "osnet_x0_25"; break;
+            default: malformed["training_dataset"] = "MSMT17-combineall"; break;
+            }
+            save(root / "manifest.json", malformed);
+            rejects([&] { ReIdEmbedder rejected(root); }, "Invalid adaptation contract accepted", "Re-ID");
+        }
         bad["source"]["checkpoint_size_bytes"] = 9'336'983; save(root / "manifest.json", bad);
         rejects([&] { ReIdEmbedder rejected(root); }, "Mixed checkpoint sizes accepted", "provenance");
         bad = valid;

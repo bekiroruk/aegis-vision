@@ -113,8 +113,10 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    geliştirmede 59/94→66/94, ayrılmış C5/C6 kontrolde 22/54→27/54 Rank-1 verdi.
    Kabul hâlâ sıfır; varsayılan korundu. [32-ayarlı geliştirme eşik kalibrasyonu](reid-calibration.md)
    tamamlandı: 37 doğru/9 yanlış ile 7 doğru/0 yanlış arasında kalite-recall ödünleşimi;
-   hiçbir ayar sabit kapıları geçmedi. Ayrı eğitim kimliklerinde temsil/metric-learning
-   iyileştirmesi ve dokunulmamış yeni son test hâlâ eksik.
+   hiçbir ayar sabit kapıları geçmedi. [GPU metric-learning başlangıç deneyi](reid-training.md)
+   tamamlandı: sabit OSNet üzerinde 305 MOT15 kırpmasıyla doğrusal katman,
+   200 güncelleme; geliştirmede 66/94→64/94 geriledi ve aday reddedildi.
+   Daha çeşitli eğitimle kalite iyileştirmesi ve dokunulmamış yeni son test hâlâ eksik.
    Non-overlap iki-kamera geçişi/saat eşleme ve canlı entegrasyon henüz yoktur. Kabul: baseline karşılaştırması
    aynı veri/sabit koşullarda; ID sayısı doğruluk metriği olarak kullanılmaz.
 

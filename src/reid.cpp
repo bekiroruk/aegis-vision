@@ -80,12 +80,15 @@ Json manifest(const std::vector<unsigned char>& bytes) {
         return true;
     };
     auto result = Json::parse(bytes.begin(), bytes.end(), callback);
-    exact_keys(result, {"version", "architecture", "training_dataset", "model_file", "model_sha256",
+    const bool adapted = result.value("version", Json()) == 2;
+    std::set<std::string> fields{"version", "architecture", "training_dataset", "model_file", "model_sha256",
                         "model_size_bytes", "input_name", "input_shape", "output_name", "output_shape",
-                        "dimension", "preprocessing", "mean", "std", "normalize_output", "source", "license"});
-    if (!result.at("version").is_number_integer() || result.at("version") != 1 ||
+                        "dimension", "preprocessing", "mean", "std", "normalize_output", "source", "license"};
+    if (adapted) fields.insert("adaptation");
+    exact_keys(result, fields);
+    if (!result.at("version").is_number_integer() || (result.at("version") != 1 && !adapted) ||
         (result.at("architecture") != "osnet_x0_25" && result.at("architecture") != "osnet_x1_0") ||
-        result.at("training_dataset") != "MSMT17-combineall" ||
+        result.at("training_dataset") != (adapted ? "MSMT17-combineall+MOT15-TUD-linear" : "MSMT17-combineall") ||
         result.at("model_file") != "model.onnx" || !hash_string(result.at("model_sha256")) ||
         !result.at("model_size_bytes").is_number_unsigned() ||
         result.at("model_size_bytes").get<std::uint64_t>() == 0 ||
@@ -96,8 +99,17 @@ Json manifest(const std::vector<unsigned char>& bytes) {
         result.at("preprocessing") != "opencv-linear-rgb-imagenet-v1" ||
         !channel_values(result.at("mean"), mean) || !channel_values(result.at("std"), standard_deviation) ||
         !result.at("normalize_output").is_boolean() || result.at("normalize_output") != true ||
-        result.at("license") != "MIT")
+        result.at("license") != (adapted ? "research-only-see-provenance" : "MIT"))
         throw std::invalid_argument("Unsupported Re-ID model/preprocessing contract");
+    if (adapted) {
+        const auto& adaptation = result.at("adaptation");
+        exact_keys(adaptation, {"method", "base_model_sha256", "training_policy_sha256", "training_data_sha256", "head_sha256"});
+        if (result.at("architecture") != "osnet_x1_0" || adaptation.at("method") != "linear-triplet-v1" ||
+            adaptation.at("base_model_sha256") != "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a" ||
+            !hash_string(adaptation.at("training_policy_sha256")) || !hash_string(adaptation.at("training_data_sha256")) ||
+            !hash_string(adaptation.at("head_sha256")))
+            throw std::invalid_argument("Unsupported Re-ID adaptation provenance");
+    }
     const auto& source = result.at("source");
     exact_keys(source, {"hf_repository", "hf_revision", "checkpoint_filename", "checkpoint_sha256",
                         "checkpoint_size_bytes", "architecture_revision", "source_sha256"});

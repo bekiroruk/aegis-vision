@@ -287,6 +287,17 @@ def export_bundle(output: Path, video: Path, reference_manifest: Path, architect
     # weights_only is mandatory; never retry using unrestricted pickle.
     checkpoint = restricted_checkpoint(checkpoint_path, torch)
     loaded = load_reid_weights(model, checkpoint, torch)
+    publish_bundle(model, output, video, reference_manifest, architecture, loaded)
+
+
+def publish_bundle(model, output: Path, video: Path, reference_manifest: Path,
+                   architecture: str, loaded: int, adaptation: dict | None = None) -> None:
+    """Export and verify an in-memory model; publish the native contract last."""
+    import cv2
+    import numpy as np
+    import onnx
+    import torch
+    model = model.cpu().eval()
     model_path = output / "model.onnx"
     with torch.no_grad():
         torch.onnx.export(model, (torch.zeros(INPUT_SHAPE),), model_path,
@@ -346,11 +357,15 @@ def export_bundle(output: Path, video: Path, reference_manifest: Path, architect
         "reference_crop_policy": "first two distinct GT identities at frame 1; floor/ceil and clip to image",
         "limitations": ["Fixtures verify implementation parity, not ReID accuracy or generalization.",
                         "OpenCV INTER_LINEAR preprocessing is this project contract; not claimed bit-identical to upstream PIL transforms.",
-                        "MSMT17 combineall checkpoint is cross-domain on MOT15; no MOT fine-tuning or threshold calibration."],
+                        "Golden fixtures are implementation checks, not held-out accuracy measurements."],
     })
     # Publish the successful runtime contract last; failed partial bundles have
     # no manifest and cannot be mistaken for verified native encoder artifacts.
-    write_json(output / "manifest.json", manifest(model_path, architecture))
+    contract = manifest(model_path, architecture)
+    if adaptation is not None:
+        contract.update(version=2, training_dataset="MSMT17-combineall+MOT15-TUD-linear",
+                        license="research-only-see-provenance", adaptation=adaptation)
+    write_json(output / "manifest.json", contract)
     print(f"Prepared {output}; static FP32 OSNet, 3 golden inputs and PyTorch/OpenCV parity passed.")
     print(f"ONNX SHA256 {file_sha256(model_path)}; {model_path.stat().st_size} bytes")
 

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "comparison": "model",
+  "baseline": "osnet_x1_0 MSMT17-combineall, single, frozen baseline",
+  "candidate": "osnet_x1_0 frozen plus TUD linear triplet head, final step 200",
+  "training_policy_sha256": "9c047d284b468487f99a3dd6cc22816fc0808ac14bf1de896be4e69af04ce71b",
+  "baseline_model_sha256": "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a",
+  "candidate_model_sha256": "2a20ac28be34142eb9807bb417293ea1d0c0700cec592f54ee7a61cda50ef319",
+  "development_manifest_sha256": "bdd3583c4db7b8d7c4038cdfa4f59dfcf6c649811b523fb795e5617b247d785c",
+  "development_protocol": "wildtrack-flip-development-v1",
+  "min_similarity": 0.85,
+  "ambiguity_margin": 0.05,
+  "minimum_counterpart_queries": 30,
+  "minimum_rank1_gain": 0.02,
+  "maximum_extra_wrong_accepts": 0,
+  "production_promotion": false,
+  "holdout_rule": "If selected, require a NEW untouched final test. Previously observed C5/C6 is not eligible. No automatic deployment.",
+  "limitations": "MOT15 single-camera training only; target development was previously seen. No external final test or full-backbone fine-tuning. Selection thresholds fixed before candidate development inference."
+}

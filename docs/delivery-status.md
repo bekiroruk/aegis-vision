@@ -56,7 +56,9 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    kontrolde erişilemiyordu; CPU CI başarısı GPU Docker kanıtı değildir.
 3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
    tamamlandı; hiçbir ayar kalite koşullarını birlikte geçmedi, varsayılan korundu.
-   Ayrı eğitim kimliklerinde temsil/metric-learning iyileştirmesi ve yeni son test;
+   [İlk GPU metric-learning deneyi](reid-training.md) tamamlandı: 305 ayrı eğitim
+   kırpması, sabit OSNet + doğrusal katman; geliştirme Rank-1 %70,21→%68,09,
+   aday reddedildi. Daha çeşitli eğitimle kalite iyileştirmesi ve yeni son test;
    saat eşleme, gerçek kamera geçişleri ve canlı kimlik ilişkilendirmesi gerekiyor.
 4. **INT8 ve diğer GPU modelleri.** INT8 engine üretimi var fakat ilk aday
    kalite/hız kapısını geçmedi. Ayrı veriyle yeni kalibrasyon/QAT ve ölçüm;

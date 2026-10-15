@@ -9,8 +9,8 @@ nitelikler kod yazarak tamamlanamaz.
 |---|---|---|
 | Uçtan uca CV pipeline | C++ detection → tracking → CLIP → Qdrant → HTTP/panel | Üretim yükü/operasyon doğrulaması |
 | Detection, segmentation, tracking | Gerçek ONNX inference, maske/takip videoları ve etiketli ölçümler | Daha geniş bağımsız veri ve kalite iyileştirmesi |
-| Eğitim/PyTorch | GPU segmentation fine-tuning ve native C++ karşılaştırması | Kaçırmaları artıran aday kabul edilmedi; eğitim kapsamını genişletme |
-| Transformer/embedding | CLIP ViT görsel/metin encoder ve referans kontrolü | DINO ayrı alternatif; çok dilli arama ve metric-learning deneyi eksik |
+| Eğitim/PyTorch | GPU segmentation fine-tuning; [GPU Re-ID doğrusal metric-learning](reid-training.md) ve native C++ karşılaştırmaları | Kalite kapılarını geçmeyen adaylar kabul edilmedi; eğitim kapsamını genişletme |
+| Transformer/embedding | CLIP ViT görsel/metin encoder ve referans kontrolü; ayrıca OSNet tabanlı metric-learning deneyi | DINO ayrı alternatif; çok dilli arama ve kalite artışı eksik; OSNet transformer değildir |
 | Çok modlu vektör arama | C++ CLIP/Qdrant indeksleme ve metin/görsel sorgu | Büyük bağımsız kalite kümesi |
 | Geometrik eşleştirme | OpenCV ORB, matching, RANSAC homografi | Daha geniş gerçek sahne değerlendirmesi |
 | OCR/VLM | Native adaptör, tek-kare HTTP işi/panel ve yerel model çalışması | Doğal Türkçe OCR ve VLM doğruluğu geniş ölçülmedi |
@@ -20,7 +20,7 @@ nitelikler kod yazarak tamamlanamaz.
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
 | Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI kontrolü | Redis dağıtık worker/lease yok; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |
-| Çoklu kamera/Re-ID | C++ tracklet/prototip; [x1.0 karşılaştırması](reid-model-experiment.md) ve [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md); kabul kapısını geçen ayar yok | Temsil/metric-learning iyileştirmesi ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
+| Çoklu kamera/Re-ID | C++ tracklet/prototip; [x1.0 karşılaştırması](reid-model-experiment.md), [kalibrasyon](reid-calibration.md), [gerçek metric-learning eğitimi](reid-training.md); eğitilen aday 66/94→64/94 ile reddedildi | Kalite iyileştirmesi ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |
 | Triton/Jetson | Doğrulanmış deployment yok | Uygun ortam/donanım ve gerçek ölçüm gerekli |
 | Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI, hazır kurulum demosu, salt okunur dosya ön kontrolü ve 20 saniyelik yerel demo videosu | Sıfır makine kurulumu, tam model/veri/bağımlılık lisans incelemesi ve yük/operasyon doğrulaması |

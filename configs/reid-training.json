@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "method": "linear-triplet-v1",
+  "base_model_sha256": "5bf5321c31d064507acaec3aefecf3381b24673123c61403ceab491f49f9dc6a",
+  "training_sources": [
+    {"manifest": "artifacts/datasets/mot15-tud/quality-manifest.json", "sha256": "adc32ea13e1338d083968d2278a87487136f764beb13b1374a24ab533c009187"},
+    {"manifest": "artifacts/datasets/mot15-campus/quality-manifest.json", "sha256": "d880b78c006938ddcbf13cabd00cba61b6dda3f6d6c9efe6c7e5e6eccbb0ff25"}
+  ],
+  "seed": 17,
+  "frame_stride": 5,
+  "minimum_crop_width": 20,
+  "minimum_crop_height": 64,
+  "identities_per_batch": 4,
+  "observations_per_identity": 4,
+  "steps": 200,
+  "learning_rate": 0.001,
+  "triplet_margin": 0.2,
+  "identity_regularization": 0.001,
+  "checkpoint": "last-step-only-no-early-stopping",
+  "development_manifest_sha256": "bdd3583c4db7b8d7c4038cdfa4f59dfcf6c649811b523fb795e5617b247d785c",
+  "evaluation_threshold": 0.85,
+  "evaluation_margin": 0.05,
+  "minimum_rank1_gain": 0.02,
+  "maximum_extra_wrong_accepts": 0,
+  "production_promotion": false,
+  "limitations": "Frozen OSNet x1.0, only a bias-free 512x512 linear head is trained. Positives/negatives sampled within each MOT15 sequence; no cross-sequence identity assumption. WILDTRACK is never read by the trainer. Fixed final checkpoint, no search. MOT15 CC BY-NC-SA 3.0/source conditions; local research only, no model/data redistribution. No independent final-test claim."
+}
