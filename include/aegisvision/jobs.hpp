@@ -35,6 +35,9 @@ public:
     [[nodiscard]] std::string storage_error() const;
     // Returns false for unknown IDs. A running job acknowledges cancellation at a checkpoint.
     bool cancel(const std::string& id);
+    // Reject new work and cooperatively interrupt active work. Durable jobs
+    // remain replayable, unlike user cancellation. Safe to call repeatedly.
+    void request_stop();
 private:
     struct Job {
         Json value;

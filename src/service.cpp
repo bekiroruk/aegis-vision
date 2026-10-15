@@ -114,7 +114,7 @@ int LocalService::bind(int port) {
     return port_;
 }
 bool LocalService::listen() { return http_.listen_after_bind(); }
-void LocalService::stop() { http_.stop(); live_.shutdown(); }
+void LocalService::stop() { jobs_.request_stop(); http_.stop(); live_.shutdown(); }
 fs::path LocalService::media_path(const std::string& relative) const {
     const auto requested = fs::u8path(relative);
     if (relative.empty() || requested.is_absolute() || requested.has_root_name())

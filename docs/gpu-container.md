@@ -29,8 +29,11 @@ GPU Docker deployment maddesi tamamlanmış değildir.
 - Python yalnız dosya ön kontrolü/sağlık için kullanılır, ardından C++ sunucuyu
   `exec` eder. Sağlık kontrolü `ready` + `tensorrt` + `fp16-mixed` + `cuda:0`
   ister. Bu, etiketli veriyle doğruluk veya GPU inference testi yerine geçmez.
-- Mevcut sunucuda SIGTERM ile aktif işleri drain etme garantisi yoktur. `init`
-  sinyali iletir; aktif işte kapanış/kurtarma gerçek konteyner testinde ölçülmelidir.
+- Sunucuya [SIGINT/SIGTERM köprüsü](service.md#işletim-sistemi-sinyaliyle-kapanış)
+  eklendi: yeni iş kabulünü durdurur, aktif işi işbirlikçi olarak keser ve
+  kalıcı işi aynı ID ile yeniden oynatılmak üzere saklar. `init` sinyali iletir.
+  Bütün işleri bitirerek drain etme veya 30 saniyede kapanma garantisi değildir;
+  gerçek GPU konteynerinde kapanış/kurtarma hâlâ ölçülmelidir.
 
 ## Hazır modelleri olan Linux makinesinde
 

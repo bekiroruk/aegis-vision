@@ -40,6 +40,9 @@ public:
     ~LocalService();
     int bind(int port); // 0 chooses a free port, useful for integration tests.
     bool listen();
+    // Process-level SIGINT/SIGTERM bridge; only one instance may own handlers.
+    // Call after bind. Signal handler only sets a lock-free flag.
+    bool listen_until_signal();
     void stop();
 private:
     using Json = nlohmann::json;

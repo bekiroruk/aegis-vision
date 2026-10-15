@@ -70,11 +70,15 @@ void JobQueue::restore() {
     for (const auto& id : order_) store_->save(jobs_.at(id)->value);
 }
 JobQueue::~JobQueue() {
+    request_stop();
+    worker_.join();
+}
+void JobQueue::request_stop() {
     {
         std::lock_guard lock(mutex_); stopping_ = true;
         for (auto& [id, job] : jobs_) { (void)id; job->cancelled = true; }
     }
-    ready_.notify_all(); worker_.join();
+    ready_.notify_all();
 }
 void JobQueue::save_locked(const Json& value, const std::vector<std::string>& evicted) {
     if (!store_) return;

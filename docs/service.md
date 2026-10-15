@@ -284,3 +284,44 @@ açın. Panelde **Karedeki yazıları oku**, API'de `ocr_frame` işi kullanılı
 Teknik referanslar: [SQLite WAL](https://sqlite.org/wal.html),
 [SQLite locking mode](https://sqlite.org/pragma.html#pragma_locking_mode),
 [kaynak dağıtımı](https://sqlite.org/download.html).
+
+## İşletim sistemi sinyaliyle kapanış
+
+2026-10-15: Sunucu dinleme aşamasında SIGINT/SIGTERM sinyallerini yakalar.
+Handler yalnız lock-free atomik bayrak yazar; SQLite, model, HTTP veya thread
+join işlemini sinyal handler'ında çalıştırmaz. Normal bir gözlemci thread yeni
+iş kabulünü durdurur, kuyrukta işbirlikçi iptal ister, HTTP dinlemeyi kapatır
+ve canlı worker'ın kapanmasını bekler. Ardından kuyruk worker'ı join edilir.
+
+Bu **bütün işleri bitirene kadar drain etme** değil, **duraklatıp yeniden
+oynatma** davranışıdır. Kalıcı SQLite açıksa yarım kalan aktif iş aynı ID ile
+`queued` olarak kaydedilir; bekleyen işler korunur. Kullanıcının iptal ettiği
+iş tekrar başlatılmaz. Veritabanı kapandıktan sonra aynı model/store bağlamıyla
+açılan servis aktif ve bekleyen işleri yeniden yürütür. Kalıcılık kapalıysa
+bekleyen işler süreç kapanınca kaybolur. Dış sistemlerde exactly-once garantisi yoktur.
+
+SIGKILL/Task Manager ile zorla sonlandırma bu yolu çalıştırmaz; mevcut WAL/crash
+kurtarma yolu geçerlidir. Windows'ta PowerShell penceresini kapatma veya
+`Stop-Process` kontrollü SIGTERM değildir. Windows testleri süreç içinden
+`raise(SIGINT/SIGTERM)` kullanır; Linux CI ayrıca ayrı ebeveyn süreçten gerçek
+SIGTERM yollar. Başlangıçta model yüklenirken henüz dinleme köprüsü kurulmamıştır.
+Devam eden tek bir GPU/model/codec çağrısı zorla kesilmez; kapanışın 30 saniye
+içinde biteceği garanti edilmez. Konteyner timeout sonrası zorla sonlandırırsa
+crash kurtarması gerekir; gerçek GPU konteyner stop/restart ölçümü hâlâ açıktır.
+
+İlgili testler: `aegisvision_shutdown`, `aegisvision_shutdown_sigint`,
+`aegisvision_job_persistence`. Ayrı POSIX süreç testi:
+
+```bash
+python3 scripts/test_shutdown_signal.py build/aegisvision_shutdown_tests
+```
+
+Test gerçek HTTP/SQLite kullanır; model ve vektör store kontrollü fixture'dır.
+Aktif, bekleyen ve kullanıcı-iptalli üç işin kapanış/yeniden açılmasını ve eski
+sinyal handler'ının geri yüklenmesini kontrol eder. Mevcut çalışan eski sunucu
+ikilisi otomatik yenilenmez veya kapatılmaz; değişiklik yeni derlemeyle uygulanır.
+
+Yerel Windows doğrulaması: iki sinyal testi üçer tekrarda geçti; servis,
+kalıcılık, ani çökme/kurtarma ve sinyal testlerinden oluşan 6/6 CTest geçti.
+9 konteyner başlangıç testi ve web regresyonları da geçti. Linux dış süreç
+SIGTERM testi CI'a eklendi; bu yerel sonuç Linux/GPU konteyner kanıtı değildir.

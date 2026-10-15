@@ -55,6 +55,8 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    Dockerfile/Compose/başlangıç kontrolleri eklendi; 9 test ve Compose ayrıştırma
    geçti. İmaj derlemesi ve gerçek NVIDIA konteynerinde sağlık/inference/kapanış
    testi bekliyor. Yerel Docker Linux motoru erişilemiyor; paket GPU çalışma kanıtı değildir.
+   C++ servisinin SIGINT/SIGTERM kontrollü kapanış ve aynı-ID SQLite yeniden
+   oynatma bağlantısı eklendi; gerçek GPU konteyner testi bununla kapanmış sayılmaz.
 3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
    tamamlandı; hiçbir ayar kalite koşullarını birlikte geçmedi, varsayılan korundu.
    [İlk GPU metric-learning deneyi](reid-training.md) tamamlandı: 305 ayrı eğitim

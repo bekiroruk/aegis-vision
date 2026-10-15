@@ -103,6 +103,8 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Test core and HTTP contract
         run: ctest --test-dir build --output-on-failure
+      - name: External SIGTERM with active and queued durable jobs
+        run: python3 scripts/test_shutdown_signal.py build/aegisvision_shutdown_tests
       - name: Offline multicamera CLI contract (synthetic, no model)
         run: python3 scripts/test_multicamera_cli.py build/aegisvision_multicamera
       - name: Tracklet export bridge contract (synthetic, no model)

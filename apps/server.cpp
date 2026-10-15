@@ -171,7 +171,7 @@ int run(std::vector<std::filesystem::path> args) {
         aegisvision::LocalService service(*detector, clip, store, config, std::move(live_detector),{},std::move(live_segmenter));
         const auto bound = service.bind(port);
         std::cout << "AegisVision ready: http://127.0.0.1:" << bound << " / collection=" << search.qdrant.collection << std::endl;
-        return service.listen() ? 0 : 1;
+        return service.listen_until_signal() ? 0 : 1;
     } catch (const std::exception& error) { std::cerr << "Error: " << error.what() << '\n'; return 1; }
 }
 }

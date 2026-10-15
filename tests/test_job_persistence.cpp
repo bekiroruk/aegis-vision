@@ -78,6 +78,12 @@ void checks(const fs::path& root) {
         active = queue.submit({{"type", "active"}});
         until([&] { return queue.get(active).at("progress").contains("items"); });
         queued = queue.submit({{"type", "waiting"}});
+        queue.request_stop(); queue.request_stop();
+        bool rejected = false;
+        try { (void)queue.submit({{"type", "too-late"}}); } catch (const JobQueueFull&) { rejected = true; }
+        require(rejected, "Stopping queue accepted new work");
+        until([&] { return queue.get(active).at("state") == "queued"; });
+        require(queue.get(active).at("cancel_requested") == false, "Shutdown turned into user cancellation");
     }
     {
         JobStore store(shutdown); const auto jobs = store.load();
