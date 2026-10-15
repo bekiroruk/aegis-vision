@@ -1,10 +1,12 @@
 #include "aegisvision/vlm.hpp"
 #include <httplib.h>
 #include <nlohmann/json.hpp>
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <thread>
 #include <stdexcept>
+#include <vector>
 using namespace aegisvision::vision;using Json=nlohmann::json;
 void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 template<class F> void rejects(F f){bool failed=false;try{f();}catch(const std::exception&){failed=true;}require(failed,"Expected VLM failure");}
@@ -22,7 +24,7 @@ int main(){try{
     rejects([]{parse_scene_response(envelope("bad\u202etext").dump());});
     rejects([]{LocalVlm({8092,99});});rejects([]{LocalVlm({8092,120001});});
     httplib::Server server;std::atomic_int mode{0};std::atomic_bool started{false};
-    server.Post("/v1/chat/completions",[&](const auto& req,auto& res){
+    server.Post("/v1/chat/completions",[&](const httplib::Request& req,httplib::Response& res){
         const auto body=Json::parse(req.body);
         if(body.at("model")!="aegis-smolvlm-500m"||body.at("stream")!=false||!body["messages"][0]["content"][0]["image_url"]["url"].get<std::string>().starts_with("data:image/jpeg;base64,/9j/")){res.status=400;return;}
         started=true;
