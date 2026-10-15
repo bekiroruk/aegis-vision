@@ -166,7 +166,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    GPU üzerinde eşzamanlı dosya indeksleme/arama ve temiz stop ile doğrulandı;
    `file_replay` olarak açıkça etiketlidir, kamera/RTSP testi değildir.
    Gerçek RTSP + GPU birleşik test, segmentation/diğer modellerin GPU uyarlaması
-   ve GPU Docker imajı hâlâ eksik. INT8 için Q/DQ/QAT veya farklı temsilî
+   ve gerçek GPU Docker doğrulaması hâlâ eksik. [GPU Dockerfile/Compose paketi](gpu-container.md)
+   ve başlangıç kontrolleri eklendi; imaj derlemesi/gerçek GPU koşusu yapılmadı.
+   INT8 için Q/DQ/QAT veya farklı temsilî
    veri deneyi ayrı geliştirme/holdout gerektirir; bu adımda başarı sayılmaz.
    Kabul: CPU/FP32 referansına karşı kalite farkı, warm-up sonrası p50/p95,
    throughput ve GPU bellek raporu. CUDA/GPU uyumu doğrulanmadan tamamlandı sayılmaz.

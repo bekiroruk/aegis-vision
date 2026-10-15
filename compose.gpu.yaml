@@ -1,0 +1,84 @@
+# Native Linux only: preserve the server's loopback/Host/Origin protections.
+name: aegis-gpu
+services:
+  qdrant-gpu:
+    image: qdrant/qdrant:v1.12.5
+    network_mode: host
+    environment:
+      QDRANT__SERVICE__HOST: 127.0.0.1
+      QDRANT__SERVICE__HTTP_PORT: "16333"
+      QDRANT__SERVICE__GRPC_PORT: "16334"
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - gpu-qdrant:/qdrant/storage
+  service:
+    image: aegisvision-gpu:local
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    platform: linux/amd64
+    network_mode: host
+    init: true
+    user: "${AEGIS_UID:-1000}:${AEGIS_GID:-1000}"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    depends_on: [qdrant-gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - type: bind
+        source: ./artifacts/models
+        target: /models
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./artifacts/container/engines
+        target: /engines
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./artifacts/media
+        target: /media
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./artifacts/container/state
+        target: /state
+        bind: {create_host_path: false}
+  engine-build:
+    image: aegisvision-gpu:local
+    platform: linux/amd64
+    profiles: [tools]
+    user: "${AEGIS_UID:-1000}:${AEGIS_GID:-1000}"
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    entrypoint: [/opt/aegis/build/aegisvision_trt_build]
+    command: [/models/yolov8n.onnx, /engines/linux-fp16, fp16]
+    healthcheck: {disable: true}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - type: bind
+        source: ./artifacts/models
+        target: /models
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./artifacts/container/engines
+        target: /engines
+        bind: {create_host_path: false}
+volumes:
+  gpu-qdrant:

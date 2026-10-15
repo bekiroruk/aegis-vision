@@ -1,0 +1,30 @@
+# Linux x86_64 development/deployment candidate; GPU runtime verification required.
+FROM nvcr.io/nvidia/tensorrt:25.09-py3
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake ninja-build g++ curl ca-certificates libopencv-dev libicu-dev ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl --fail --location --retry 3 \
+    https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz \
+    -o /tmp/ort.tgz \
+    && echo '1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b  /tmp/ort.tgz' | sha256sum --check \
+    && tar -xzf /tmp/ort.tgz -C /opt && rm /tmp/ort.tgz
+WORKDIR /opt/aegis
+COPY CMakeLists.txt ./
+COPY cmake ./cmake
+COPY include ./include
+COPY src ./src
+COPY apps ./apps
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DAEGISVISION_BUILD_TESTS=OFF -DAEGISVISION_WITH_OPENCV=ON \
+    -DAEGISVISION_WITH_SEARCH=ON -DAEGISVISION_WITH_TENSORRT=ON \
+    -DONNXRUNTIME_ROOT=/opt/onnxruntime-linux-x64-1.23.2 -DTENSORRT_ROOT=/usr \
+    && cmake --build build --parallel 2 --target aegisvision_server aegisvision_trt_build \
+    && ./build/aegisvision_server --help && ./build/aegisvision_trt_build --help
+COPY web ./web
+COPY deploy/gpu ./deploy
+ENV LD_LIBRARY_PATH=/opt/onnxruntime-linux-x64-1.23.2/lib:${LD_LIBRARY_PATH}
+USER 1000:1000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
+    CMD ["python3", "/opt/aegis/deploy/entrypoint.py", "--health"]
+ENTRYPOINT ["python3", "/opt/aegis/deploy/entrypoint.py"]

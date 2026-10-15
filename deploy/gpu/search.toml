@@ -1,0 +1,18 @@
+version = 1
+[pipeline]
+mode = "search"
+[embedding]
+backend = "clip_onnx"
+bundle = "/models/clip-vit-b32"
+dimension = 512
+[vector_store]
+backend = "qdrant"
+host = "127.0.0.1"
+port = 16333
+collection = "aegis_linux_gpu"
+dimension = 512
+timeout_seconds = 10
+[runtime]
+device = "cpu"
+precision = "fp32"
+engine = "onnxruntime"

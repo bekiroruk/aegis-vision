@@ -16,7 +16,7 @@ nitelikler kod yazarak tamamlanamaz.
 | OCR/VLM | Native adaptör, tek-kare HTTP işi/panel ve yerel model çalışması | Doğal Türkçe OCR ve VLM doğruluğu geniş ölçülmedi |
 | TensorRT FP16 | Yerel engine, CPU karşılaştırması, GPU servis ve video demosu | Gerçek RTSP ile GPU birleşik test; diğer modellerin GPU uyarlaması |
 | INT8 | Ayrık kalibrasyon ve native engine ölçümü | Kalite/hız kapısı geçmedi; kabul edilmiş INT8 modeli yok |
-| GPU Docker deployment | Mevcut Dockerfile yalnız temel CPU demodur | GPU servis imajı ve gerçek konteyner testi eksik; yerel Docker motoru kapalı |
+| GPU Docker deployment | [GPU Dockerfile/Compose ve başlangıç kontrolleri](gpu-container.md); 9 test + Compose ayrıştırma | İmaj derlemesi ve gerçek GPU konteyner testi yapılmadı; yerel Docker motoru kapalı |
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
 | Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI kontrolü | Redis dağıtık worker/lease yok; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |

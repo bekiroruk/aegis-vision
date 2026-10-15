@@ -51,9 +51,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    işi, kesinti/yeniden bağlantı ve temiz stop tek gerçek yayında sınanmalı.
    CPU RTSP ve GPU dosya replay ayrı ayrı var; birleşik test yerine geçmez.
    Mevcut publisher engeli aşılmış sayılmıyor.
-2. **Linux GPU Docker dağıtımı.** GPU servis imajı ve çalışan NVIDIA
-   konteynerinde sağlık/inference/kapanış testi. Yerel Docker Linux motoru bu
-   kontrolde erişilemiyordu; CPU CI başarısı GPU Docker kanıtı değildir.
+2. **Linux GPU Docker dağıtımı.** [GPU servis paketinin](gpu-container.md)
+   Dockerfile/Compose/başlangıç kontrolleri eklendi; 9 test ve Compose ayrıştırma
+   geçti. İmaj derlemesi ve gerçek NVIDIA konteynerinde sağlık/inference/kapanış
+   testi bekliyor. Yerel Docker Linux motoru erişilemiyor; paket GPU çalışma kanıtı değildir.
 3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
    tamamlandı; hiçbir ayar kalite koşullarını birlikte geçmedi, varsayılan korundu.
    [İlk GPU metric-learning deneyi](reid-training.md) tamamlandı: 305 ayrı eğitim

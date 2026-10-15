@@ -14,6 +14,8 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r tests/requirements-api.txt
       - run: python scripts/test_openapi.py
+      - run: python scripts/test_gpu_container.py
+      - run: docker compose -f compose.gpu.yaml config --quiet
 
   build-and-test:
     strategy:

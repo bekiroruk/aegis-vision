@@ -66,6 +66,9 @@ varsayılanı korunur. Gerçek GPU dosya indeksleme/arama ve fixture kaynaklı
 canlı worker doğrulandı. Publisher gerektirmeyen `-ReplayFile` video demosu da
 gerçek GPU'da panel, eşzamanlı indeksleme/arama ve stop ile doğrulandı;
 kamera yayını değildir. Gerçek RTSP + GPU birleşik testi ve GPU Docker hâlâ eksik.
+[Linux GPU servis paketi](docs/gpu-container.md) eklendi: ayrı Dockerfile/Compose,
+model/mount ön kontrolü ve FP16 sağlık kontrolü. İmaj derlemesi ve gerçek GPU
+konteyner çalışması henüz doğrulanmadı; mevcut Windows demosu değişmedi.
 
 Gerçek PP-OCRv3 + CRNN EN ile [C++ OCR CLI'ı](docs/ocr.md): metin, dört köşeli
 kutu, ayrı detection/recognition skorları ve JSON/önizleme. İlk sürüm İngilizce

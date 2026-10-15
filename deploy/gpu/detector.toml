@@ -1,0 +1,15 @@
+version = 1
+[pipeline]
+mode = "image"
+[detector]
+backend = "yolo_onnx"
+model = "/models/yolov8n.onnx"
+confidence_threshold = 0.35
+nms_iou_threshold = 0.45
+input_size = 640
+max_detections = 300
+[runtime]
+device = "cpu"
+precision = "fp32"
+engine = "opencv-dnn"
+# Server --trt-bundle explicitly replaces this detector; no CPU fallback.

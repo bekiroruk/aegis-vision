@@ -1,10 +1,11 @@
 # SDK stays local. No system PATH changes, Python runtime, or silent CPU fallback.
 set(TENSORRT_ROOT "" CACHE PATH "TensorRT 10.13.3 SDK root (include, lib)")
 find_package(CUDAToolkit 13.0 REQUIRED)
-find_path(TRT_INCLUDE NvInfer.h PATHS "${TENSORRT_ROOT}/include" NO_DEFAULT_PATH REQUIRED)
+find_path(TRT_INCLUDE NvInfer.h PATHS "${TENSORRT_ROOT}/include"
+    PATH_SUFFIXES x86_64-linux-gnu NO_DEFAULT_PATH REQUIRED)
 foreach(component nvinfer nvonnxparser)
     find_library(TRT_${component}_LIB NAMES ${component}_10 ${component}
-        PATHS "${TENSORRT_ROOT}/lib" NO_DEFAULT_PATH REQUIRED)
+        PATHS "${TENSORRT_ROOT}/lib" PATH_SUFFIXES x86_64-linux-gnu NO_DEFAULT_PATH REQUIRED)
     add_library(aegis_${component} SHARED IMPORTED)
     if(WIN32)
         find_file(_cuda_runtime_dll NAMES cudart64_13.dll
