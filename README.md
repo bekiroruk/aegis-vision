@@ -11,6 +11,8 @@ içinde birleştirmektir.
 
 ## Mevcut özellikler
 
+[Güncel teslim durumu ve kalan 8 iş grubu](docs/delivery-status.md).
+
 İlandaki maddelerle mevcut kanıtları ve eksikleri karşılaştır:
 [iş ilanı teslim kontrolü](docs/job-requirements.md).
 

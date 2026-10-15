@@ -50,6 +50,17 @@ Hazırlık kontrolü bileşen başına en fazla 120 saniye bekler.
 
 ## Kurulum sınırı
 
+Servisleri açmadan bütün eksik başlangıç dosyalarını görmek için:
+
+```powershell
+.\scripts\demo.ps1 -CheckOnly | ConvertTo-Json
+```
+
+Bu salt okunur envanterdir; model içeriği, DLL, port veya GPU doğrulaması
+yapmaz. `FilesPresent: true` tek başına uygulama çalışır demek değildir.
+`-Stop` / `-OpenBrowser` ile birlikte kullanılamaz. Regresyon kontrolü:
+`./scripts/test_demo_preflight.ps1`.
+
 Bu komut kurulum/indirme aracı değildir. Eksik dosyada hangi dosyanın gerektiğini
 yazar. İlk kez klonlanan repoda derleme ve modeller ayrıca hazırlanmalıdır:
 

@@ -1,4 +1,4 @@
-param([switch]$Stop, [switch]$OpenBrowser)
+param([switch]$Stop, [switch]$OpenBrowser, [switch]$CheckOnly)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $stateDirectory = Join-Path $repo 'artifacts/service/demo-launcher'
@@ -6,6 +6,28 @@ $stateFile = Join-Path $stateDirectory 'processes.clixml'
 $owned = @()
 $started = @()
 $lock = $null
+$requiredFiles = @('build/live-seg/Release/aegisvision_server.exe','artifacts/deps/qdrant/qdrant.exe',
+    'artifacts/deps/llama-b11552/llama-server.exe','configs/analysis.toml','configs/service-search.toml',
+    'configs/image.toml','configs/qdrant-local.yaml','web/index.html','artifacts/media/pedestrians.mp4',
+    'artifacts/models/yolov8n.onnx','artifacts/models/yolov8n-seg/yolov8n-seg.onnx',
+    'artifacts/models/clip-vit-b32/manifest.json','artifacts/models/ocr-multi-v6/inference.onnx',
+    'artifacts/models/ocr-multi-v6/inference.yml','artifacts/models/ocr-multi-v6/text_detection_en_ppocrv3_2023may.onnx',
+    'artifacts/models/smolvlm-500m/SmolVLM-500M-Instruct-Q8_0.gguf',
+    'artifacts/models/smolvlm-500m/mmproj-SmolVLM-500M-Instruct-Q8_0.gguf')
+function Get-MissingDemoFiles {
+    @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $repo $_) -PathType Leaf) })
+}
+if ($CheckOnly) {
+    if ($Stop -or $OpenBrowser) { throw '-CheckOnly cannot be combined with -Stop or -OpenBrowser.' }
+    $missing = @(Get-MissingDemoFiles)
+    [pscustomobject]@{
+        FilesPresent = ($missing.Count -eq 0)
+        MissingFiles = $missing
+        ProjectDirectory = $repo
+        Note = 'File presence only; does not validate models, DLLs, services or GPU. Nothing was started or changed.'
+    }
+    return
+}
 
 function Get-OwnedProcess($record) {
     $process = Get-Process -Id $record.Id -ErrorAction SilentlyContinue
@@ -73,14 +95,8 @@ try {
         Write-Host 'Demo baslaticisinin actigi servisler durduruldu. Daha once acik servisler korunur.'
         return
     }
-    foreach ($file in @('build/live-seg/Release/aegisvision_server.exe','artifacts/deps/qdrant/qdrant.exe',
-        'artifacts/deps/llama-b11552/llama-server.exe','configs/analysis.toml','configs/service-search.toml',
-        'configs/image.toml','configs/qdrant-local.yaml','web/index.html','artifacts/media/pedestrians.mp4',
-        'artifacts/models/yolov8n.onnx','artifacts/models/yolov8n-seg/yolov8n-seg.onnx',
-        'artifacts/models/clip-vit-b32/manifest.json','artifacts/models/ocr-multi-v6/inference.onnx',
-        'artifacts/models/ocr-multi-v6/inference.yml','artifacts/models/ocr-multi-v6/text_detection_en_ppocrv3_2023may.onnx')) {
-        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Eksik dosya: $file. docs/demo.md kurulum adimlarini kullanin." }
-    }
+    $missing = @(Get-MissingDemoFiles)
+    if ($missing.Count) { throw "Eksik dosyalar: $($missing -join ', '). docs/demo.md kurulum adimlarini kullanin." }
     $hashes = @{
         'SmolVLM-500M-Instruct-Q8_0.gguf'='9d4612de6a42214499e301494a3ecc2be0abdd9de44e663bda63f1152fad1bf4'
         'mmproj-SmolVLM-500M-Instruct-Q8_0.gguf'='d1eb8b6b23979205fdf63703ed10f788131a3f812c7b1f72e0119d5d81295150'

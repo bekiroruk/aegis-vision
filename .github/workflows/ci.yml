@@ -24,6 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S . -B build -DAEGISVISION_BUILD_TESTS=ON
+      - name: Demo preflight without launching services
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/test_demo_preflight.ps1
       - name: Build
         run: cmake --build build --config Release
       - name: Test

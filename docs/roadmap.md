@@ -1,6 +1,6 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-14. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
+Güncelleme: 2026-10-15. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -55,6 +55,8 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
   Ardışık kopmalar azalırken FP artışı görüldü; varsayılan yapılmadı.
 
 ## Kalan işler — önerilen sıra
+
+Kısa kapanış listesi ve bu turdaki teslim kontrolleri: [teslim durumu](delivery-status.md).
 
 **Aktif sıra:** canlı segmentasyonun gerçek RTSP doğrulaması tamamlandı.
 Yeni işlev olarak PP-OCRv3 + CRNN EN C++ adaptörü/CLI'ı ve gerçek fotoğraf smoke
@@ -165,8 +167,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
 6. **Portföy teslimi ve ileri deployment.** [API/OpenAPI sözleşmesi](api.md), route
    ve sayı sınırı uyum testleri eklendi; mevcut GPU servisinde gerçek GET yanıtları
    doğrulandı. Hazır kurulum için demo başlatıcısı mevcut; sıfır makinede tekrar
-   üretilebilir kurulumu, mimari karar/model-veri lisans notlarını ve kısa demo
-   videosunu tamamla. Triton/Jetson profilleri uygun donanım varsa son aşamadır;
+   üretilebilir kurulumu ve model-veri lisans notlarını tamamla. Gerçek analiz
+   çıktısından 20 saniyelik yerel demo videosu hazırlandı; yeni inference ölçümü değildir.
+   Triton/Jetson profilleri uygun donanım varsa son aşamadır;
    cihazda ölçülmeyen hız için iddiada bulunulmaz.
 
 İş ilanındaki diğer adımlar için kalite ölçümü ve operasyon katmanları genişletilecek.

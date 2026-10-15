@@ -1,6 +1,6 @@
 # İş ilanına göre teslim kontrolü
 
-2026-10-14. Bu tablo bir deneyim/işe uygunluk sertifikası değildir; repo içindeki
+2026-10-15. Bu tablo bir deneyim/işe uygunluk sertifikası değildir; repo içindeki
 uygulama ve doğrulama kapsamını ayırır. "Var" üretim ortamında eksiksiz onay
 anlamına gelmez. Üç yıl profesyonel deneyim, mezuniyet ve ekip çalışması gibi
 nitelikler kod yazarak tamamlanamaz.
@@ -23,9 +23,11 @@ nitelikler kod yazarak tamamlanamaz.
 | Çoklu kamera/Re-ID | C++ tracklet/prototip çıkarımı; [x1.0 model karşılaştırması](reid-model-experiment.md): aynı C5/C6 GT-kutularında Rank-1 %40,74→%50,00, sıfır kabul | Görünüm/kabul kalitesi yetersiz; geliştirme-verisi kalibrasyonu ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |
 | Triton/Jetson | Doğrulanmış deployment yok | Uygun ortam/donanım ve gerçek ölçüm gerekli |
-| Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI ve hazır kurulum demosu | Sıfır makine kurulumu, lisans notlarının son kontrolü, kısa demo videosu |
+| Teknik teslim | Kullanım belgeleri, ADR'ler, API/OpenAPI, hazır kurulum demosu, salt okunur dosya ön kontrolü ve 20 saniyelik yerel demo videosu | Sıfır makine kurulumu, tam model/veri/bağımlılık lisans incelemesi ve yük/operasyon doğrulaması |
 
 ## Uygulama sırası
+
+Kısa ve güncel kapanış listesi: [teslim durumu](delivery-status.md).
 
 1. Yayın erişilebilir olduğunda mevcut gerçek RTSP + GPU birleşik testini bitir.
    Dosya replay testi bunun yerine geçmez. Mevcut CPU RTSP testleri ayrı kanıttır.
