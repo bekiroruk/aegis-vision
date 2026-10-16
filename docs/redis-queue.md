@@ -227,6 +227,28 @@ hafif fixture'da gerçek Redis + C++ YOLO + Chromium üzerinden gönderim,
 sayfa yenileme, kutulu sonuç ve iptali kontrol eder. Bu fixture tam CLIP/Qdrant
 servisi değildir; ana sunucunun build ve regresyonları ayrıca çalıştırılır.
 
+### Doğrulanan worker varlık takibi — 2026-10-16
+
+Bu sürümün [CI koşusundaki](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334)
+7/7 grubun tamamı başarılıdır.
+
+`ced9aba` için [gerçek Redis grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334/job/117109356672)
+9/9 entegrasyon testini, native heartbeat/iptal ve AOF restart testlerini geçti.
+Yeni test; aynı owner'ın tekrar sayılmamasını, context uyuşmazlığını, 128 owner
+sınırını ve 5 saniyelik sürenin dolmasını doğrular.
+[Gerçek görüntü + tarayıcı grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334/job/117109356751)
+`worker_presence_verified=true`, `http_redis_yolo_verified=true` ve
+`browser_verified=true` üretti. Ayrı, uzun yaşayan C++ worker boş kuyrukta
+5,5 saniye beklerken sinyali sürdü, gerçek görüntü işini tamamladı ve süreç
+kapatılınca sayım sıfıra döndü. Model çıktısı yine 4 kişi ve 1 otobüs.
+
+[Kanıt artifact'ının](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334/artifacts/12063432355)
+yerel kopyası `outputs/redis-presence-20261016/` altındadır. Windows ana servis
+ve worker derlemesi, 4/4 ilgili CTest, ana servis regresyonu, 7/7 OpenAPI ve
+web durum testleri de geçti. Windows'ta Redis sunucusu yok; bunlar yerel canlı
+Redis kurulumu yapıldığı anlamına gelmez. Docker başlatma denemesi kendi
+inference socket hatasında durdu; Docker ayarları/verileri sıfırlanmadı.
+
 ### Doğrulanan HTTP ve tarayıcı koşusu — 2026-10-16
 
 `2ff7fd0` için [CI koşusunun](https://github.com/bekiroruk/aegis-vision/actions/runs/38935643135)

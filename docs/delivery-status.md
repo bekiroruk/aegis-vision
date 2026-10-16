@@ -84,8 +84,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    ana Windows servisinin derlemesi ve ayrı servis regresyon testi de geçti.
    Windows'ta Redis çalıştırılmadı; yerel canlı Redis paneli teslimi değildir.
    Süreli worker sinyali ve panelde otomatik yenilenen varlık durumu eklendi;
-   model hazır/boş kapasite garantisi değildir. Yeni sürümün CI sonucu ayrıca
-   doğrulanmalıdır. Docker yerelde yeniden denendi; kendi inference socket
+   `ced9aba` için [gerçek Redis ve tarayıcı testleri](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334)
+   geçti: boşta sinyalin yenilenmesi, gerçek inference ve kapanınca süre dolumu.
+   Aynı koşunun 7/7 CI grubu başarılı.
+   Bu model hazır/boş kapasite garantisi değildir. Docker yerelde yeniden denendi; kendi inference socket
    başlangıç hatasıyla durdu. Fabrika ayarlarına dönüş/veri silme yapılmadı.
    Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
