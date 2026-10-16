@@ -145,7 +145,9 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    cancellation ve SQLite job recovery tamamlandı. RTSP/FFmpeg kayıt CLI'ı,
    reconnect/backpressure, süre sınırlı canlı web ekranı ve kota sınırlı canlı nesne
    arşivi/indeksi tamamlandı. GStreamer adaptörü, kamera/stream PTS, tam FPS/sesli
-   kayıt ve çoklu worker/Redis lease desteği geliştir. Mevcut arşiv yalnızca analiz
+   kayıt ve çoklu worker/Redis entegrasyonunu geliştir. [Redis lease/token çekirdeği](redis-queue.md)
+   gerçek Redis yarışma/restart testlerini geçti; model worker/heartbeat/HTTP bağlantısı henüz yok.
+   Mevcut arşiv yalnızca analiz
    karelerini kaydeder; kota dolunca capture yerine yalnızca arşiv durur.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,
    tekrar denemeler aynı sonucu iki kez indekslemez. FastAPI/Celery şart değil;

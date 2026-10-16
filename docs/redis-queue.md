@@ -65,6 +65,12 @@ Redis restart'ında aktif/bekleyen işlerin, iptalin ve tamamlanmış sonucun
 korunması sınanır. Yerel makinede Redis yoktur; gerçek sonuç CI'dan doğrulanır.
 Fixture payload kullanılır; CV/GPU veya Redis failover testi değildir.
 
+**Doğrulanan koşu:** `66e72d1` için [Linux Redis grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38865988386/job/116858823943)
+başarılı: native derleme/kontrat, sekiz gerçek Redis entegrasyon testi ve
+AOF restart/kurtarma geçti. Bu sonuç diğer CI gruplarının veya gelecekteki
+worker/panel entegrasyonunun geçtiği anlamına gelmez. Test konteyneri koşunun
+sonunda kaldırıldı; bilgisayardaki mevcut servis/veriler değiştirilmedi.
+
 Sonraki parça model yüklü C++ worker, heartbeat/iptal döngüsü ve HTTP kuyruğuna
 opsiyonel bağlantıdır. Media/model context'inin otomatik hash'lenmesi, dosya
 sonuçlarının token kontrollü yayını ve Qdrant yan etkilerinin idempotent
