@@ -196,7 +196,7 @@ değildir; worker registry/sağlık takibi henüz yoktur.
   404 bilinmeyen iş, 409 ID çakışması/değişmiş önizleme, 429 dolu kuyruk,
   503 kapalı/erişilemeyen/uyuşmayan kuyruk. İnternete açılacak auth/TLS yoktur.
 
-Son işin ID/görüntü/context'i localStorage'da saklanır. Yenileme işi yeniden
+Son işin ID/görüntü/context/kuyruk adı localStorage'da saklanır. Yenileme işi yeniden
 oluşturmaz. Gönderim cevabı kaybolursa kimlik korunur, aynı ID ile durum
 sorgulanabilir/tekrar gönderilebilir. Tarayıcı geçmişi yalnız son işi saklar;
 merkezi geçmiş listesi, TTL ve kapasite boşaltma henüz yoktur. Sunucudan gelen

@@ -56,5 +56,6 @@ const status={enabled:true,queue:'images',context:'ctx',images:['bus.jpg'],worke
   await flush();assert.match(h.el('status').textContent,/analiz ediliyor/);assert.equal(h.calls.filter(c=>c.body).length,0);
   // Do not restore an old model/media namespace.
   h=harness(async()=>({value:status}),{...saved,context:'old'});await flush();assert.equal(h.el('submit').disabled,false);
+  h=harness(async()=>({value:status}),{...saved,queue:'different'});await flush();assert.equal(h.el('submit').disabled,false);
   console.log('Redis UI: disabled state, stable retry ID, refresh recovery, cancellation, safe labels and preview passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

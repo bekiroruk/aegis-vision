@@ -18,7 +18,7 @@
   const idOK = id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id);
   const terminal = state => ['succeeded', 'failed', 'cancelled'].includes(state);
   const storageKey = 'aegis-redis-image-v1';
-  let context = '', enabled = false, active = null, pending = false, revision = 0, shown = '';
+  let context = '', queueName = '', enabled = false, active = null, pending = false, revision = 0, shown = '';
   async function api(path, body) {
     const r = await fetch(path, {signal: AbortSignal.timeout(10000), ...(body === undefined ? {} :
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
@@ -34,8 +34,8 @@
     el('submit').disabled=!enabled || pending || !!active || !el('image').value;
     el('image').disabled=!enabled || pending || !!active;
     el('cancel').hidden=!active || terminal(active.state);
-    el('cancel').disabled=pending;
-    el('retry').disabled=pending;
+    el('cancel').disabled=pending || !enabled;
+    el('retry').disabled=pending || !enabled;
     el('new').hidden=!active || !terminal(active.state);
     el('refresh').disabled=pending;
   }
@@ -79,15 +79,15 @@
       enabled=info.enabled===true;
       panel.hidden=!enabled && panel.dataset?.optional==='true';
       if(!enabled) {el('connection').textContent='Redis görüntü kuyruğu bu serviste etkin değil.';return;}
-      if(typeof info.context!=='string' || !Array.isArray(info.images)) throw new Error('Geçersiz kuyruk bilgisi');
-      if(context && context!==info.context) {++revision;active=null;clearResult();save();}
-      context=info.context;
+      if(typeof info.context!=='string' || typeof info.queue!=='string' || !Array.isArray(info.images)) throw new Error('Geçersiz kuyruk bilgisi');
+      if(context && (context!==info.context || queueName!==info.queue)) {++revision;active=null;clearResult();save();}
+      context=info.context;queueName=info.queue;
       el('connection').textContent=`Redis erişilebilir · ${info.queue} · CPU işçisi ayrı çalışır`;
       const previous=el('image').value;el('image').replaceChildren();
       for(const name of info.images.slice(0,128)) {if(typeof name!=='string') continue;const option=document.createElement('option');option.value=name;option.textContent=name;el('image').append(option);}
       if(info.images.includes(previous)) el('image').value=previous;
       if(!active) {try { const saved=JSON.parse(localStorage.getItem(storageKey));
-        if(saved?.context===context && idOK(saved.id) && typeof saved.image==='string') active={...saved,state:'queued'};
+        if(saved?.context===context && saved.queue===queueName && idOK(saved.id) && typeof saved.image==='string') active={...saved,state:'queued'};
       } catch {}}
       if(active) {active.state='queued';shown='';}
       if(!info.images.length) el('connection').textContent+=' · Medya klasöründe JPG/PNG bulunamadı.';
@@ -97,7 +97,7 @@
   }
   async function submit(retry=false) {
     if(pending || !enabled) return;
-    if(!retry) {if(active || !el('image').value) return;++revision;clearResult();active={id:'img-'+crypto.randomUUID(),image:el('image').value,context,state:'queued'};save();}
+    if(!retry) {if(active || !el('image').value) return;++revision;clearResult();active={id:'img-'+crypto.randomUUID(),image:el('image').value,context,queue:queueName,state:'queued'};save();}
     if(!active) return;
     pending=true;sync();el('retry').hidden=true;
     try {show(await api('/api/redis-images',{id:active.id,image:active.image}));}
