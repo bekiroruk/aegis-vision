@@ -5,6 +5,39 @@ on:
   pull_request:
 
 jobs:
+  redis-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build optional native Redis queue
+        run: |
+          cmake -S . -B build-redis -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_REDIS=ON
+          cmake --build build-redis --parallel 2 --target aegisvision_redis_queue aegisvision_redis_tests
+          ctest --test-dir build-redis -R '^aegisvision_redis_validation$' --output-on-failure
+      - name: Start isolated real Redis with durable AOF
+        run: |
+          docker run -d --name aegis-redis-ci -p 127.0.0.1:16379:6379 redis:7.4-alpine redis-server --appendonly yes --appendfsync always
+          for attempt in $(seq 1 30); do
+            if docker exec aegis-redis-ci redis-cli ping | grep -q PONG; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Native multi-process claim, expiry, fencing and bounds
+        run: python3 scripts/test_redis_queue.py build-redis/aegisvision_redis_queue 16379
+      - name: Real Redis restart and ownership recovery
+        run: |
+          python3 scripts/test_redis_restart.py build-redis/aegisvision_redis_queue 16379 restart-test-ci write
+          docker restart aegis-redis-ci
+          for attempt in $(seq 1 30); do
+            if docker exec aegis-redis-ci redis-cli ping | grep -q PONG; then break; fi
+            sleep 1
+          done
+          python3 scripts/test_redis_restart.py build-redis/aegisvision_redis_queue 16379 restart-test-ci read
+      - name: Remove this job's test container
+        if: always()
+        run: docker rm -f aegis-redis-ci || true
+
   api-contract:
     runs-on: ubuntu-latest
     steps:

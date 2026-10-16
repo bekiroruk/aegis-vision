@@ -1,6 +1,6 @@
 # Teslim durumu ve kalan işler
 
-Güncelleme: 2026-10-15. Bu belge mevcut teslimin kısa listesidir; bütün ilan
+Güncelleme: 2026-10-16. Bu belge mevcut teslimin kısa listesidir; bütün ilan
 maddelerinin tamamlandığı veya üretime hazır olduğu anlamına gelmez.
 
 ## Kullanılabilir demo
@@ -69,14 +69,15 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
 5. **Bağımsız kalite doğrulaması.** Detection/tracking/segmentation, arama,
    doğal Türkçe OCR, VLM ve geometrik eşleştirme için daha geniş bağımsız veri.
    Eğitim/değerlendirme araçları var; bütün alanlarda iyi kalite iddiası yok.
-6. **Dağıtık kuyruk.** Tek-süreç C++/SQLite kuyruğunun ötesinde Redis worker,
-   görev sahipliği, çökme kurtarma ve çift işlemeyi önleme testleri.
-   Compose içinde Redis bulunması uygulamanın hazır olduğu anlamına gelmez.
+6. **Dağıtık kuyruk.** [C++ Redis sahiplik/kurtarma çekirdeği](redis-queue.md)
+   eklendi; lease, token kontrollü sonuç kabulü, iptal, retry ve kapasite sınırları.
+   Model yüklü worker, heartbeat döngüsü, HTTP bağlantısı ve dosya/Qdrant yan
+   etkilerinin korunması hâlâ eksik. Mevcut panel SQLite kullanmaya devam eder.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı
    makinede denenmesi, model/veri/bağımlılık lisans envanteri ve dağıtım
    koşullarının incelenmesi, yük/operasyon kontrolleri. Kısa demo hazır;
-   diğer teslim şartları açık. THIRD_PARTY_NOTICES şu an yalnız TrackEval
-   bildirimini içerir; tam lisans denetimi değildir.
+   diğer teslim şartları açık. THIRD_PARTY_NOTICES TrackEval ve hiredis
+   bildirimlerini içerir; tam lisans denetimi değildir.
 8. **Triton / Jetson.** Tercih sebebi olan ileri deployment için gerçek
    sunucu/edge ortamı ve uyumluluk/hız ölçümleri gerekiyor.
 

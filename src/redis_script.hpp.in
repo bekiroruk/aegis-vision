@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr const char* aegis_redis_script = R"AEGIS_REDIS(@AEGIS_REDIS_SCRIPT@)AEGIS_REDIS";
