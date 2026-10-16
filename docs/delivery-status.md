@@ -73,7 +73,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    eklendi; lease, token kontrollü sonuç kabulü, iptal, retry ve kapasite sınırları.
    Linux'ta gerçek Redis ile sekiz süreç yarışması ve AOF restart/kurtarma geçti.
    Gerçek YOLO görüntü worker'ı, otomatik heartbeat, iptal/sahiplik kaybında
-   sonuç bastırma ve model/medya hash kontrolü eklendi. HTTP bağlantısı,
+   sonuç bastırma ve model/medya hash kontrolü eklendi. `69a6f31` için
+   [7/7 CI grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793)
+   geçti; gerçek Redis → C++ YOLO → sonuç zinciri 4 kişi/1 otobüs ile doğrulandı.
+   Linux görüntü worker'ı OpenCV 4.12 kullanır; eski 4.6 importer uyumsuzdur. HTTP bağlantısı,
    diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı

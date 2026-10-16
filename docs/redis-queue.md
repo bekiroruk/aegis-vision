@@ -157,3 +157,23 @@ ve güvenilen model gerekir. Context kökü içerdiğinden ilk sürüm aynı mak
 
 Bu bağlantı segmentation/video/OCR/VLM, web paneli, GPU worker veya performans
 yük testini kapsamaz. Bunlar mevcut HTTP servisinde ayrı çalışmaya devam eder.
+
+### Doğrulanan gerçek worker koşusu — 2026-10-16
+
+`69a6f31` kodu için [CI koşusunun](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793)
+**7/7 grubu başarılı**. [Redis + gerçek YOLO grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793/job/116962259367)
+`redis_verified=true`, 5 detection (4 kişi, 1 otobüs) üretti. Kuyruktaki iş
+`succeeded`, attempts=1; terminal replay, SHA/yol/tür reddi ve iptal testleri geçti.
+[JSON kanıt artifact'ı](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793/artifacts/12045037486)
+aynı koşuda saklandı. Artifact saklama süresi GitHub ayarlarıyla sınırlıdır.
+
+Ayrı Redis grubu otomatik heartbeat ile ilk lease süresinden uzun işin
+tamamlandığını, rakip claim reddini ve aktif iptalde sonuç yayımlanmadığını
+gerçek sunucuda doğruladı. Önceki sekiz kuyruk testi ve AOF restart testi de geçti.
+
+Windows OpenCV 4.12 üzerinde 4/4 ilgili CTest, gerçek YOLO referans testi,
+ayrı Redis-only build'de 2/2 test ve temel build'de 7/7 test geçti. Yerel gerçek
+görüntü raporu `outputs/redis-worker/local-image.json`: 4 kişi/1 otobüs,
+tek ölçüm inference 210.19 ms (benchmark değildir). Bu rapordaki
+`redis_verified=false` doğrudur: Windows'ta Redis yok; birleşik Redis kanıtı
+yukarıdaki Linux koşusudur. Yerel model/fotoğraf/rapor Git'e yüklenmedi.
