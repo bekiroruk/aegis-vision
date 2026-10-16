@@ -87,6 +87,11 @@ ayrıca incelenmelidir; hiredis bildirimi THIRD_PARTY_NOTICES içindedir.
 
 `AEGISVISION_WITH_REDIS=ON` ve `AEGISVISION_WITH_OPENCV=ON` birlikte açılınca
 `aegisvision_redis_worker` derlenir. Model: mevcut COCO YOLOv8 detect ONNX;
+**OpenCV >= 4.12.0 gerektirir.** İlk Linux birleşik koşusu dağıtımın OpenCV
+4.6 ONNX `Add` importer hatasıyla durdu; model veya kuyruk başarısı sayılmadı.
+CI bu yüzden hash kontrollü 4.12.0 kaynağını özel bir dizine derleyip cache'ler;
+sistem OpenCV'si veya mevcut diğer test grupları değiştirilmez. Bu özel build
+yalnız görüntü testi içindir, FFmpeg/GStreamer açık video dağıtımı değildir.
 CPU/OpenCV, 640 giriş, confidence 0.35, NMS 0.45, en fazla 100 detection.
 Model işçi başına ilk geçerli işte bir kez yüklenir. Python yalnız CI'da model
 export/test sürücüsüdür; kuyruk ve inference native C++'tır.

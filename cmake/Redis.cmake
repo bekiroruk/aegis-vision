@@ -45,6 +45,9 @@ if(AEGISVISION_BUILD_TESTS)
 endif()
 
 if(AEGISVISION_WITH_OPENCV)
+    if(OpenCV_VERSION VERSION_LESS "4.12.0")
+        message(FATAL_ERROR "Redis YOLO worker requires OpenCV >= 4.12.0; distro 4.6 cannot import the reference ONNX model. See docs/redis-queue.md.")
+    endif()
     include(FetchContent)
     FetchContent_Declare(search_sha URL https://codeload.github.com/okdshin/PicoSHA2/tar.gz/161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29
         URL_HASH SHA256=6cf473a00c98298d3ddee0aed853e3c799791f49dbc01c996ea46cb248e85802 DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
