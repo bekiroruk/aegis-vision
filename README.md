@@ -24,7 +24,8 @@ arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sı
 
 [İsteğe bağlı C++ Redis görüntü worker'ı](docs/redis-queue.md): gerçek YOLO
 tespiti, otomatik lease yenileme, token kontrollü sonuç, hash doğrulama ve iptal.
-Henüz panel backend'i değildir; mevcut HTTP/SQLite kuyruğu korunur.
+İsteğe bağlı panel bölümünden görüntü işi gönderme, iptal ve kutulu sonuç vardır;
+mevcut video/arama HTTP/SQLite kuyruğu korunur.
 
 [Deneysel çoklu-kamera eşleştirme](docs/multicamera.md): kapanmış takip parçaları
 için C++ çekirdek/CLI, kamera-epoch alanları ve belirsizlik reddi. Henüz gerçek

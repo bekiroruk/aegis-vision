@@ -1,6 +1,8 @@
 #include "aegisvision/redis_image.hpp"
+#include "aegisvision/vision.hpp"
 #include <picosha2.h>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #include <opencv2/core/version.hpp>
 #include <chrono>
 #include <fstream>
@@ -61,18 +63,23 @@ Json RedisImageWorker::request(const std::string& image) const {
     return {{"type", "detect_image"}, {"image", image},
         {"sha256", picosha2::hash256_hex_string(read_image(image))}};
 }
-Json RedisImageWorker::analyze(const Json& payload, const StopCheck& cancelled) {
+cv::Mat RedisImageWorker::decode(const Json& payload) const {
     require(payload.is_object() && payload.size() == 3 && payload.value("type", "") == "detect_image"
         && payload.contains("image") && payload.at("image").is_string()
         && payload.contains("sha256") && payload.at("sha256").is_string());
     const auto expected = payload.at("sha256").get<std::string>();
     require(expected.size() == 64 && expected.find_first_not_of("0123456789abcdef") == std::string::npos);
-    if (cancelled()) throw std::runtime_error("Job no longer owned");
     const auto encoded = read_image(payload.at("image").get<std::string>());
     if (picosha2::hash256_hex_string(encoded) != expected) throw std::invalid_argument("Image SHA256 changed");
     // This is a trusted-media worker, not a sandbox for hostile image codecs.
     const auto image = cv::imdecode(encoded, cv::IMREAD_COLOR | cv::IMREAD_IGNORE_ORIENTATION);
     require(!image.empty() && image.total() <= 16000000);
+    return image;
+}
+Json RedisImageWorker::analyze(const Json& payload, const StopCheck& cancelled) {
+    if (cancelled()) throw std::runtime_error("Job no longer owned");
+    const auto image = decode(payload);
+    const auto expected = payload.at("sha256").get<std::string>();
     if (cancelled()) throw std::runtime_error("Job no longer owned");
     if (!detector_) {
         detector_ = std::make_unique<vision::YoloDetector>(model_bytes_, config());
@@ -92,5 +99,27 @@ Json RedisImageWorker::analyze(const Json& payload, const StopCheck& cancelled) 
             {"class_id", std::stoi(detection.attributes.at("class_id"))}, {"xyxy", {b.x1, b.y1, b.x2, b.y2}}});
     }
     return result;
+}
+std::vector<unsigned char> RedisImageWorker::preview(const Json& payload, const Json& result) const {
+    require(result.at("context") == context_ && result.at("image_sha256") == payload.at("sha256"));
+    const auto image = decode(payload); // Recheck bytes before showing an old job's boxes.
+    require(result.at("width") == image.cols && result.at("height") == image.rows);
+    require(result.at("detections").is_array() && result.at("detections").size() <= 100);
+    std::vector<Detection> detections;
+    for (const auto& d : result.at("detections")) {
+        const auto& b = d.at("xyxy");
+        require(b.is_array() && b.size() == 4);
+        const float x1=b.at(0), y1=b.at(1), x2=b.at(2), y2=b.at(3), score=d.at("confidence");
+        require(x1>=0 && y1>=0 && x2>x1 && y2>y1 && x2<=image.cols && y2<=image.rows && score>=0 && score<=1);
+        const auto label = d.at("label").get<std::string>(); require(label.size()<=64);
+        detections.push_back({{x1,y1,x2,y2},label,score,{},{}});
+    }
+    auto annotated = vision::annotate(image, detections);
+    const double scale = std::min(1., 960. / std::max(image.cols, image.rows));
+    if (scale < 1) cv::resize(annotated, annotated, {}, scale, scale, cv::INTER_AREA);
+    std::vector<unsigned char> encoded;
+    if (!cv::imencode(".jpg", annotated, encoded, {cv::IMWRITE_JPEG_QUALITY,80}) || encoded.size()>1024*1024)
+        throw std::runtime_error("Preview encoding failed");
+    return encoded;
 }
 }

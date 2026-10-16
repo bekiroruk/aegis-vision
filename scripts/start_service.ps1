@@ -13,10 +13,13 @@ param(
     [ValidateRange(0,65535)][int]$VlmPort = 0,
     [switch]$LiveSegmentation,
     [string]$TensorRtBundle = "",
+    [ValidateRange(0,65535)][int]$RedisPort = 0,
+    [string]$RedisQueue = "",
     [string]$SearchConfig = "configs/service-search.toml",
     [string]$ServerExecutable = "build/search/Release/aegisvision_server.exe"
 )
 $ErrorActionPreference = "Stop"
+if (($RedisPort -gt 0) -ne (-not [string]::IsNullOrEmpty($RedisQueue))) { throw 'RedisPort ve RedisQueue birlikte verilmelidir.' }
 if($LiveUrl -and $ReplayFile){throw 'LiveUrl ve ReplayFile birlikte kullanilamaz.'}
 if($OcrModels -and $OcrMultilingual){throw 'Tek bir OCR backend secin: OcrModels veya OcrMultilingual'}
 if($AnalysisConfig -and ($SegmentationModel -or $OcrModels -or $OcrMultilingual -or $VlmPort)){throw 'AnalysisConfig ile model parametrelerini birlikte kullanmayin.'}
@@ -44,6 +47,7 @@ try {
     try { Invoke-RestMethod -Uri http://127.0.0.1:6333/healthz -TimeoutSec 3 | Out-Null }
     catch { throw "Qdrant calismiyor. Ayri terminalde artifacts/deps/qdrant/qdrant.exe --config-path configs/qdrant-local.yaml komutunu baslatin." }
     $serverArguments = @($SearchConfig,'configs/image.toml',$MediaDirectory,'web',$Port,$JobDatabase)
+    if ($RedisPort) { $serverArguments += @('--redis-port',$RedisPort,'--redis-queue',$RedisQueue) }
     if ($TensorRtBundle) { $serverArguments += @('--trt-bundle',$TensorRtBundle) }
     if($AnalysisConfig){$serverArguments += @('--analysis-config',$AnalysisConfig)}
     if ($LiveSegmentation -and ((-not $LiveUrl -and -not $ReplayFile) -or (-not $SegmentationModel -and -not $AnalysisConfig))) { throw 'LiveSegmentation icin kaynak ve segmentation modeli gereklidir.' }

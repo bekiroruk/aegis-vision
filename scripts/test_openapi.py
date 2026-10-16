@@ -24,7 +24,7 @@ class ContractTests(unittest.TestCase):
 
     def test_all_cpp_routes_documented(self):
         source = '\n'.join((ROOT / path).read_text(encoding='utf-8') for path in
-                           ['src/service.cpp', 'src/service_video.cpp'])
+                           ['src/service.cpp', 'src/service_video.cpp', 'src/image_queue_http.cpp'])
         actual = {(method.lower(), literal or raw) for method, literal, raw in
                   re.findall(r'http_\.(Get|Post)\((?:"([^"\n]+)"|R"\((.*?)\)")', source)}
         listed = {(method, operation['x-cpp-route']) for path in SPEC['paths'].values()

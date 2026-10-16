@@ -147,7 +147,7 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    arşivi/indeksi tamamlandı. GStreamer adaptörü, kamera/stream PTS, tam FPS/sesli
    kayıt ve çoklu worker/Redis entegrasyonunu geliştir. [Redis lease/token çekirdeği](redis-queue.md)
    gerçek Redis yarışma/restart testlerini geçti; YOLO görüntü worker/heartbeat bağlantısı eklendi,
-   HTTP bağlantısı ve diğer analiz türleri henüz yok.
+   görüntü HTTP/panel köprüsü eklendi; diğer analiz türleri henüz yok.
    Mevcut arşiv yalnızca analiz
    karelerini kaydeder; kota dolunca capture yerine yalnızca arşiv durur.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,

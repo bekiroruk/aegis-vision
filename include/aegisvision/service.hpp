@@ -7,6 +7,7 @@
 #include "aegisvision/segmentation.hpp"
 #include "aegisvision/ocr.hpp"
 #include "aegisvision/vlm.hpp"
+#include "aegisvision/image_queue_http.hpp"
 #include <httplib.h>
 #include <filesystem>
 
@@ -27,6 +28,7 @@ struct ServiceConfig {
     vision::IVlm* vlm{}; // Optional local scene captioner; worker-owned use, must outlive service.
     std::string vlm_signature;
     nlohmann::json detector_backend={{"engine","custom"},{"device","unknown"},{"precision","unknown"}};
+    std::shared_ptr<ImageQueueBackend> image_queue; // Optional independent Redis image jobs.
 };
 class ArchiveJobBusy : public std::runtime_error {
 public: ArchiveJobBusy() : std::runtime_error("Archive segment already has an active indexing job") {}

@@ -137,6 +137,21 @@ def document():
                              ('segment_video', 'VideoResult')]]
     json_response = lambda name: {'description': name, 'content': {'application/json': {'schema': ref(name)}}}
     errors = {str(code): json_response('Error') for code in [400, 403, 404, 409, 415, 429, 500, 503]}
+    image_id = {'type':'string', 'pattern':'^[A-Za-z0-9_-]{1,64}$'}
+    image_path = {'type':'string', 'minLength':1, 'maxLength':512, 'pattern':r'^[^\u0000]+$'}
+    sha = {'type':'string', 'pattern':'^[0-9a-f]{64}$'}
+    schemas['RedisImageRequest'] = obj({'id':image_id, 'image':image_path}, closed=True)
+    schemas['RedisImageStatus'] = obj({'enabled':BOOL,'queue':TEXT,'context':TEXT,
+        'backend':{'const':'opencv-dnn-cpu'}, 'worker_status':{'const':'unknown'},
+        'images':{'type':'array','items':image_path,'maxItems':128}}, ['enabled'], closed=True)
+    schemas['RedisImageResult'] = obj({'type':{'const':'detect_image'},'context':TEXT,
+        'model_sha256':sha,'image_sha256':sha,'image':image_path,'width':integer(1),'height':integer(1),
+        'inference_ms':{'type':'number','minimum':0},'detections':{'type':'array','maxItems':100,
+        'items':obj({'label':{'type':'string','maxLength':64},'confidence':{'type':'number','minimum':0,'maximum':1},
+        'class_id':integer(0,79),'xyxy':{'type':'array','items':NUMBER,'minItems':4,'maxItems':4}},closed=True)}},closed=True)
+    schemas['RedisImageJob'] = obj({'id':image_id,'state':{'enum':['queued','running','succeeded','failed','cancelled']},
+        'attempts':integer(0,3),'payload':obj({'type':{'const':'detect_image'},'image':image_path,'sha256':sha},closed=True),
+        'result':{'oneOf':[{'type':'null'},ref('RedisImageResult'),obj({'error':TEXT},closed=True)]}},closed=True)
     paths = {}
 
     def add(path, method, op_id, summary, schema, cpp, codes=(), body=None, parameters=None, status=200, description=''):
@@ -206,6 +221,21 @@ def document():
         binary('/api/jobs/{id}/' + file, 'analysis_' + file.replace('.', '_'), 'Read completed segment_video output: ' + file,
             r'/api/jobs/([0-9]+-[0-9]+)/(video\.mp4|tracks\.csv|preview\.jpg)', mime,
             [param('id', JOB_ID), param('download', {'type': 'string', 'description': 'Presence forces attachment. CSV always downloads.'}, 'query')], True)
+
+    add('/api/redis-images','get','redisImageStatus','Read optional Redis queue and local image catalog',
+        'RedisImageStatus','/api/redis-images',[503],description='enabled=false when not configured. Reachable Redis does not prove a worker is alive. Top-level JPG/PNG catalog only, bounded scan.')
+    add('/api/redis-images','post','redisImageSubmit','Submit one image with a stable client-generated ID',
+        'RedisImageJob','/api/redis-images',[400,409,429,503],'RedisImageRequest',status=202,
+        description='Separate CPU worker, not SQLite. Retry uncertain submission with the SAME id/image. Server hashes local bytes. No upload, external URL, model selection or raw queue commands.')
+    add('/api/redis-images/{id}','get','redisImageGet','Read Redis image state and detections',
+        'RedisImageJob',r'/api/redis-images/([A-Za-z0-9_-]{1,64})',[404,503],parameters=[param('id',image_id)])
+    add('/api/redis-images/{id}/cancel','post','redisImageCancel','Fence a Redis image job result',
+        'RedisImageJob',r'/api/redis-images/([A-Za-z0-9_-]{1,64})/cancel',[400,404,503],'Empty',[param('id',image_id)],
+        description='Cancellation blocks result acceptance, not an in-flight OpenCV call. Terminal jobs are unchanged.')
+    preview=binary('/api/redis-images/{id}/preview.jpg','redisImagePreview','Render verified image and detection boxes',
+        r'/api/redis-images/([A-Za-z0-9_-]{1,64})/preview\.jpg','image/jpeg',[param('id',image_id)])
+    for status in ['409','503']: preview['responses'][status]={'description':'Incomplete, changed media or unavailable queue',
+        'content':{'application/json':{'schema':ref('Error')}}}
 
     return {'openapi': '3.1.1', 'info': {'title': 'AegisVision local C++ API', 'version': '0.1.0',
         'description': 'Local-only service, no authentication/TLS. Do not expose publicly. Host must be localhost:<port> or 127.0.0.1:<port>; Origin, if present, must equal http://Host. POST requires application/json, maximum 8192 bytes. One finite-job worker; live sessions are separate and nonpersistent. Models/features vary: inspect /api/health. Schemas describe the contract, not runtime schema enforcement. No file-upload endpoint.'},

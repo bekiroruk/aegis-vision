@@ -76,8 +76,9 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    sonuç bastırma ve model/medya hash kontrolü eklendi. `69a6f31` için
    [7/7 CI grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793)
    geçti; gerçek Redis → C++ YOLO → sonuç zinciri 4 kişi/1 otobüs ile doğrulandı.
-   Linux görüntü worker'ı OpenCV 4.12 kullanır; eski 4.6 importer uyumsuzdur. HTTP bağlantısı,
-   diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
+   Linux görüntü worker'ı OpenCV 4.12 kullanır; eski 4.6 importer uyumsuzdur.
+   İsteğe bağlı görüntü HTTP/panel bağlantısı eklendi (ayrı doğrulama koşusu gerekir).
+   Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı
    makinede denenmesi, model/veri/bağımlılık lisans envanteri ve dağıtım

@@ -5,6 +5,9 @@
 #include <charconv>
 #include <algorithm>
 #include <iostream>
+#ifdef AEGISVISION_SERVICE_REDIS
+#include "aegisvision/redis_image_queue.hpp"
+#endif
 #ifdef AEGISVISION_SERVICE_TENSORRT
 #include "aegisvision/tensorrt.hpp"
 #include "aegisvision/quality_benchmark.hpp"
@@ -36,6 +39,7 @@ int run(std::vector<std::filesystem::path> args) {
                 "   VLM: --vlm-port PORT enables queued scene_frame jobs through local llama.cpp.\n"
                 "   Analysis: --analysis-config FILE.toml replaces segmentation/OCR/VLM flags.\n"
                 "   GPU detection: --trt-bundle LOCAL_FP16_BUNDLE (requires TensorRT build; no CPU fallback).\n"
+                "   Redis images: --redis-port PORT --redis-queue NAME (optional Redis build; separate CPU worker required).\n"
                 "   Applies to file indexing and live detection, not segmentation/OCR/CLIP/VLM.\n"
                 "   Demo: --replay-file treats the live source argument as a local video, not RTSP. Loops at configured output_fps.\n"
                 "Local HTTP worker + dashboard. Defaults: port 8090, artifacts/service/jobs.sqlite. Creates Qdrant collection if missing.\n";
@@ -61,6 +65,19 @@ int run(std::vector<std::filesystem::path> args) {
         auto vlm_port_text=take_path("--vlm-port");
         const auto analysis_file=take_path("--analysis-config");
         const auto trt_bundle=take_path("--trt-bundle");
+        const auto redis_port_text=take_path("--redis-port"), redis_queue=take_path("--redis-queue");
+        if(redis_port_text.empty()!=redis_queue.empty()) throw std::invalid_argument("Redis requires both --redis-port and --redis-queue");
+        int redis_port=0;
+        if(!redis_port_text.empty()) {
+#ifndef AEGISVISION_SERVICE_REDIS
+            throw std::invalid_argument("This server was built without Redis image support");
+#else
+            const auto text=redis_port_text.string();
+            const auto [end,error]=std::from_chars(text.data(),text.data()+text.size(),redis_port);
+            if(error!=std::errc{} || end!=text.data()+text.size() || redis_port<1 || redis_port>65535)
+                throw std::invalid_argument("Redis port must be 1..65535");
+#endif
+        }
 #ifndef AEGISVISION_SERVICE_TENSORRT
         if(!trt_bundle.empty()) throw std::invalid_argument("This server was built without TensorRT");
 #endif
@@ -109,6 +126,9 @@ int run(std::vector<std::filesystem::path> args) {
         aegisvision::QdrantVectorStore store(search.qdrant, true);
         aegisvision::ServiceConfig config{args[3], args[4],signature};
         config.detector_backend=backend;
+#ifdef AEGISVISION_SERVICE_REDIS
+        if(redis_port) config.image_queue=aegisvision::make_redis_image_queue(detection.detector_model,args[3],redis_port,redis_queue.string());
+#endif
         std::unique_ptr<aegisvision::vision::YoloSegmenter> segmenter;
         std::unique_ptr<aegisvision::vision::IOcr> ocr;
         std::unique_ptr<aegisvision::vision::LocalVlm> vlm;

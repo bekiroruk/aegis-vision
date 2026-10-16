@@ -2,8 +2,9 @@
 
 2026-10-16. İsteğe bağlı C++ `RedisLeaseQueue` ve native komut aracı.
 **Gerçek YOLO görüntü analizi yapan bağımsız C++ worker eklendi.**
-Panelin JobQueue backend'i henüz değildir. Mevcut HTTP/SQLite servisi değişmez;
-Redis worker ayrı süreç olarak iş alır ve sonuç JSON'unu token kontrolüyle yayımlar.
+İsteğe bağlı HTTP/panel görüntü köprüsü vardır. Panelin video/arama JobQueue
+backend'i değiştirilmez; Redis worker ayrı süreç olarak görüntü işi alır ve
+sonuç JSON'unu token kontrolüyle yayımlar.
 
 ## Sözleşme
 
@@ -71,7 +72,7 @@ AOF restart/kurtarma geçti. Bu sonuç diğer CI gruplarının veya gelecekteki
 worker/panel entegrasyonunun geçtiği anlamına gelmez. Test konteyneri koşunun
 sonunda kaldırıldı; bilgisayardaki mevcut servis/veriler değiştirilmedi.
 
-Sonraki parça HTTP kuyruğuna opsiyonel bağlantıdır. Dosya sonuçlarının token
+Sonraki parça diğer analiz türlerinin taşınmasıdır. Dosya sonuçlarının token
 kontrollü yayını ve Qdrant yan etkilerinin idempotent yönetimi ayrıca gerekir.
 Yeni worker bunlara yazmaz; yalnız JSON detection sonucu üretir.
 Lease eski worker'ın hesaplamasını engellemez;
@@ -155,8 +156,59 @@ ve güvenilen model gerekir. Context kökü içerdiğinden ilk sürüm aynı mak
   JSON'u `redis-image-evidence` artifact'ına kaydedilir. Test eklenmesi başarılı
   koşu iddiası değildir; son koşunun sonucu ayrıca kontrol edilmelidir.
 
-Bu bağlantı segmentation/video/OCR/VLM, web paneli, GPU worker veya performans
-yük testini kapsamaz. Bunlar mevcut HTTP servisinde ayrı çalışmaya devam eder.
+Bu bağlantı segmentation/video/OCR/VLM, GPU worker veya performans yük testini
+kapsamaz. Diğer analizler mevcut HTTP servisinde ayrı çalışmaya devam eder.
+
+## İsteğe bağlı web paneli bağlantısı
+
+`AEGISVISION_WITH_SEARCH=ON` + `AEGISVISION_WITH_REDIS=ON` ile derlenen ana
+sunucu `--redis-port PORT --redis-queue NAME` kabul eder. Aynı YOLO ONNX,
+OpenCV sürümü ve canonical medya kökü worker ile eşleşmelidir. Redis worker
+sunucudan ayrı çalışır; sunucu inference'ı HTTP thread'inde yapmaz.
+
+Windows'taki mevcut bağımlılıklar için:
+
+```powershell
+cmake -S . -B build/search -DAEGISVISION_WITH_REDIS=ON
+cmake --build build/search --config Release --target aegisvision_server
+# Ayrı Redis sunucusu 16379'da, mevcut Qdrant 6333'te çalışmalı.
+.\scripts\start_service.ps1 -MediaDirectory artifacts/samples -RedisPort 16379 -RedisQueue web-images-v1
+# Ayrı terminalde, aynı proje kökünden:
+.\build\redis-cv\Release\aegisvision_redis_worker.exe run 16379 web-images-v1 image-worker artifacts/models/yolov8n.onnx artifacts/samples
+```
+
+Ana panelde "Fotoğrafta nesne bul" bölümü açılır; aynı sunucunun `/redis.html`
+sayfası yalnız bu bölümü gösterir. Özellik kapalıyken ana panelde gizlenir.
+Yerel makinede Redis henüz yoksa bu komutlar Redis'i kurmaz/başlatmaz; bağlantı
+eksikliği açıkça görünür. `Redis erişilebilir` bir worker'ın çalıştığı garantisi
+değildir; worker registry/sağlık takibi henüz yoktur.
+
+- `GET /api/redis-images`: etkinlik, context, queue, en fazla 128 üst düzey
+  JPG/PNG; dizinde en fazla 1024 giriş taranır. Upload/uzak URL kabul edilmez.
+- `POST /api/redis-images`: `{id,image}`; sabit istemci ID'siyle idempotent
+  gönderim, 202 kabul cevabı. Body 8 KiB; bilinmeyen alanlar reddedilir.
+- `GET /api/redis-images/{id}` ve `POST .../{id}/cancel` (`{}`): durum/sonuç/iptal.
+  Sahiplik token'ı ve owner tarayıcı cevabına taşınmaz.
+- `GET .../{id}/preview.jpg`: yalnız succeeded işte mevcut fotoğrafın SHA'sı
+  tekrar doğrulanır; aynı görüntü üzerine detection kutuları çizilir. Medya
+  değişirse 409, Redis erişilemezse 503; dış dosya veya Qdrant yazımı yoktur.
+- Host/Origin ve JSON kontrolleri ana servisle aynı sınırdadır. 400 hatalı istek,
+  404 bilinmeyen iş, 409 ID çakışması/değişmiş önizleme, 429 dolu kuyruk,
+  503 kapalı/erişilemeyen/uyuşmayan kuyruk. İnternete açılacak auth/TLS yoktur.
+
+Son işin ID/görüntü/context'i localStorage'da saklanır. Yenileme işi yeniden
+oluşturmaz. Gönderim cevabı kaybolursa kimlik korunur, aynı ID ile durum
+sorgulanabilir/tekrar gönderilebilir. Tarayıcı geçmişi yalnız son işi saklar;
+merkezi geçmiş listesi, TTL ve kapasite boşaltma henüz yoktur. Sunucudan gelen
+dosya/etiket metinleri HTML olarak çalıştırılmaz. Önizleme URL'si yalnız sabit
+same-origin endpoint ve doğrulanmış iş kimliğinden üretilir.
+
+`test_image_queue_http.cpp` etkin/kapalı route, Host/Origin, boyut/alan
+kontrollerini; `test_redis_web.cjs` yeniden gönderim/yenileme/iptal ve güvenli
+gösterimi sınar. `test_redis_http.py --browser` aynı route modülünü kullanan
+hafif fixture'da gerçek Redis + C++ YOLO + Chromium üzerinden gönderim,
+sayfa yenileme, kutulu sonuç ve iptali kontrol eder. Bu fixture tam CLIP/Qdrant
+servisi değildir; ana sunucunun build ve regresyonları ayrıca çalıştırılır.
 
 ### Doğrulanan gerçek worker koşusu — 2026-10-16
 

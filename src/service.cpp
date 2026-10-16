@@ -512,6 +512,7 @@ void LocalService::routes() {
         } catch (const std::exception& error) { reply(response, {{"error", error.what()}}, 404); }
     });
     video_result_routes();
+    register_image_queue_routes(http_, config_.image_queue);
     if (!http_.set_mount_point("/", utf8(config_.web_root))) throw std::runtime_error("Cannot serve web assets");
 }
 }

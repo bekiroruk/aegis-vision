@@ -12,7 +12,9 @@ public:
     const std::string& context() const { return context_; }
     nlohmann::json request(const std::string& relative_image) const;
     nlohmann::json analyze(const nlohmann::json& payload, const StopCheck& cancelled);
+    std::vector<unsigned char> preview(const nlohmann::json& payload, const nlohmann::json& result) const;
 private:
+    cv::Mat decode(const nlohmann::json& payload) const;
     std::vector<unsigned char> read_image(const std::string& relative) const;
     std::filesystem::path root_;
     std::vector<unsigned char> model_bytes_;
