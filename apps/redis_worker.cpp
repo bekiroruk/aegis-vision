@@ -54,7 +54,24 @@ int run(const std::vector<fs::path>& args) {
         const bool once = args.size() >= 8;
         RedisImageWorker image(args[5], args[6]);
         RedisLeaseQueue queue(number(args[2]), utf8(args[3]), image.context());
+        const auto owner = utf8(args[4]);
+        // Validate before advertising; the model itself is still lazy-loaded.
+        RedisLeaseQueue::validate({{"op","claim"},{"owner",owner},{"lease_ms",lease}});
+        if(lease<3000) throw std::invalid_argument("Worker lease must be at least 3000ms");
         std::signal(SIGINT, stop); std::signal(SIGTERM, stop);
+        (void)queue.call({{"op","worker_ping"},{"owner",owner}});
+        // Separate from the inference thread and token-fenced job heartbeat.
+        // No deregistration: a duplicate owner must not erase another process.
+        // Abrupt/graceful exit both age out within the fixed 5-second window.
+        std::jthread presence([&](std::stop_token token) {
+            while(!token.stop_requested() && !stopping.load()) {
+                for(int i=0;i<10 && !token.stop_requested() && !stopping.load();++i)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if(token.stop_requested() || stopping.load()) break;
+                try { (void)queue.call({{"op","worker_ping"},{"owner",owner}}); }
+                catch(const std::exception&) { std::cerr << "Worker heartbeat unavailable; presence will expire\n"; }
+            }
+        });
         std::cerr << "Redis image worker ready; context=" << image.context() << '\n';
         const JobHandler analyze = [&](const Json& payload, const StopCheck& cancelled) {
             try { return image.analyze(payload, cancelled); }
@@ -62,7 +79,7 @@ int run(const std::vector<fs::path>& args) {
         };
         while (!stopping.load()) {
             const auto outcome = run_redis_job([&](const Json& c) { return queue.call(c); },
-                analyze, utf8(args[4]), lease, [] { return stopping.load(); });
+                analyze, owner, lease, [] { return stopping.load(); });
             const auto state = outcome == WorkerOutcome::Completed ? "completed" :
                 outcome == WorkerOutcome::Failed ? "failed" : outcome == WorkerOutcome::Lost ? "ownership_lost" : "empty";
             if (outcome != WorkerOutcome::Empty || once) std::cout << Json{{"outcome", state}}.dump() << std::endl;

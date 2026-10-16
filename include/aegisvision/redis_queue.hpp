@@ -11,6 +11,8 @@ public:
     RedisLeaseQueue(int port, std::string queue, std::string context);
     // submit(id,payload), claim(owner,lease_ms), renew(id,owner,token,lease_ms),
     // complete(id,owner,token,result), fail(id,owner,token,result), cancel(id), get(id).
+    // worker_ping(owner), workers(): unique owner names seen in the last 5 seconds.
+    // Observability only: not model readiness, idle capacity or job ownership.
     // null means unknown/no work/expired or stale ownership; errors throw.
     nlohmann::json call(const nlohmann::json& command) const;
     static void validate(const nlohmann::json& command);

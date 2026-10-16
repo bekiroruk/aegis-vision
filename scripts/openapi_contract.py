@@ -142,7 +142,8 @@ def document():
     sha = {'type':'string', 'pattern':'^[0-9a-f]{64}$'}
     schemas['RedisImageRequest'] = obj({'id':image_id, 'image':image_path}, closed=True)
     schemas['RedisImageStatus'] = obj({'enabled':BOOL,'queue':TEXT,'context':TEXT,
-        'backend':{'const':'opencv-dnn-cpu'}, 'worker_status':{'const':'unknown'},
+        'backend':{'const':'opencv-dnn-cpu'}, 'worker_status':{'enum':['recent_heartbeat','no_recent_heartbeat']},
+        'worker_count':integer(0,128), 'heartbeat_ttl_ms':{'const':5000},
         'images':{'type':'array','items':image_path,'maxItems':128}}, ['enabled'], closed=True)
     schemas['RedisImageResult'] = obj({'type':{'const':'detect_image'},'context':TEXT,
         'model_sha256':sha,'image_sha256':sha,'image':image_path,'width':integer(1),'height':integer(1),
@@ -223,7 +224,7 @@ def document():
             [param('id', JOB_ID), param('download', {'type': 'string', 'description': 'Presence forces attachment. CSV always downloads.'}, 'query')], True)
 
     add('/api/redis-images','get','redisImageStatus','Read optional Redis queue and local image catalog',
-        'RedisImageStatus','/api/redis-images',[503],description='enabled=false when not configured. Reachable Redis does not prove a worker is alive. Top-level JPG/PNG catalog only, bounded scan.')
+        'RedisImageStatus','/api/redis-images',[503],description='enabled=false when not configured. Worker count is distinct owner names with a heartbeat in the last 5 seconds, not inference readiness or idle capacity. Top-level JPG/PNG catalog only, bounded scan.')
     add('/api/redis-images','post','redisImageSubmit','Submit one image with a stable client-generated ID',
         'RedisImageJob','/api/redis-images',[400,409,429,503],'RedisImageRequest',status=202,
         description='Separate CPU worker, not SQLite. Retry uncertain submission with the SAME id/image. Server hashes local bytes. No upload, external URL, model selection or raw queue commands.')

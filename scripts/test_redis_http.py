@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -51,7 +52,8 @@ def main():
                     return json.loads(data) if 'application/json' in response.headers.get('Content-Type', '') else data
 
             status = request('/api/redis-images')
-            assert status['enabled'] and status['images'] == ['bus.jpg'] and status['worker_status'] == 'unknown'
+            assert status['enabled'] and status['images'] == ['bus.jpg']
+            assert status['worker_status'] == 'no_recent_heartbeat' and status['worker_count'] == 0
             assert b'redis-images.js' in request('/redis.html')
             assert b'Foto' in request('/redis-images.js')
             request('/api/redis-images', headers={'Origin': 'http://evil.test'}, expected=403)
@@ -83,6 +85,35 @@ def main():
             request('/api/redis-images', {'id': 'real', 'image': 'bus.jpg'}, expected=409)
             evidence = {'passed': True, 'http_redis_yolo_verified': True, 'labels': labels,
                         'preview_bytes': len(preview), 'job': result}
+            # A persistent idle worker keeps its own liveness window refreshed.
+            # Then prove actual inference and expiry after that process exits.
+            shutil.copyfile(args.media / 'bus.jpg', media / 'bus.jpg')
+            worker = subprocess.Popen([str(args.worker.resolve()), 'run', str(args.port), namespace,
+                                       'presence-worker', str(args.model.resolve()), str(media)],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            def wait_for(check, seconds=15):
+                deadline = time.monotonic() + seconds
+                while time.monotonic() < deadline:
+                    if check(): return
+                    time.sleep(.1)
+                raise AssertionError('Timed out waiting for worker presence/result')
+            try:
+                time.sleep(5.5)  # Earlier --once heartbeat must expire; idle worker must remain.
+                assert worker.poll() is None
+                presence = request('/api/redis-images')
+                assert presence['worker_count'] == 1 and presence['worker_status'] == 'recent_heartbeat'
+                assert presence['heartbeat_ttl_ms'] == 5000
+                request('/api/redis-images', {'id': 'presence-job', 'image': 'bus.jpg'}, expected=202)
+                wait_for(lambda: request('/api/redis-images/presence-job')['state'] == 'succeeded', 120)
+            finally:
+                worker.terminate()
+                try: worker.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    worker.kill()
+                    worker.communicate(timeout=5)
+            wait_for(lambda: request('/api/redis-images')['worker_count'] == 0)
+            assert request('/api/redis-images')['worker_status'] == 'no_recent_heartbeat'
+            evidence['worker_presence_verified'] = True
             if args.browser:
                 from playwright.sync_api import sync_playwright, expect
                 shutil.copyfile(args.media / 'bus.jpg', media / 'bus.jpg')
@@ -93,6 +124,7 @@ def main():
                         errors = []
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         page.goto(base + '/redis.html')
+                        expect(page.locator('#ri-connection')).to_contain_text('İşçi sinyali yok')
                         expect(page.locator('#ri-submit')).to_be_enabled()
                         page.locator('#ri-submit').click()
                         expect(page.locator('#ri-status')).to_contain_text('Sırada')

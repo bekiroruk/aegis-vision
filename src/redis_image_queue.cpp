@@ -36,7 +36,7 @@ public:
     Backend(const fs::path& model,const fs::path& media,int port,const std::string& name)
         : root_(fs::canonical(media)),image_(model,root_),queue_(port,name,image_.context()),name_(name) {}
     Json status() const override {
-        (void)call({{"op","get"},{"id","bridge-probe"}});
+        const auto presence=call({{"op","workers"}});
         std::vector<std::string> names;
         unsigned scanned=0;
         for(const auto& file:fs::directory_iterator(root_)) {
@@ -49,7 +49,8 @@ public:
         }
         std::sort(names.begin(),names.end()); if(names.size()>128) names.resize(128);
         return {{"enabled",true},{"queue",name_},{"context",image_.context()},{"images",names},
-            {"backend","opencv-dnn-cpu"},{"worker_status","unknown"}};
+            {"backend","opencv-dnn-cpu"},{"worker_status",presence.at("worker_count").get<int>()>0 ? "recent_heartbeat" : "no_recent_heartbeat"},
+            {"worker_count",presence.at("worker_count")},{"heartbeat_ttl_ms",presence.at("heartbeat_ttl_ms")}};
     }
     Json submit(const std::string& id,const std::string& file) const override {
         RedisLeaseQueue::validate({{"op","get"},{"id",id}});

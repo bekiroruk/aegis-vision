@@ -1,8 +1,8 @@
--- Four explicit keys, bounded 128 jobs, Redis server time, no external side effects.
+-- Five explicit keys, bounded 128 jobs/workers, Redis server time, no external side effects.
 -- All access to this namespace must use this protocol, standalone Redis 7+ only.
-local jobs, pending, leases, meta = KEYS[1], KEYS[2], KEYS[3], KEYS[4]
-local expected = {'hash', 'list', 'zset', 'hash'}
-for i=1,4 do
+local jobs, pending, leases, meta, workers = KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5]
+local expected = {'hash', 'list', 'zset', 'hash', 'zset'}
+for i=1,5 do
   local kind=redis.call('TYPE',KEYS[i]).ok
   if kind~='none' and kind~=expected[i] then return redis.error_reply('QUEUE_WRONG_TYPE') end
 end
@@ -10,10 +10,10 @@ local c=cjson.decode(ARGV[2])
 local op=c.op
 local context=redis.call('HGET',meta,'context')
 if context and context~=ARGV[1] then return redis.error_reply('QUEUE_CONTEXT_MISMATCH') end
-if not context and redis.call('EXISTS',jobs,pending,leases,meta)>0 then
+if not context and redis.call('EXISTS',jobs,pending,leases,meta,workers)>0 then
   return redis.error_reply('QUEUE_MISSING_CONTEXT')
 end
-if not context and op~='submit' then return 'null' end
+if not context and op~='submit' and op~='worker_ping' and op~='workers' then return 'null' end
 local function output(j) return j and cjson.encode(j) or 'null' end
 local function get(id)
   local raw=redis.call('HGET',jobs,id)
@@ -22,7 +22,19 @@ end
 local function save(j) redis.call('HSET',jobs,j.id,cjson.encode(j)) end
 local clock=redis.call('TIME')
 local now=tonumber(clock[1])*1000+math.floor(tonumber(clock[2])/1000)
-if op=='submit' then
+if op=='worker_ping' or op=='workers' then
+  -- Observational liveness only, independent of job leases and model readiness.
+  redis.call('ZREMRANGEBYSCORE',workers,'-inf',now)
+  if op=='worker_ping' then
+    if not redis.call('ZSCORE',workers,c.owner) and redis.call('ZCARD',workers)>=128 then
+      return redis.error_reply('QUEUE_WORKERS_FULL')
+    end
+    if not context then redis.call('HSET',meta,'context',ARGV[1]) end
+    redis.call('ZADD',workers,now+5000,c.owner)
+    redis.call('PEXPIRE',workers,5000)
+  end
+  return cjson.encode({worker_count=redis.call('ZCARD',workers),heartbeat_ttl_ms=5000})
+elseif op=='submit' then
   local old=get(c.id)
   local payload=ARGV[3]
   if old then

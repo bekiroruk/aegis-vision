@@ -83,6 +83,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    sonuç, sayfa yenileme ve iptal geçti. Bu birleşik test hafif HTTP fixture'ında;
    ana Windows servisinin derlemesi ve ayrı servis regresyon testi de geçti.
    Windows'ta Redis çalıştırılmadı; yerel canlı Redis paneli teslimi değildir.
+   Süreli worker sinyali ve panelde otomatik yenilenen varlık durumu eklendi;
+   model hazır/boş kapasite garantisi değildir. Yeni sürümün CI sonucu ayrıca
+   doğrulanmalıdır. Docker yerelde yeniden denendi; kendi inference socket
+   başlangıç hatasıyla durdu. Fabrika ayarlarına dönüş/veri silme yapılmadı.
    Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı

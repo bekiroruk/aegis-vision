@@ -29,6 +29,8 @@ void RedisLeaseQueue::validate(const nlohmann::json& c) {
     const auto op=c.at("op").get<std::string>();
     std::set<std::string> keys{"op"};
     if(op=="claim") keys.insert({"owner","lease_ms"});
+    else if(op=="worker_ping") keys.insert("owner");
+    else if(op=="workers") { /* Read bounded recent-heartbeat count. */ }
     else if(op=="submit") keys.insert({"id","payload"});
     else if(op=="get" || op=="cancel") keys.insert("id");
     else if(op=="renew") keys.insert({"id","owner","token","lease_ms"});
@@ -59,8 +61,8 @@ nlohmann::json RedisLeaseQueue::call(const nlohmann::json& command) const {
     if(!connection || connection->err || redisSetTimeout(connection.get(),timeout)!=REDIS_OK)
         throw std::runtime_error("Redis connection unavailable; no write retried");
     const std::string prefix="aegis:{"+queue_+"}:";
-    const std::vector<std::string> args{"EVAL",aegis_redis_script,"4",prefix+"jobs",prefix+"pending",
-        prefix+"leases",prefix+"meta",context_,command.dump(),
+    const std::vector<std::string> args{"EVAL",aegis_redis_script,"5",prefix+"jobs",prefix+"pending",
+        prefix+"leases",prefix+"meta",prefix+"workers",context_,command.dump(),
         command.contains("payload") ? command.at("payload").dump() : "",
         command.contains("result") ? command.at("result").dump() : ""};
     std::vector<const char*> argv; std::vector<std::size_t> lengths;
@@ -73,7 +75,7 @@ nlohmann::json RedisLeaseQueue::call(const nlohmann::json& command) const {
     if(reply->type!=REDIS_REPLY_STRING || reply->len>262144)
         throw std::runtime_error("Invalid Redis queue reply");
     auto value=nlohmann::json::parse(reply->str,reply->str+reply->len);
-    if(value.is_object()) {
+    if(value.is_object() && value.contains("request_json")) {
         // Lua/cjson uses doubles. Preserve 64-bit IDs and exact request/result
         // JSON through opaque strings instead of re-encoding them in Lua.
         value["payload"]=nlohmann::json::parse(value.at("request_json").get<std::string>());

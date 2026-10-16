@@ -15,6 +15,9 @@ int main() {
         rejects([]{RedisLeaseQueue q(6379,"queue",std::string(257,'a'));});
         for(const Json& c:std::vector<Json>{Json(),Json::array(),{{"op","unknown"}},{{"op","get"}},
                 {{"op","get"},{"id","a"},{"extra",true}},{{"op","get"},{"id","../a"}},
+                {{"op","workers"},{"owner","w"}},{{"op","worker_ping"}},
+                {{"op","worker_ping"},{"owner","../w"}},
+                {{"op","worker_ping"},{"owner","w"},{"lease_ms",5000}},
                 {{"op","submit"},{"id","a"},{"payload",Json::array()}},
                 {{"op","submit"},{"id","a"},{"payload",{{"huge",std::string(8193,'x')}}}},
                 {{"op","complete"},{"id","a"},{"owner","w"},{"token","bad"},{"result",Json::object()}}})
@@ -22,6 +25,8 @@ int main() {
         for(const Json& lease:std::vector<Json>{true,1.2,99,300001,"1000"})
             rejects([&]{RedisLeaseQueue::validate({{"op","claim"},{"owner","w"},{"lease_ms",lease}});});
         for(const auto* op:{"get","cancel"}) RedisLeaseQueue::validate({{"op",op},{"id","job_1"}});
+        RedisLeaseQueue::validate({{"op","workers"}});
+        RedisLeaseQueue::validate({{"op","worker_ping"},{"owner","w"}});
         RedisLeaseQueue::validate({{"op","submit"},{"id","j"},{"payload",{{"text","Türkçe"}}}});
         RedisLeaseQueue::validate({{"op","claim"},{"owner","w"},{"lease_ms",30000}});
         RedisLeaseQueue::validate({{"op","renew"},{"id","j"},{"owner","w"},{"token","123"},{"lease_ms",100}});

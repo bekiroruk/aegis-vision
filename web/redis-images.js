@@ -11,7 +11,7 @@
     <div class="demo-actions"><button id="ri-refresh" type="button">Bağlantıyı / sonucu yenile</button>
     <button id="ri-retry" type="button" hidden>Aynı işi tekrar gönder</button><button id="ri-cancel" type="button" hidden>İşi iptal et</button>
     <button id="ri-new" type="button" hidden>Yeni analiz</button></div>
-    <p class="hint">Redis bağlantısı, işçinin çalıştığı anlamına gelmez. İş sırada kalırsa C++ worker'ı kontrol edin. Yalnızca medya klasöründeki JPG/PNG dosyaları listelenir.</p>
+    <p class="hint">İşçi sinyali son 5 saniyelik bağlantı bilgisidir; modelin hazır veya işçinin boş olduğunu garanti etmez. İşçi yokken de iş kuyruğa alınabilir. Yalnızca medya klasöründeki JPG/PNG dosyaları listelenir.</p>
     <p id="ri-status" role="status" aria-live="polite"></p><img id="ri-preview" alt="Fotoğraftaki tespit edilmiş nesneler" hidden>
     <ul id="ri-results"></ul>`;
   const el = id => document.getElementById('ri-' + id);
@@ -19,6 +19,30 @@
   const terminal = state => ['succeeded', 'failed', 'cancelled'].includes(state);
   const storageKey = 'aegis-redis-image-v1';
   let context = '', queueName = '', enabled = false, active = null, pending = false, revision = 0, shown = '';
+  let healthPending = false;
+  function showPresence(info) {
+    const count=info.worker_count;
+    const valid=Number.isInteger(count) && count>=0 && count<=128 && info.heartbeat_ttl_ms===5000;
+    let message='İşçi durumu bilinmiyor';
+    if(valid && count>0 && info.worker_status==='recent_heartbeat') message=`Son kontrolde ${count} işçi kimliğinden sinyal alındı`;
+    if(valid && count===0 && info.worker_status==='no_recent_heartbeat') message='İşçi sinyali yok · C++ worker başlatılmalı';
+    el('connection').textContent=`Redis erişilebilir · ${info.queue} · ${message}`;
+    if(!info.images?.length) el('connection').textContent+=' · Medya klasöründe JPG/PNG bulunamadı.';
+  }
+  async function health() {
+    if(pending || healthPending || !enabled) return;
+    healthPending=true;const stamp=revision;
+    try {
+      const info=await api('/api/redis-images');
+      if(stamp!==revision) return;
+      if(!info.enabled || info.context!==context || info.queue!==queueName) {
+        el('connection').textContent='Kuyruk yapılandırması değişti. Bağlantıyı yenileyin.';
+        enabled=false;sync();return;
+      }
+      showPresence(info);
+    } catch { if(stamp===revision) el('connection').textContent='Bağlantı / işçi durumu doğrulanamıyor; son sinyal bilgisi geçersiz.'; }
+    finally {healthPending=false;}
+  }
   async function api(path, body) {
     const r = await fetch(path, {signal: AbortSignal.timeout(10000), ...(body === undefined ? {} :
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
@@ -82,7 +106,7 @@
       if(typeof info.context!=='string' || typeof info.queue!=='string' || !Array.isArray(info.images)) throw new Error('Geçersiz kuyruk bilgisi');
       if(context && (context!==info.context || queueName!==info.queue)) {++revision;active=null;clearResult();save();}
       context=info.context;queueName=info.queue;
-      el('connection').textContent=`Redis erişilebilir · ${info.queue} · CPU işçisi ayrı çalışır`;
+      showPresence(info);
       const previous=el('image').value;el('image').replaceChildren();
       for(const name of info.images.slice(0,128)) {if(typeof name!=='string') continue;const option=document.createElement('option');option.value=name;option.textContent=name;el('image').append(option);}
       if(info.images.includes(previous)) el('image').value=previous;
@@ -90,7 +114,6 @@
         if(saved?.context===context && saved.queue===queueName && idOK(saved.id) && typeof saved.image==='string') active={...saved,state:'queued'};
       } catch {}}
       if(active) {active.state='queued';shown='';}
-      if(!info.images.length) el('connection').textContent+=' · Medya klasöründe JPG/PNG bulunamadı.';
     } catch(e) {enabled=false;panel.hidden=false;clearResult();el('connection').textContent=`Redis bağlantısı yok: ${e.message}`;}
     finally {pending=false;sync();}
     await poll();
@@ -119,5 +142,6 @@
   el('new').addEventListener('click',()=>{if(pending) return;++revision;active=null;save();clearResult();el('status').textContent='';el('retry').hidden=true;sync();});
   el('image').addEventListener('change',sync);
   setInterval(()=>void poll(),1000);
+  setInterval(()=>void health(),2000);
   void connect();
 })();

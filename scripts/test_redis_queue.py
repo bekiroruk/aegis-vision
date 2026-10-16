@@ -110,5 +110,25 @@ class QueueTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "QUEUE_FULL"): self.submit("still-full")
         self.assertEqual(self.submit("1")["state"], "queued")
 
+    def test_worker_presence_context_capacity_and_expiry(self):
+        self.assertEqual(self.call('workers'), {'worker_count': 0, 'heartbeat_ttl_ms': 5000})
+        self.assertEqual(self.call('worker_ping', owner='a')['worker_count'], 1)
+        self.assertEqual(self.call('worker_ping', owner='a')['worker_count'], 1)
+        self.assertEqual(self.call('worker_ping', owner='b')['worker_count'], 2)
+        with self.assertRaisesRegex(RuntimeError, 'CONTEXT_MISMATCH'):
+            self.call('worker_ping', context='wrong', owner='other')
+        with self.assertRaisesRegex(RuntimeError, 'CONTEXT_MISMATCH'):
+            self.call('workers', context='wrong')
+        for i in range(126): self.call('worker_ping', owner='w' + str(i))
+        self.assertEqual(self.call('workers')['worker_count'], 128)
+        with self.assertRaisesRegex(RuntimeError, 'WORKERS_FULL'):
+            self.call('worker_ping', owner='overflow')
+        self.assertEqual(self.call('worker_ping', owner='a')['worker_count'], 128)
+        # Exited processes must age out without deregistration; no job lease changes.
+        time.sleep(5.2)
+        self.assertEqual(self.call('workers')['worker_count'], 0)
+        self.assertEqual(self.call('worker_ping', owner='new')['worker_count'], 1)
+        self.assertEqual(self.submit()['state'], 'queued')
+
 
 if __name__ == "__main__": unittest.main()

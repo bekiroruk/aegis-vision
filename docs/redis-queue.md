@@ -25,7 +25,7 @@ sonuç JSON'unu token kontrolüyle yayımlar.
   tekrarlanmaz: işlem olmuş olabilir. Submit aynı ID ile, complete ise get ile
   uzlaştırılabilir. Cevabı kaybolan claim lease süresiyle kurtarılır.
 
-Dört açık anahtar kullanılır: `aegis:{QUEUE}:jobs/pending/leases/meta`.
+Beş açık anahtar kullanılır: `aegis:{QUEUE}:jobs/pending/leases/meta/workers`.
 Atomiklik [Redis EVAL](https://redis.io/docs/latest/commands/eval/) ve
 [Lua sözleşmesine](https://redis.io/docs/latest/develop/programmability/eval-intro/)
 dayanır. Script atomikliği runtime hatalarında transaction rollback garantisi
@@ -181,10 +181,27 @@ Ana panelde "Fotoğrafta nesne bul" bölümü açılır; aynı sunucunun `/redis
 sayfası yalnız bu bölümü gösterir. Özellik kapalıyken ana panelde gizlenir.
 Yerel makinede Redis henüz yoksa bu komutlar Redis'i kurmaz/başlatmaz; bağlantı
 eksikliği açıkça görünür. `Redis erişilebilir` bir worker'ın çalıştığı garantisi
-değildir; worker registry/sağlık takibi henüz yoktur.
+değildir. Yeni worker sürümü ayrı thread'den saniyede bir `worker_ping(owner)`
+gönderir; `workers` komutu Redis saatine göre son 5 saniyedeki farklı owner
+kimliklerini sayar. Panel bu bilgiyi iki saniyede bir yeniler; bağlantı hatasında
+eski olumlu bilgiyi geçersiz olarak gösterir. İşçi sinyali yokken iş yine kuyruğa
+alınabilir; işçinin başlatılması gerektiği açıkça belirtilir.
+
+Bu **liveness sinyalidir**, model yüklenmesi/başarılı inference, boş kapasite
+veya iş lease'i değildir. Model ilk işte yüklenir. Aynı owner kullanan süreçler
+tek sayılır; ayrı kimlikler kullanın. En fazla 128 canlı owner tutulur; süresi
+dolan kayıtlar temizlenir, anahtar son heartbeat'ten 5 saniye sonra da silinir.
+Worker'ın çıkışından sonra son sinyal en fazla 5 saniye geçerli kalır; panelin
+yenileme/ağ gecikmesi buna eklenir. Graceful çıkışta kayıt silinmez; böylece aynı
+owner'lı başka süreç yanlışlıkla silinmez. Eski worker sürümleri sinyal göndermez.
+Sinyal hatası iş sahipliğini değiştirmez; mevcut token kontrollü iş heartbeat'i
+sonuç yayımlama yetkisini ayrıca korur. İlk sinyal model/medya context'ini
+sabitlediği için boş kuyrukta bile farklı context reddedilir.
 
 - `GET /api/redis-images`: etkinlik, context, queue, en fazla 128 üst düzey
-  JPG/PNG; dizinde en fazla 1024 giriş taranır. Upload/uzak URL kabul edilmez.
+  JPG/PNG; dizinde en fazla 1024 giriş taranır. `worker_status` değeri
+  `recent_heartbeat` veya `no_recent_heartbeat`, `worker_count` 0–128,
+  `heartbeat_ttl_ms` 5000. Upload/uzak URL kabul edilmez.
 - `POST /api/redis-images`: `{id,image}`; sabit istemci ID'siyle idempotent
   gönderim, 202 kabul cevabı. Body 8 KiB; bilinmeyen alanlar reddedilir.
 - `GET /api/redis-images/{id}` ve `POST .../{id}/cancel` (`{}`): durum/sonuç/iptal.

@@ -57,5 +57,20 @@ const status={enabled:true,queue:'images',context:'ctx',images:['bus.jpg'],worke
   // Do not restore an old model/media namespace.
   h=harness(async()=>({value:status}),{...saved,context:'old'});await flush();assert.equal(h.el('submit').disabled,false);
   h=harness(async()=>({value:status}),{...saved,queue:'different'});await flush();assert.equal(h.el('submit').disabled,false);
+  // Presence refresh must not reset a terminal result or issue another submit.
+  let info={...status,worker_count:0,heartbeat_ttl_ms:5000,worker_status:'no_recent_heartbeat'},offline=false;
+  h=harness(async()=>{if(offline) throw new Error('offline');return {value:info};});await flush();
+  assert.match(h.el('connection').textContent,/İşçi sinyali yok/);
+  assert.equal(h.el('submit').disabled,false); // Queuing without a worker is intentional.
+  info={...info,worker_count:2,worker_status:'recent_heartbeat'};
+  h.timers[1]();await flush();assert.match(h.el('connection').textContent,/2 işçi kimliğinden/);
+  offline=true;h.timers[1]();await flush();assert.match(h.el('connection').textContent,/doğrulanamıyor/);
+  offline=false;info={...info,worker_count:0,worker_status:'no_recent_heartbeat'};
+  h.timers[1]();await flush();assert.match(h.el('connection').textContent,/İşçi sinyali yok/);
+  info={...info,worker_count:999,worker_status:'recent_heartbeat'};
+  h.timers[1]();await flush();assert.match(h.el('connection').textContent,/bilinmiyor/);
+  info={...info,queue:'another-queue'};h.timers[1]();await flush();
+  assert.equal(h.el('submit').disabled,true);assert.match(h.el('connection').textContent,/yapılandırması değişti/);
+  assert.equal(h.calls.filter(c=>c.body).length,0);
   console.log('Redis UI: disabled state, stable retry ID, refresh recovery, cancellation, safe labels and preview passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

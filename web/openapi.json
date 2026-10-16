@@ -1321,7 +1321,7 @@
           }
         },
         "x-cpp-route": "/api/redis-images",
-        "description": "enabled=false when not configured. Reachable Redis does not prove a worker is alive. Top-level JPG/PNG catalog only, bounded scan."
+        "description": "enabled=false when not configured. Worker count is distinct owner names with a heartbeat in the last 5 seconds, not inference readiness or idle capacity. Top-level JPG/PNG catalog only, bounded scan."
       },
       "post": {
         "operationId": "redisImageSubmit",
@@ -3107,7 +3107,18 @@
             "const": "opencv-dnn-cpu"
           },
           "worker_status": {
-            "const": "unknown"
+            "enum": [
+              "recent_heartbeat",
+              "no_recent_heartbeat"
+            ]
+          },
+          "worker_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 128
+          },
+          "heartbeat_ttl_ms": {
+            "const": 5000
           },
           "images": {
             "type": "array",
