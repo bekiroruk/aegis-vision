@@ -13,8 +13,8 @@ jobs:
       - name: Build optional native Redis queue
         run: |
           cmake -S . -B build-redis -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_REDIS=ON
-          cmake --build build-redis --parallel 2 --target aegisvision_redis_queue aegisvision_redis_tests
-          ctest --test-dir build-redis -R '^aegisvision_redis_validation$' --output-on-failure
+          cmake --build build-redis --parallel 2 --target aegisvision_redis_queue aegisvision_redis_tests aegisvision_redis_worker_tests
+          ctest --test-dir build-redis -R '^aegisvision_redis_(validation|worker)$' --output-on-failure
       - name: Start isolated real Redis with durable AOF
         run: |
           docker run -d --name aegis-redis-ci -p 127.0.0.1:16379:6379 redis:7.4-alpine redis-server --appendonly yes --appendfsync always
@@ -25,6 +25,8 @@ jobs:
           exit 1
       - name: Native multi-process claim, expiry, fencing and bounds
         run: python3 scripts/test_redis_queue.py build-redis/aegisvision_redis_queue 16379
+      - name: Native worker automatic heartbeat and active cancellation
+        run: build-redis/aegisvision_redis_worker_tests 16379
       - name: Real Redis restart and ownership recovery
         run: |
           python3 scripts/test_redis_restart.py build-redis/aegisvision_redis_queue 16379 restart-test-ci write
@@ -37,6 +39,51 @@ jobs:
       - name: Remove this job's test container
         if: always()
         run: docker rm -f aegis-redis-ci || true
+
+  redis-image-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install OpenCV for the native image worker
+        run: bash scripts/ci_install_opencv.sh
+      - name: Build native worker
+        run: |
+          cmake -S . -B build-redis-image -DCMAKE_BUILD_TYPE=Release -DAEGISVISION_WITH_REDIS=ON -DAEGISVISION_WITH_OPENCV=ON
+          cmake --build build-redis-image --parallel 2 --target aegisvision_redis_worker aegisvision_redis_queue aegisvision_redis_worker_tests
+          ctest --test-dir build-redis-image -R '^aegisvision_redis_worker' --output-on-failure
+      - name: Prepare public pretrained YOLO reference (Python is export-only)
+        run: |
+          python -m pip install torch==2.9.1 torchvision==0.24.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install ultralytics==8.3.252 onnx==1.19.1
+          mkdir -p artifacts/models artifacts/samples
+          curl --retry 3 -fL https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.pt -o artifacts/models/yolov8n.pt
+          echo 'f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36  artifacts/models/yolov8n.pt' | sha256sum --check
+          curl --retry 3 -fL https://raw.githubusercontent.com/ultralytics/ultralytics/v8.3.252/ultralytics/assets/bus.jpg -o artifacts/samples/bus.jpg
+          echo 'c02019c4979c191eb739ddd944445ef408dad5679acab6fd520ef9d434bfbc63  artifacts/samples/bus.jpg' | sha256sum --check
+          python scripts/export_yolo.py
+      - name: Start isolated Redis
+        run: |
+          docker run -d --name aegis-image-redis-ci -p 127.0.0.1:16379:6379 redis:7.4-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec aegis-image-redis-ci redis-cli ping | grep -q PONG; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Real image to Redis to C++ YOLO to fenced result
+        run: python scripts/test_redis_image.py build-redis-image/aegisvision_redis_worker artifacts/models/yolov8n.onnx artifacts/samples --queue build-redis-image/aegisvision_redis_queue --output outputs/redis-image-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: redis-image-evidence
+          path: outputs/redis-image-ci.json
+          if-no-files-found: warn
+      - name: Remove this job's Redis
+        if: always()
+        run: docker rm -f aegis-image-redis-ci || true
 
   api-contract:
     runs-on: ubuntu-latest

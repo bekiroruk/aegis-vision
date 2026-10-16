@@ -146,7 +146,8 @@ zaman aşımının aynı nedenden kaynaklandığını tek başına kanıtlamaz.
    reconnect/backpressure, süre sınırlı canlı web ekranı ve kota sınırlı canlı nesne
    arşivi/indeksi tamamlandı. GStreamer adaptörü, kamera/stream PTS, tam FPS/sesli
    kayıt ve çoklu worker/Redis entegrasyonunu geliştir. [Redis lease/token çekirdeği](redis-queue.md)
-   gerçek Redis yarışma/restart testlerini geçti; model worker/heartbeat/HTTP bağlantısı henüz yok.
+   gerçek Redis yarışma/restart testlerini geçti; YOLO görüntü worker/heartbeat bağlantısı eklendi,
+   HTTP bağlantısı ve diğer analiz türleri henüz yok.
    Mevcut arşiv yalnızca analiz
    karelerini kaydeder; kota dolunca capture yerine yalnızca arşiv durur.
    Kabul: bağlantı kesilmesi ve yük testleri; bellek sınırlı, görevler izlenebilir,

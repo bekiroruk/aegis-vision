@@ -38,6 +38,9 @@ class YoloDetector final : public IDetector {
 public:
     explicit YoloDetector(const std::filesystem::path& model,
         YoloConfig config = {}, std::vector<std::string> labels = coco_labels());
+    // Load the exact bytes that a caller hashed, without reopening a mutable path.
+    explicit YoloDetector(const std::vector<unsigned char>& model,
+        YoloConfig config = {}, std::vector<std::string> labels = coco_labels());
     [[nodiscard]] std::vector<Detection> detect(const Frame& frame) override;
 private:
     cv::dnn::Net net_;

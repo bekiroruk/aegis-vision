@@ -137,10 +137,8 @@ std::vector<Detection> decode_yolo(const cv::Mat& output, const Letterbox& trans
     return result;
 }
 
-YoloDetector::YoloDetector(const std::filesystem::path& model, YoloConfig config,
-    std::vector<std::string> labels) : config_(config), labels_(std::move(labels)) {
-    validate(config_);
-    if (labels_.empty()) throw std::invalid_argument("Class labels are required");
+namespace {
+std::vector<unsigned char> read_yolo_model(const std::filesystem::path& model) {
     std::ifstream input(model, std::ios::binary | std::ios::ate);
     if (!input) throw std::runtime_error("Cannot open ONNX model; see docs/yolo.md for export instructions");
     const auto length = input.tellg();
@@ -149,7 +147,19 @@ YoloDetector::YoloDetector(const std::filesystem::path& model, YoloConfig config
     input.seekg(0);
     input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     if (!input) throw std::runtime_error("Cannot read ONNX model");
-    net_ = cv::dnn::readNetFromONNX(bytes);
+    return bytes;
+}
+}
+YoloDetector::YoloDetector(const std::filesystem::path& model, YoloConfig config,
+    std::vector<std::string> labels) : YoloDetector(read_yolo_model(model), config, std::move(labels)) {}
+
+YoloDetector::YoloDetector(const std::vector<unsigned char>& model, YoloConfig config,
+    std::vector<std::string> labels) : config_(config), labels_(std::move(labels)) {
+    validate(config_);
+    if (labels_.empty()) throw std::invalid_argument("Class labels are required");
+    if (model.empty() || model.size() > 1024ULL * 1024 * 1024)
+        throw std::invalid_argument("Invalid ONNX model size");
+    net_ = cv::dnn::readNetFromONNX(model);
     if (net_.empty()) throw std::runtime_error("ONNX network is empty");
     net_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
     net_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);

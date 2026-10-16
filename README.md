@@ -22,9 +22,9 @@ Kullanım ve ilk kurulum sınırları: [tek komutluk demo](docs/demo.md).
 [HTTP API/OpenAPI sözleşmesi](docs/api.md): iş gönderme, sonuç/iptal, canlı oturum,
 arşiv ve medya çıktıları. Çalışan serviste `/openapi.json`; CI route/sınır uyumunu denetler.
 
-[İsteğe bağlı C++ Redis kuyruk çekirdeği](docs/redis-queue.md): süreçler arası
-lease, sahiplik token'ı, süre aşımı kurtarma ve iptal. Henüz CV worker veya
-panel backend'i değildir; mevcut HTTP/SQLite kuyruğu korunur.
+[İsteğe bağlı C++ Redis görüntü worker'ı](docs/redis-queue.md): gerçek YOLO
+tespiti, otomatik lease yenileme, token kontrollü sonuç, hash doğrulama ve iptal.
+Henüz panel backend'i değildir; mevcut HTTP/SQLite kuyruğu korunur.
 
 [Deneysel çoklu-kamera eşleştirme](docs/multicamera.md): kapanmış takip parçaları
 için C++ çekirdek/CLI, kamera-epoch alanları ve belirsizlik reddi. Henüz gerçek

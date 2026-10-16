@@ -18,7 +18,7 @@ nitelikler kod yazarak tamamlanamaz.
 | INT8 | Ayrık kalibrasyon ve native engine ölçümü | Kalite/hız kapısı geçmedi; kabul edilmiş INT8 modeli yok |
 | GPU Docker deployment | [GPU Dockerfile/Compose ve başlangıç kontrolleri](gpu-container.md); 9 test + Compose ayrıştırma | İmaj derlemesi ve gerçek GPU konteyner testi yapılmadı; yerel Docker motoru kapalı |
 | Modüler/konfigürasyonlu mimari | C++ port/adaptör, TOML, testler, ADR'ler | Yeni backend'lerin aynı sözleşmelere eklenmesi |
-| Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI; [Redis lease/token çekirdeği](redis-queue.md) | Redis CV worker/heartbeat/HTTP entegrasyonu eksik; FastAPI/Celery kullanılmıyor |
+| Asenkron kuyruk/API | Bounded C++ worker, SQLite kalıcılık/iptal, OpenAPI/CI; [Redis YOLO worker + heartbeat/token kontrolü](redis-queue.md) | Redis HTTP/diğer analiz entegrasyonu ve yan etki koruması eksik; FastAPI/Celery kullanılmıyor |
 | C++ / Python / Linux / Git | Uygulama C++20, eğitim/araçlar Python, Git ve CI | Python uygulama deneyimi yerine C++ tercih edildi; Linux GPU deployment doğrulanmadı |
 | Çoklu kamera/Re-ID | C++ tracklet/prototip; [x1.0 karşılaştırması](reid-model-experiment.md), [kalibrasyon](reid-calibration.md), [gerçek metric-learning eğitimi](reid-training.md); eğitilen aday 66/94→64/94 ile reddedildi | Kalite iyileştirmesi ve yeni son test, non-overlap geçiş ölçümü, saat eşleme ve canlı entegrasyon eksik |
 | RTSP/GStreamer/DeepStream | RTSP/FFmpeg, reconnect/bounded queue; CPU maske testi | GPU+RTSP birleşik test açık; GStreamer/DeepStream yok |

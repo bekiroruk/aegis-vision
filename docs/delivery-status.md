@@ -72,8 +72,10 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
 6. **Dağıtık kuyruk.** [C++ Redis sahiplik/kurtarma çekirdeği](redis-queue.md)
    eklendi; lease, token kontrollü sonuç kabulü, iptal, retry ve kapasite sınırları.
    Linux'ta gerçek Redis ile sekiz süreç yarışması ve AOF restart/kurtarma geçti.
-   Model yüklü worker, heartbeat döngüsü, HTTP bağlantısı ve dosya/Qdrant yan
-   etkilerinin korunması hâlâ eksik. Mevcut panel SQLite kullanmaya devam eder.
+   Gerçek YOLO görüntü worker'ı, otomatik heartbeat, iptal/sahiplik kaybında
+   sonuç bastırma ve model/medya hash kontrolü eklendi. HTTP bağlantısı,
+   diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
+   Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı
    makinede denenmesi, model/veri/bağımlılık lisans envanteri ve dağıtım
    koşullarının incelenmesi, yük/operasyon kontrolleri. Kısa demo hazır;
