@@ -210,6 +210,29 @@ hafif fixture'da gerçek Redis + C++ YOLO + Chromium üzerinden gönderim,
 sayfa yenileme, kutulu sonuç ve iptali kontrol eder. Bu fixture tam CLIP/Qdrant
 servisi değildir; ana sunucunun build ve regresyonları ayrıca çalıştırılır.
 
+### Doğrulanan HTTP ve tarayıcı koşusu — 2026-10-16
+
+`2ff7fd0` için [CI koşusunun](https://github.com/bekiroruk/aegis-vision/actions/runs/38935643135)
+**7/7 grubu başarılı**. [Görüntü entegrasyon grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38935643135/job/117090324022)
+`http_redis_yolo_verified=true` ve `browser_verified=true` üretti. Gerçek Redis,
+ayrı native C++ YOLO worker ve Chromium ile panelden gönderim, aynı işin sayfa
+yenilemesinden sonra izlenmesi, kutulu önizleme ve iptal geçti. Sonuç 4 kişi ve
+1 otobüs; HTTP önizlemesi 173.228 bayt JPEG. Kaynak görüntü değiştiğinde eski
+kutularla önizleme verilmemesi ve aynı ID'nin farklı içeriğe kullanılamaması da
+sınandı. Tarayıcı durumunun context **ve kuyruk adıyla** ayrılması ayrıca
+regresyon testiyle korunur.
+
+[Kanıt artifact'ı](https://github.com/bekiroruk/aegis-vision/actions/runs/38935643135/artifacts/12060563139)
+JSON raporlarını, kutulu JPEG'i ve gerçek tarayıcı ekran görüntüsünü içerir.
+Yerel kopyaları `outputs/redis-http-20261016/` altında tutulur, Git'e yüklenmez.
+Artifact saklama süresi GitHub ayarlarıyla sınırlıdır.
+
+Windows'ta Redis etkin ana servis derlendi; `aegisvision_service` regresyonu,
+3/3 ilgili Redis/HTTP CTest, 7/7 OpenAPI testi ve mevcut/yeni web durum testleri
+geçti. Windows'ta Redis sunucusu başlatılmadı: birleşik tarayıcı kanıtı Linux
+CI fixture'ına aittir, yerel canlı servis veya tam CLIP/Qdrant uçtan uca testi
+değildir. Bu doğrulama diğer analiz türlerinin Redis'e taşınmasını kapsamaz.
+
 ### Doğrulanan gerçek worker koşusu — 2026-10-16
 
 `69a6f31` kodu için [CI koşusunun](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793)

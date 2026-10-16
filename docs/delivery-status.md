@@ -77,7 +77,12 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    [7/7 CI grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38897763793)
    geçti; gerçek Redis → C++ YOLO → sonuç zinciri 4 kişi/1 otobüs ile doğrulandı.
    Linux görüntü worker'ı OpenCV 4.12 kullanır; eski 4.6 importer uyumsuzdur.
-   İsteğe bağlı görüntü HTTP/panel bağlantısı eklendi (ayrı doğrulama koşusu gerekir).
+   İsteğe bağlı görüntü HTTP/panel bağlantısı da doğrulandı: `2ff7fd0` için
+   [7/7 CI grubu](https://github.com/bekiroruk/aegis-vision/actions/runs/38935643135)
+   başarılı. Gerçek Chromium → HTTP → Redis → ayrı C++ YOLO worker → kutulu
+   sonuç, sayfa yenileme ve iptal geçti. Bu birleşik test hafif HTTP fixture'ında;
+   ana Windows servisinin derlemesi ve ayrı servis regresyon testi de geçti.
+   Windows'ta Redis çalıştırılmadı; yerel canlı Redis paneli teslimi değildir.
    Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı
