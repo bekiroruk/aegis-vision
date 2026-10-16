@@ -32,7 +32,7 @@ if op=='submit' then
   end
   if redis.call('HLEN',jobs)>=128 then return redis.error_reply('QUEUE_FULL') end
   if not context then redis.call('HSET',meta,'context',ARGV[1]) end
-  local j={id=c.id,payload=c.payload,request_json=payload,state='queued',attempts=0,
+  local j={id=c.id,request_json=payload,state='queued',attempts=0,
     token='0',owner='',deadline_ms=0,result=cjson.null,updated_ms=now}
   save(j); redis.call('RPUSH',pending,c.id)
   return output(j)
@@ -78,7 +78,7 @@ elseif op=='renew' or op=='complete' or op=='fail' then
   if op=='renew' then
     j.deadline_ms=now+c.lease_ms; save(j); redis.call('ZADD',leases,j.deadline_ms,c.id)
   else
-    j.state=op=='complete' and 'succeeded' or 'failed'; j.result=c.result; j.deadline_ms=0
+    j.state=op=='complete' and 'succeeded' or 'failed'; j.result_json=ARGV[4]; j.deadline_ms=0
     save(j); redis.call('ZREM',leases,c.id)
   end
   return output(j)

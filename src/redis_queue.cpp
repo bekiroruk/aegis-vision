@@ -61,7 +61,8 @@ nlohmann::json RedisLeaseQueue::call(const nlohmann::json& command) const {
     const std::string prefix="aegis:{"+queue_+"}:";
     const std::vector<std::string> args{"EVAL",aegis_redis_script,"4",prefix+"jobs",prefix+"pending",
         prefix+"leases",prefix+"meta",context_,command.dump(),
-        command.contains("payload") ? command.at("payload").dump() : ""};
+        command.contains("payload") ? command.at("payload").dump() : "",
+        command.contains("result") ? command.at("result").dump() : ""};
     std::vector<const char*> argv; std::vector<std::size_t> lengths;
     for(const auto& a:args) {argv.push_back(a.data()); lengths.push_back(a.size());}
     std::unique_ptr<redisReply,decltype(&freeReplyObject)> reply(
@@ -69,8 +70,19 @@ nlohmann::json RedisLeaseQueue::call(const nlohmann::json& command) const {
     if(!reply) throw std::runtime_error("Redis reply lost: operation outcome unknown; no write retried");
     if(reply->type==REDIS_REPLY_ERROR)
         throw std::runtime_error("Redis queue rejected operation: "+std::string(reply->str,reply->len));
-    if(reply->type!=REDIS_REPLY_STRING || reply->len>131072)
+    if(reply->type!=REDIS_REPLY_STRING || reply->len>262144)
         throw std::runtime_error("Invalid Redis queue reply");
-    return nlohmann::json::parse(reply->str,reply->str+reply->len);
+    auto value=nlohmann::json::parse(reply->str,reply->str+reply->len);
+    if(value.is_object()) {
+        // Lua/cjson uses doubles. Preserve 64-bit IDs and exact request/result
+        // JSON through opaque strings instead of re-encoding them in Lua.
+        value["payload"]=nlohmann::json::parse(value.at("request_json").get<std::string>());
+        value.erase("request_json");
+        if(value.contains("result_json")) {
+            value["result"]=nlohmann::json::parse(value.at("result_json").get<std::string>());
+            value.erase("result_json");
+        }
+    }
+    return value;
 }
 }

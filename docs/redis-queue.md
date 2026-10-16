@@ -56,9 +56,11 @@ koordinasyon komutlarıdır. Model/medya dosyaları Redis'e yüklenmez.
 ## Test ve sınırlar
 
 Windows native derleme ve bağlantısız kontrat testi geçti. Ayrı `redis-linux`
-CI grubu gerçek Redis 7.4 üzerinde yedi entegrasyon testi çalıştırır: sekiz
+CI grubu gerçek Redis 7.4 üzerinde sekiz entegrasyon testi çalıştırır: sekiz
 native süreçle tek claim, idempotency/context, lease devri/eski token reddi,
-renew, iptal, retry ve kapasite. Ayrıca AOF `appendfsync always` açık gerçek
+renew, iptal, retry, kapasite ve 64-bit sayı/Unicode korunması. Payload/sonuç
+Lua'nın double sayı dönüşümüne sokulmadan opaque JSON olarak korunur.
+Ayrıca AOF `appendfsync always` açık gerçek
 Redis restart'ında aktif/bekleyen işlerin, iptalin ve tamamlanmış sonucun
 korunması sınanır. Yerel makinede Redis yoktur; gerçek sonuç CI'dan doğrulanır.
 Fixture payload kullanılır; CV/GPU veya Redis failover testi değildir.

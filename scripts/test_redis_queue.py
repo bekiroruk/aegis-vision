@@ -51,6 +51,16 @@ class QueueTests(unittest.TestCase):
             self.call("get", context="changed-model", id="j")
         self.assertEqual(self.call("get", id="j")["state"], "queued")
 
+    def test_payload_and_result_preserve_large_integer_and_unicode(self):
+        payload = {"id64": 2**60 + 7, "text": "Türkçe\u0000veri", "nested": {"p": .12345678901234567}}
+        self.assertEqual(self.call("submit", id="j", payload=payload)["payload"], payload)
+        job = self.claim()
+        result = self.finish(job, result=payload)
+        self.assertEqual(result["result"], payload)
+        restored = self.call("get", id="j")
+        self.assertEqual(restored["payload"], payload)
+        self.assertEqual(restored["result"], payload)
+
     def test_expired_worker_cannot_publish_or_renew(self):
         self.submit()
         old = self.claim(lease=150)
