@@ -1,4 +1,4 @@
-param([switch]$Stop, [switch]$OpenBrowser, [switch]$CheckOnly)
+param([switch]$Stop, [switch]$OpenBrowser, [switch]$CheckOnly, [switch]$RedisImages)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $stateDirectory = Join-Path $repo 'artifacts/service/demo-launcher'
@@ -6,7 +6,8 @@ $stateFile = Join-Path $stateDirectory 'processes.clixml'
 $owned = @()
 $started = @()
 $lock = $null
-$requiredFiles = @('build/live-seg/Release/aegisvision_server.exe','artifacts/deps/qdrant/qdrant.exe',
+$serverExecutable = if ($RedisImages) { 'build/search/Release/aegisvision_server.exe' } else { 'build/live-seg/Release/aegisvision_server.exe' }
+$requiredFiles = @($serverExecutable,'artifacts/deps/qdrant/qdrant.exe',
     'artifacts/deps/llama-b11552/llama-server.exe','configs/analysis.toml','configs/service-search.toml',
     'configs/image.toml','configs/qdrant-local.yaml','web/index.html','artifacts/media/pedestrians.mp4',
     'artifacts/models/yolov8n.onnx','artifacts/models/yolov8n-seg/yolov8n-seg.onnx',
@@ -14,6 +15,7 @@ $requiredFiles = @('build/live-seg/Release/aegisvision_server.exe','artifacts/de
     'artifacts/models/ocr-multi-v6/inference.yml','artifacts/models/ocr-multi-v6/text_detection_en_ppocrv3_2023may.onnx',
     'artifacts/models/smolvlm-500m/SmolVLM-500M-Instruct-Q8_0.gguf',
     'artifacts/models/smolvlm-500m/mmproj-SmolVLM-500M-Instruct-Q8_0.gguf')
+if ($RedisImages) { $requiredFiles += 'build/redis-cv/Release/aegisvision_redis_worker.exe' }
 function Get-MissingDemoFiles {
     @($requiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $repo $_) -PathType Leaf) })
 }
@@ -83,6 +85,37 @@ function Start-Component($name, $relativeExe, $arguments, $port, $url, $validate
     throw "$name 120 saniye icinde hazir olmadi. Gunluk: $stateDirectory"
 }
 
+function Start-ImageWorker {
+    $exe = (Resolve-Path -LiteralPath (Join-Path $repo 'build/redis-cv/Release/aegisvision_redis_worker.exe')).Path
+    $context = & $exe context artifacts/models/yolov8n.onnx artifacts/media
+    if ($LASTEXITCODE -ne 0) { throw 'Redis worker model/media context could not be computed.' }
+    $info = Invoke-RestMethod 'http://127.0.0.1:8090/api/redis-images' -TimeoutSec 3
+    if (-not $info.enabled -or $info.queue -ne 'desktop-images-v1' -or $info.context -ne $context) {
+        throw 'Redis panel/worker context differs. Stop the existing demo before changing mode.'
+    }
+    foreach ($record in $script:owned) {
+        if ($record.Name -eq 'redis-image-worker' -and $record.Path -eq $exe -and (Get-OwnedProcess $record)) {
+            Write-Host 'Zaten acik: Redis goruntu iscisi'; return
+        }
+    }
+    $errorLog = Join-Path $stateDirectory 'redis-image-worker.stderr.log'
+    $process = Start-Process -FilePath $exe -ArgumentList 'run 16379 desktop-images-v1 desktop-image-worker artifacts/models/yolov8n.onnx artifacts/media' `
+        -WorkingDirectory $repo -WindowStyle Hidden -PassThru -RedirectStandardError $errorLog `
+        -RedirectStandardOutput (Join-Path $stateDirectory 'redis-image-worker.stdout.log')
+    $record = [pscustomobject]@{Name='redis-image-worker';Id=$process.Id;StartTicks=$process.StartTime.ToUniversalTime().Ticks;Path=$exe}
+    $script:started += $record; $script:owned += $record; Save-State
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+        if ($process.HasExited) { throw "Redis worker kapandi. Gunluk: $errorLog" }
+        $log = Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue
+        if ($log -and $log.Contains("Redis image worker ready; context=$context")) {
+            Write-Host 'Hazir: Redis goruntu iscisi (model ilk iste yuklenir)'; return
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Redis worker baslangici dogrulanamadi. Gunluk: $errorLog"
+}
+
 Push-Location $repo
 try {
     New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
@@ -108,7 +141,10 @@ try {
     }
     Start-Component 'qdrant' 'artifacts/deps/qdrant/qdrant.exe' '--config-path configs/qdrant-local.yaml' 6333 'http://127.0.0.1:6333/healthz' { param($value) $null -ne $value }
     Start-Component 'vlm' 'artifacts/deps/llama-b11552/llama-server.exe' '-m artifacts/models/smolvlm-500m/SmolVLM-500M-Instruct-Q8_0.gguf --mmproj artifacts/models/smolvlm-500m/mmproj-SmolVLM-500M-Instruct-Q8_0.gguf --alias aegis-smolvlm-500m --host 127.0.0.1 --port 8092 -c 2048 -t 4 -np 1 -ngl 0 --no-mmproj-offload --no-webui --no-agent --cors-origins http://127.0.0.1:8092 --no-cors-credentials' 8092 'http://127.0.0.1:8092/v1/models' { param($value) @($value.data | Where-Object id -eq 'aegis-smolvlm-500m').Count -eq 1 }
-    Start-Component 'aegisvision' 'build/live-seg/Release/aegisvision_server.exe' 'configs/service-search.toml configs/image.toml artifacts/media web 8090 artifacts/service/vlm-demo-jobs.sqlite --analysis-config configs/analysis.toml' 8090 'http://127.0.0.1:8090/api/health' { param($value) $value.status -eq 'ready' -and $value.segmentation_enabled -eq $true -and $value.ocr_unicode -eq $true -and $value.vlm_enabled -eq $true }
+    $serverArguments = 'configs/service-search.toml configs/image.toml artifacts/media web 8090 artifacts/service/vlm-demo-jobs.sqlite --analysis-config configs/analysis.toml'
+    if ($RedisImages) { $serverArguments += ' --redis-port 16379 --redis-queue desktop-images-v1' }
+    Start-Component 'aegisvision' $serverExecutable $serverArguments 8090 'http://127.0.0.1:8090/api/health' { param($value) $value.status -eq 'ready' -and $value.segmentation_enabled -eq $true -and $value.ocr_unicode -eq $true -and $value.vlm_enabled -eq $true }
+    if ($RedisImages) { Start-ImageWorker }
     Write-Host 'AegisVision hazir: http://127.0.0.1:8090'
     Write-Host 'Durdurmak icin: .\scripts\demo.ps1 -Stop'
     if ($OpenBrowser) { Start-Process 'http://127.0.0.1:8090' }

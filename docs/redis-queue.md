@@ -6,6 +6,12 @@
 backend'i değiştirilmez; Redis worker ayrı süreç olarak görüntü işi alır ve
 sonuç JSON'unu token kontrolüyle yayımlar.
 
+**17 Ekim yerel doğrulama:** Docker Redis + ana Windows servisi + ayrı C++
+worker + tarayıcı ile gerçek görüntü analizi de geçti; [başlatma ve kanıt](demo.md).
+Bu belgedeki 16 Ekim tarihli "yerelde Redis yok" ifadeleri o koşuların sınırıdır.
+Docker 4.53.0 socket başlangıç hatası yeniden açılışta tekrarladığından yerel
+çalışmanın her açılışta sorunsuz olduğu iddia edilmez.
+
 ## Sözleşme
 
 - `submit`, `claim`, `renew`, `complete`, `fail`, `cancel`, `get` işlemleri.

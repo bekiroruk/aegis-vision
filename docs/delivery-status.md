@@ -1,6 +1,6 @@
 # Teslim durumu ve kalan işler
 
-Güncelleme: 2026-10-16. Bu belge mevcut teslimin kısa listesidir; bütün ilan
+Güncelleme: 2026-10-17. Bu belge mevcut teslimin kısa listesidir; bütün ilan
 maddelerinin tamamlandığı veya üretime hazır olduğu anlamına gelmez.
 
 ## Kullanılabilir demo
@@ -82,13 +82,18 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    başarılı. Gerçek Chromium → HTTP → Redis → ayrı C++ YOLO worker → kutulu
    sonuç, sayfa yenileme ve iptal geçti. Bu birleşik test hafif HTTP fixture'ında;
    ana Windows servisinin derlemesi ve ayrı servis regresyon testi de geçti.
-   Windows'ta Redis çalıştırılmadı; yerel canlı Redis paneli teslimi değildir.
+   Bu ilk koşu Windows'ta Redis çalıştırıldığı anlamına gelmiyordu.
    Süreli worker sinyali ve panelde otomatik yenilenen varlık durumu eklendi;
    `ced9aba` için [gerçek Redis ve tarayıcı testleri](https://github.com/bekiroruk/aegis-vision/actions/runs/38941310334)
    geçti: boşta sinyalin yenilenmesi, gerçek inference ve kapanınca süre dolumu.
    Aynı koşunun 7/7 CI grubu başarılı.
-   Bu model hazır/boş kapasite garantisi değildir. Docker yerelde yeniden denendi; kendi inference socket
-   başlangıç hatasıyla durdu. Fabrika ayarlarına dönüş/veri silme yapılmadı.
+   Bu model hazır/boş kapasite garantisi değildir. 17 Ekim'de Docker'ın bozuk
+   geçici socket klasörleri silinmeden yedek adlara taşınınca motor açıldı.
+   [Yerel tam servis + Redis + C++ worker + tarayıcı](demo.md) gerçek fotoğrafta
+   4 kişi/1 otobüs üretti; sayfa yenilemesi sonucu korudu. Başlatıcıya
+   `-RedisImages` eklendi. Docker 4.53.0 hatası sonraki açılışta tekrarladı;
+   geçici klasör düzeltmesi kalıcı çözüm sayılmaz. Fabrika ayarlarına dönüş,
+   imaj/konteyner/volume silme yapılmadı.
    Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı

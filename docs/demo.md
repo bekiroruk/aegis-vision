@@ -48,6 +48,48 @@ Yeni süreç başlatıldığında ilgili log yenilenir. Başlatma hatasında yal
 çağrıda açılan süreçler kapatılır. Port başka uygulamadaysa üzerine yazılmaz.
 Hazırlık kontrolü bileşen başına en fazla 120 saniye bekler.
 
+## Redis görüntü bölümü — hazır yerel kurulum
+
+Docker Desktop açık ve motoru hazırken, bu bilgisayarda oluşturulmuş Redis
+konteynerini ve tam demo + ayrı C++ görüntü işçisini başlat:
+
+```powershell
+docker start aegis-redis-local
+.\scripts\demo.ps1 -RedisImages -OpenBrowser
+```
+
+Ana panelin fotoğraf bölümü veya `http://127.0.0.1:8090/redis.html` üzerinden
+`bus.jpg` → **Fotoğrafı analiz et**. Yerel örnek, `artifacts/samples/bus.jpg`
+dosyasının `artifacts/media/bus.jpg` kopyasıdır. Başlatıcı fotoğraf kopyalamaz.
+Video/OCR/VLM hâlâ aynı panelde mevcut SQLite iş akışını kullanır.
+
+`-RedisImages`, Redis ile derlenmiş `build/search/Release/aegisvision_server.exe`
+ve `build/redis-cv/Release/aegisvision_redis_worker.exe` kullanır. Redis adresi
+`127.0.0.1:16379`, kuyruk `desktop-images-v1`, medya kökü `artifacts/media`.
+Başlatıcı Docker/Redis kurmaz veya başlatmaz. Mod değiştirirken önce
+`./scripts/demo.ps1 -Stop` kullan; başka süreçlerin portunu ele geçirmez.
+İşçi bağlantı/sahiplik hatasında güvenli biçimde çıkar. Bağlantı düzeldikten
+sonra aynı başlatma komutu eksik işçiyi yeniden açar; çalışan servisleri korur.
+
+`-Stop` kayıtlı C++ işçisini de kapatır, Docker/Redis'i kapatmaz. Redis'i ayrıca
+durdurmak için `docker stop aegis-redis-local`; veri volume'da korunur.
+Ön kontrol `./scripts/demo.ps1 -RedisImages -CheckOnly` ile yapılabilir.
+Bu kurulum yeni klonda kendiliğinden oluşmaz; ayrıntılar [Redis belgesinde](redis-queue.md).
+
+### Yerel gerçek analiz kanıtı — 2026-10-17
+
+Docker Engine 29.0.1 + loopback Redis + ana Windows C++ servisi + ayrı worker
+zinciri tarayıcıdan doğrulandı. `img-c5c2fe82-df4c-46aa-8745-b4c0a9da7414`
+işi `succeeded`, attempts=1; 4 kişi ve 1 otobüs, kutulu önizleme. Sayfa
+yenilemesi aynı sonucu korudu. Bu yalnız Linux CI fixture kanıtı değildir.
+Yerel `outputs/local-redis-20261017/job.json` ve `result.jpg` Git'e yüklenmez.
+Tek ölçüm inference 400,05 ms; benchmark veya GPU kanıtı değildir.
+Servis sağlığı segmentation/video/OCR/Unicode/VLM açık ve storage_error boş;
+bu turda bu modellerin hepsi tekrar çalıştırılmadı.
+
+Başlatıcının yeniden çağrılması mevcut süreçleri çoğaltmadı; kapalı işçi yeniden
+açıldı. Ön kontrol testleri Windows PowerShell 5.1 ve PowerShell 7'de geçti.
+
 ## Kurulum sınırı
 
 Servisleri açmadan bütün eksik başlangıç dosyalarını görmek için:

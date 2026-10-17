@@ -11,6 +11,12 @@ try {
     Assert (-not $empty.FilesPresent) 'Empty checkout reported complete'
     Assert ($empty.MissingFiles.Count -eq 17) 'Missing prerequisite inventory changed; review this test'
     Assert (-not (Test-Path (Join-Path $testRoot 'artifacts'))) 'Preflight mutated empty checkout'
+    $redis = & $launcher -CheckOnly -RedisImages
+    Assert ($redis.MissingFiles.Count -eq 18) 'Redis preflight inventory changed'
+    Assert ($redis.MissingFiles -contains 'build/search/Release/aegisvision_server.exe') 'Redis mode must use the Redis-enabled server build'
+    Assert ($redis.MissingFiles -contains 'build/redis-cv/Release/aegisvision_redis_worker.exe') 'Redis worker missing from inventory'
+    Assert ($redis.MissingFiles -notcontains 'build/live-seg/Release/aegisvision_server.exe') 'Redis mode must not demand a second server'
+    Assert (-not (Test-Path (Join-Path $testRoot 'artifacts'))) 'Redis preflight created service state'
     foreach ($relative in $empty.MissingFiles) {
         $target = Join-Path $testRoot $relative
         New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
