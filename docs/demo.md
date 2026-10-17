@@ -89,6 +89,29 @@ bu turda bu modellerin hepsi tekrar çalıştırılmadı.
 
 Başlatıcının yeniden çağrılması mevcut süreçleri çoğaltmadı; kapalı işçi yeniden
 açıldı. Ön kontrol testleri Windows PowerShell 5.1 ve PowerShell 7'de geçti.
+`73fa5b1` için [CI koşusunun](https://github.com/bekiroruk/aegis-vision/actions/runs/39009437068)
+7/7 grubu başarılı; bu sonuç Docker güncellemesinin tamamlandığı anlamına gelmez.
+
+### Docker yerinde güncelleme — 2026-10-17
+
+Kullanıcı onayıyla Docker Desktop 4.53.0 → 4.95.0.242831 güncellendi.
+Resmî kurulum dosyasının SHA256 değeri
+`73431db38491f770543880366228a23c993f84d1e8e045f56d83b8a98940cf76`
+ve geçerli Docker Inc imzası doğrulandı; kurulum çıkış kodu 0.
+Linux Engine 29.8.2 açıldı. Mevcut `aegis-redis-local` konteyneri ve
+`aegis-redis-local-data` volume'u korundu; Redis PING → PONG.
+Yukarıdaki eski iş aynı ID, `succeeded` ve attempts=1 ile geri geldi.
+Ana servisin sağlık kontrolü `ready`, `storage_error` boş döndü.
+
+Demo ve Redis kontrollü durdurulduktan sonra Docker tamamen kapatılıp
+yeniden açıldı; socket başlangıç hatası bu denemede tekrarlamadı ve Redis
+yeniden PONG döndürdü. Panelden yeni `img-46f69b54-6d8f-4359-a7fc-773620b7c9f4`
+işi gönderildi: `succeeded`, attempts=1, 4 kişi/1 otobüs; tek inference ölçümü
+398,06 ms. Yerel ekran kanıtı `outputs/local-redis-20261017/panel-after-update.jpg`.
+Bu tek yeniden açılış testidir; Windows yeniden başlatma
+ve uzun süreli kararlılık testi değildir. Fabrika ayarlarına dönüş,
+imaj/konteyner/volume silme yapılmadı; önceki geçici klasör yedekleri korundu.
+Bu kontrol Linux GPU inference veya GPU konteyner teslimi yerine geçmez.
 
 ## Kurulum sınırı
 

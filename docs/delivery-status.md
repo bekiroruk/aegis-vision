@@ -54,7 +54,8 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
 2. **Linux GPU Docker dağıtımı.** [GPU servis paketinin](gpu-container.md)
    Dockerfile/Compose/başlangıç kontrolleri eklendi; 9 test ve Compose ayrıştırma
    geçti. İmaj derlemesi ve gerçek NVIDIA konteynerinde sağlık/inference/kapanış
-   testi bekliyor. Yerel Docker Linux motoru erişilemiyor; paket GPU çalışma kanıtı değildir.
+   testi bekliyor. 17 Ekim'de Docker 4.95.0 güncellemesiyle yerel Linux motoruna
+   erişim doğrulandı; bu CPU Redis kontrolü GPU çalışma kanıtı değildir.
    C++ servisinin SIGINT/SIGTERM kontrollü kapanış ve aynı-ID SQLite yeniden
    oynatma bağlantısı eklendi; gerçek GPU konteyner testi bununla kapanmış sayılmaz.
 3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
@@ -92,8 +93,11 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    [Yerel tam servis + Redis + C++ worker + tarayıcı](demo.md) gerçek fotoğrafta
    4 kişi/1 otobüs üretti; sayfa yenilemesi sonucu korudu. Başlatıcıya
    `-RedisImages` eklendi. Docker 4.53.0 hatası sonraki açılışta tekrarladı;
-   geçici klasör düzeltmesi kalıcı çözüm sayılmaz. Fabrika ayarlarına dönüş,
-   imaj/konteyner/volume silme yapılmadı.
+   geçici klasör düzeltmesi kalıcı çözüm sayılmaz. Kullanıcı onaylı yerinde
+   4.95.0 güncellemesi sonrasında Engine 29.8.2 ve Redis açıldı; eski iş korundu.
+   Bir kontrollü Docker kapatma/açma testinde socket hatası tekrarlamadı.
+   Windows yeniden başlatma/uzun süreli kararlılık henüz sınanmadı.
+   Fabrika ayarlarına dönüş, imaj/konteyner/volume silme yapılmadı.
    Diğer analiz türleri ve dosya/Qdrant yan etkilerinin korunması hâlâ eksik.
    Mevcut panel SQLite kullanmaya devam eder; yeni worker JSON sonucu Redis'e yazar.
 7. **Temiz makine teslimi ve dağıtım incelemesi.** Sıfırdan kurulumun ayrı

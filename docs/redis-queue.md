@@ -9,8 +9,10 @@ sonuç JSON'unu token kontrolüyle yayımlar.
 **17 Ekim yerel doğrulama:** Docker Redis + ana Windows servisi + ayrı C++
 worker + tarayıcı ile gerçek görüntü analizi de geçti; [başlatma ve kanıt](demo.md).
 Bu belgedeki 16 Ekim tarihli "yerelde Redis yok" ifadeleri o koşuların sınırıdır.
-Docker 4.53.0 socket başlangıç hatası yeniden açılışta tekrarladığından yerel
-çalışmanın her açılışta sorunsuz olduğu iddia edilmez.
+Docker 4.53.0 socket başlangıç hatası yeniden açılışta tekrarladı. Kullanıcı
+onaylı 4.95.0 yerinde güncellemesinden sonra Engine 29.8.2, mevcut Redis volume'u
+ve eski başarılı iş doğrulandı. Bir kontrollü Docker kapatma/açma testinde hata
+tekrarlamadı; Windows yeniden başlatma ve uzun süreli kararlılık sınanmadı.
 
 ## Sözleşme
 
