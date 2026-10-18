@@ -12,6 +12,10 @@ Bu başlatıcılar mevcut model/derleme/FFmpeg kurulumunu kullanır; yeni bilgis
 önce [kurulum kılavuzu](docs/demo.md) gerekir.
 
 [Örnek sonuçlar, sunum akışı ve farklı video kullanımı](docs/video-studio.md).
+Yerel teslimde `SUNUMU-AC.cmd`, servis gerektirmeyen altı slaytlık sunumu ve iki
+karşılaştırma videosunu açar. [Anlatım ve paket kullanımı](docs/sunum/KULLANIM.md).
+PowerPoint, slayt görselleri ve videolar `outputs/sunum-paketi-20261019/` altında
+yereldedir; Git klonu bu üretilmiş dosyaları içermez.
 Bu teslimin sınırı **yerel video portföy demosudur**. Kamera, yeni Re-ID araştırmaları,
 Jetson/Triton ve üretim sertifikasyonu demoyu bitirmek için beklenen adımlar değildir.
 
