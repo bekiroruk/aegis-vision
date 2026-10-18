@@ -309,6 +309,11 @@ Devam eden tek bir GPU/model/codec çağrısı zorla kesilmez; kapanışın 30 s
 içinde biteceği garanti edilmez. Konteyner timeout sonrası zorla sonlandırırsa
 crash kurtarması gerekir; gerçek GPU konteyner stop/restart ölçümü hâlâ açıktır.
 
+**18 Ekim güncellemesi:** [İzole Linux GPU konteyner testi](gpu-container.md)
+aktif video işinde 1,417 saniyede exit=0 kapanış ve yeniden açılışta aynı-ID,
+attempts=2 başarı doğruladı; eski arama sonucu korundu. Yukarıdaki "ölçüm açık"
+ifadesi 15 Ekim durumudur. Tek yerel WSL2 koşusu tüm yükler için kapanış garantisi değildir.
+
 İlgili testler: `aegisvision_shutdown`, `aegisvision_shutdown_sigint`,
 `aegisvision_job_persistence`. Ayrı POSIX süreç testi:
 

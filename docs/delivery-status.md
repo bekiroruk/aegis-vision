@@ -1,6 +1,6 @@
 # Teslim durumu ve kalan işler
 
-Güncelleme: 2026-10-17. Bu belge mevcut teslimin kısa listesidir; bütün ilan
+Güncelleme: 2026-10-18. Bu belge mevcut teslimin kısa listesidir; bütün ilan
 maddelerinin tamamlandığı veya üretime hazır olduğu anlamına gelmez.
 
 ## Kullanılabilir demo
@@ -51,13 +51,15 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
    işi, kesinti/yeniden bağlantı ve temiz stop tek gerçek yayında sınanmalı.
    CPU RTSP ve GPU dosya replay ayrı ayrı var; birleşik test yerine geçmez.
    Mevcut publisher engeli aşılmış sayılmıyor.
-2. **Linux GPU Docker dağıtımı.** [GPU servis paketinin](gpu-container.md)
-   Dockerfile/Compose/başlangıç kontrolleri eklendi; 9 test ve Compose ayrıştırma
-   geçti. İmaj derlemesi ve gerçek NVIDIA konteynerinde sağlık/inference/kapanış
-   testi bekliyor. 17 Ekim'de Docker 4.95.0 güncellemesiyle yerel Linux motoruna
-   erişim doğrulandı; bu CPU Redis kontrolü GPU çalışma kanıtı değildir.
-   C++ servisinin SIGINT/SIGTERM kontrollü kapanış ve aynı-ID SQLite yeniden
-   oynatma bağlantısı eklendi; gerçek GPU konteyner testi bununla kapanmış sayılmaz.
+2. **Linux GPU Docker dağıtımı — yerel işlevsel kabul geçti.**
+   [18 Ekim gerçek GPU testi](gpu-container.md) Docker Desktop/WSL2 Linux amd64
+   konteynerinde imaj derleme, RTX 3060'a özel FP16 engine, video indeksleme,
+   CLIP/Qdrant arama ve JPEG önizlemeyi doğruladı. Aktif iş sırasında temiz stop
+   1,417 saniye; aynı ID attempts=2 ile tamamlandı, eski arama sonucu korundu.
+   Servis root değil, kök/model/engine salt okunur; izole test host portu açmaz.
+   Bu artık yalnız paket/CPU Redis kanıtı değildir. Kalan: native Linux sunucu
+   ağı/izinleri, bağımsız kalite ve yük testleri, güvenlik/lisans/üretim imajı
+   incelemesi. Engine'in üretim onayı verilmedi; bütün dağıtım işi bitmiş değildir.
 3. **Çoklu kamera/Re-ID.** [32-ayarlı geliştirme kalibrasyonu](reid-calibration.md)
    tamamlandı; hiçbir ayar kalite koşullarını birlikte geçmedi, varsayılan korundu.
    [İlk GPU metric-learning deneyi](reid-training.md) tamamlandı: 305 ayrı eğitim
