@@ -111,6 +111,8 @@ jobs:
       - run: python scripts/test_openapi.py
       - run: node tests/test_redis_web.cjs
       - run: python scripts/test_gpu_container.py
+      - run: python scripts/test_gpu_compose.py
+      - run: python scripts/test_gpu_runtime_contract.py
       - run: docker compose -f compose.gpu.yaml config --quiet
 
   build-and-test:

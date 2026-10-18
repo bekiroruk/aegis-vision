@@ -1,5 +1,5 @@
 # Linux x86_64 development/deployment candidate; GPU runtime verification required.
-FROM nvcr.io/nvidia/tensorrt:25.09-py3
+FROM nvcr.io/nvidia/tensorrt:25.09-py3@sha256:2bc1b502a8ec29fbb1642aff6bcf2392bab11e59adf923c726b2b33e8e5d6d6b
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake ninja-build g++ curl ca-certificates libopencv-dev libicu-dev ffmpeg \

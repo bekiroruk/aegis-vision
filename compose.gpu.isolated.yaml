@@ -1,0 +1,21 @@
+# Test-only override: no Docker Desktop host-network setting or published ports.
+# Call HTTP through `docker compose exec`; the Windows demo stays separate.
+name: aegis-gpu-isolated
+services:
+  qdrant-gpu:
+    network_mode: !reset null
+    networks: [gpu-test]
+  service:
+    network_mode: service:qdrant-gpu
+    volumes:
+      - type: bind
+        source: ./artifacts/container/isolated-media
+        target: /media
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./artifacts/container/isolated-state
+        target: /state
+        bind: {create_host_path: false}
+networks:
+  gpu-test:
+    internal: true
