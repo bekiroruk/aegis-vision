@@ -1,0 +1,17 @@
+/* Presentation layer; inference and result validation remain in app.js. */
+body{background:radial-gradient(ellipse at 80% 0,#18354680,transparent 48%),#0c121b}
+main{max-width:1600px;padding-top:36px}.intro{max-width:900px;margin-bottom:28px}
+.intro>p{color:var(--muted);max-width:700px}.intro h1{font-size:clamp(32px,4vw,52px);letter-spacing:-2px}
+.workflow{display:flex;flex-wrap:wrap;gap:26px;margin:24px 0}.workflow span{font-size:13px;color:var(--ink)}
+.workflow b{display:inline-grid;place-items:center;width:30px;height:30px;background:#203c3a;color:var(--accent);border-radius:50%;margin-right:8px;font-size:11px}
+.workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}
+.workspace video{aspect-ratio:16/10;object-fit:contain;max-height:480px}
+.output-panel{border-color:#3a645d}.output-panel .index-controls{grid-template-columns:minmax(100px,1fr) auto;gap:10px}
+.output-panel #video-cancel{grid-column:1/-1}.output-panel #video-status:not(:empty){padding:12px;border-radius:8px;background:#0c191a;color:#b9f2df;font-size:13px}
+#video-download{background:var(--accent);color:#082922;padding:10px 20px;border-radius:8px;font-weight:700;text-decoration:none}
+.advanced{margin-top:28px}.advanced>summary{cursor:pointer;padding:20px;border:1px solid var(--border);border-radius:12px;font-weight:600}
+.advanced>summary span{display:block;color:var(--muted);font-size:12px;font-weight:400;margin-top:5px}
+#own-video{background:linear-gradient(100deg,#172d32,#141e2b)}#own-video p{font-size:14px;max-width:1000px}
+#own-video .hint{font-size:12px}#media-refresh{font-size:12px;padding:7px 12px}.demo-actions a{font-size:13px}
+@media(max-width:1000px){.workspace{grid-template-columns:1fr}.intro h1{letter-spacing:-1px}}
+@media(max-width:540px){.workflow{gap:12px}.workflow span{font-size:11px}.output-panel .index-controls{grid-template-columns:1fr}.output-panel .index-controls button{grid-column:auto}.panel-title{flex-wrap:wrap}}

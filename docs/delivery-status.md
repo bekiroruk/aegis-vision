@@ -1,9 +1,15 @@
-# Teslim durumu ve kalan işler
+# Teslim durumu
 
 Güncelleme: 2026-10-18. Bu belge mevcut teslimin kısa listesidir; bütün ilan
 maddelerinin tamamlandığı veya üretime hazır olduğu anlamına gelmez.
 
 ## Kullanılabilir demo
+
+18 Ekim kapanış kapsamı: **Video Studio / yerel video portföy demosu**.
+Kullanıcı fiziksel kamera testini kapsamdan çıkardı. Aşağıdaki ileri araştırma ve
+üretim başlıkları bu demonun teslimini bloke etmez; tamamlanmış da sayılmaz.
+Yeni kullanım ve iki farklı gerçek videonun sonuçları: [Video Studio](video-studio.md).
+`DEMOYU-AC.cmd` paneli, `VIDEO-EKLE.cmd` kendi video seçim penceresini açar.
 
 Hazır kurulumdaki panel: `http://127.0.0.1:8090`.
 Kapandıysa repo içinden `./scripts/demo.ps1 -OpenBrowser` çalıştırılır.
@@ -45,7 +51,7 @@ servis başlatmaz/durdurmaz; farklı çalışma klasöründen de kullanılabilir
   Eski analiz çıktısının kısaltılmasıdır; yeni inference/canlı GPU kanıtı değildir.
   Video yerelde tutulur, Git'e yüklenmez; kaynağın lisansı ayrıca gözetilir.
 
-## Kalan adımlar — kapanış koşulları
+## Demo dışında kalan ileri çalışmalar — isteğe bağlı ayrı kapsam
 
 1. **Gerçek RTSP + GPU birleşik testi.** TensorRT analizi, eşzamanlı dosya
    işi, kesinti/yeniden bağlantı ve temiz stop tek gerçek yayında sınanmalı.

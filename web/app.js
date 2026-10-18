@@ -273,7 +273,7 @@ function addMedia(path) {
 }
 function chooseMedia(path, userChoice = false) {
   if (!path) return;
-  if (path!==selectedMedia) {clearSegmentation();clearOcr();clearScene();clearVideo();}
+  if (path!==selectedMedia) {clearSegmentation();clearOcr();clearScene();clearVideo();restorePending=true;}
   addMedia(path); selectedMedia = path; $('media').value = path;
   if (userChoice) mediaChoiceMade = true;
   const target = new URL(mediaUrl(path),location.href).href;
@@ -360,10 +360,10 @@ function showJobs(jobs) {
   activeJobs=jobs.filter(job=>!terminal(job.state));
   const running=activeJobs.filter(job=>job.state==='running'), queued=activeJobs.filter(job=>job.state==='queued');
   $('queue-status').textContent=activeJobs.length ? `${running.map(job=>`${jobName(job)} çalışıyor${job.request.type==='index_video' ? ` · ${job.progress?.decoded_frames || 0} kare okundu, ${job.progress?.indexed_items || 0} nesne kaydı` : ''}`).join('; ') || 'İşler başlatılmayı bekliyor'}. ${queued.length} iş sırada. Sonuçlar tamamlandıkça aşağıda açılır. İptal etmek için İşler bölümünü kullanın.` : '';
-  // Restore once on page load, never overwrite a new request or a user-selected source.
+  // Restore once per selected source; never change the source or overwrite a new request.
   if (restorePending && mediaReady && selectedMedia) {
     restorePending=false;
-    if (!mediaChoiceMade) {
+    {
       const latest=type=>jobs.find(job=>job.request.type===type && job.request.path===selectedMedia);
       const movie=latest('segment_video');
       if(movie && !videoSubmitting && !videoJob && !$('video-status').textContent) videoJob=movie.id;
@@ -515,6 +515,16 @@ $('scene-form').addEventListener('submit',async event=> {
   finally {sceneSubmitting=false;syncScene();}
 });
 $('media').addEventListener('change',() => chooseMedia($('media').value,true));
+$('media-refresh').addEventListener('click',async () => {
+  $('media-refresh').disabled=true;
+  try {
+    const data=await api('/api/media');
+    data.videos.forEach(video=>addMedia(video.path));
+    if (!selectedMedia && data.videos.length) chooseMedia(data.videos[0].path);
+    notice('Video listesi yenilendi. Yeni videonuzu listeden seçebilirsiniz.');
+  } catch(error) {notice(error.message);}
+  finally {$('media-refresh').disabled=false;}
+});
 $('player').addEventListener('loadedmetadata',() => {
   if (selectedMedia && $('player').src === new URL(mediaUrl(selectedMedia),location.href).href)
     $('duration').textContent = `${$('player').duration.toFixed(1)} saniye`;
@@ -541,7 +551,8 @@ async function start() {
     data.videos.forEach(video => addMedia(video.path));
     mediaReady = true;
     if (!mediaChoiceMade) {
-      const initial = data.videos[0]?.path || $('media').options[0]?.value;
+      const requested = new URL(location.href).searchParams.get('video');
+      const initial = data.videos.find(video=>video.path===requested)?.path || data.videos.find(video=>video.path.startsWith('demo-'))?.path || data.videos[0]?.path || $('media').options[0]?.value;
       if (initial) chooseMedia(initial);
     }
     syncMediaControls();

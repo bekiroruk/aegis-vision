@@ -2,15 +2,12 @@
 <html lang="tr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/segmentation.css">
-<title>AegisVision · Video arama</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/live.css"><script src="/app.js" defer></script><script src="/redis-images.js" defer></script></head>
+<title>AegisVision · Video Studio</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/live.css"><link rel="stylesheet" href="/showcase.css"><script src="/app.js" defer></script><script src="/redis-images.js" defer></script></head>
 <body>
 <header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
 <main>
-<section id="redis-image-panel" class="panel search-panel" aria-label="Redis görüntü analizi" data-optional="true" hidden></section>
-<section class="intro"><p class="eyebrow">GÖRÜNTÜDEN BİLGİYE</p><h1>Videodaki nesneleri görün.</h1><p>Önce bir kareyi analiz edin: nesneler renkli maskelerle aşağıda görünür. Bunun için videoyu indekslemek gerekmez.</p><div class="demo-actions"><button id="quick-analyze" type="button" disabled>İlk kareyi analiz et</button><a href="#segmentation-heading">Maske sonucuna git</a><a href="#result-title">Arama sonuçlarına git</a></div><p class="hint">Önceki analizler bu video için otomatik açılır. Yeni bir iş gönderirseniz işlem sırasını aşağıdan izleyin.</p></section>
+<section class="intro"><p class="eyebrow">AEGISVISION / VIDEO STUDIO</p><h1>Görüntüyü analize dönüştür.</h1><p>Kendi videonuzda nesne maskeleri ve takip numaraları. Kaynak ile sonucu karşılaştırın, işlenmiş videoyu sunumunuzda kullanın.</p><div class="workflow"><span><b>01</b> Video seç</span><span><b>02</b> Analiz et</span><span><b>03</b> İzle & indir</span></div><p class="hint">Kamera gerekmez · Yerel C++ analizi · Önceki sonuçlar otomatik açılır</p></section>
 <div id="notice" role="status" aria-live="polite"></div>
-<p id="detector-backend" class="hint" role="status">Nesne tespiti motoru kontrol ediliyor…</p>
-<p class="demo-actions"><a href="#video-heading">Videonun tamamını maskeli ve takip numaralı işle →</a></p>
 <p id="queue-status" role="status" aria-live="polite"></p>
 <section id="live-panel" class="panel live-panel" aria-labelledby="live-heading" hidden>
 <div class="panel-title"><h2 id="live-heading">Canlı RTSP analizi</h2><span id="live-state" class="badge subtle">Hazırlanıyor…</span></div>
@@ -21,15 +18,13 @@
 </section>
 <section id="archive-panel" class="panel archive-panel" aria-labelledby="archive-heading" hidden><div class="panel-title"><h2 id="archive-heading">Canlı arşiv</h2><span id="archive-state" class="badge subtle">Hazırlanıyor…</span></div><p class="hint archive-description">Yalnızca analiz edilen kareler kaydedilir. Kayıt süresi gerçek yayın süresi değildir; sonuçlara tıklayınca klibin içindeki ana gidilir. Kota dolunca arşiv durur, canlı önizleme devam eder. Kayıtlar otomatik silinmez.</p><div id="archive-segments" class="archive-segments"><p class="empty">Henüz arşiv parçası yok.</p></div></section>
 <div class="workspace">
-<section class="panel player-panel"><div class="panel-title"><h2>Video kaynağı</h2><span id="duration" class="muted"></span></div>
+<section class="panel player-panel"><div class="panel-title"><h2>01 / Kaynak video</h2><span id="duration" class="muted"></span></div>
 <label for="media">Yerel video</label><select id="media" aria-label="Yerel video"></select>
+<div class="demo-actions"><button id="media-refresh" type="button" class="secondary">Listeyi yenile</button><a href="#own-video">Kendi videomu eklemek istiyorum</a></div>
 <video id="player" controls muted playsinline preload="metadata"></video>
-<form id="index-form" class="index-controls"><div><label for="stride">Her kaç karede bir?</label><input id="stride" type="number" min="1" max="10000" value="15" required></div><div><label for="max-frames">Kare sınırı · 0 = tümü</label><input id="max-frames" type="number" min="0" max="1000000" value="150" required></div><button type="submit" id="index-button">Arama için indeksle</button></form>
-<p class="hint">Yalnızca metinle arama için gerekir. Başlangıçta ilk 150 kare işlenir; tüm video için sınırı 0 yapın. CPU üzerinde uzun sürebilir ve diğer analizleri bekletebilir. Daha önce indekslediyseniz yeniden başlatmayın.</p></section>
-<aside class="panel"><div class="panel-title"><h2>İşler</h2><span class="badge subtle">CANLI</span></div><p class="hint">İndeksleme ve arama sırayla çalışır. İlerlemeyi burada izleyebilirsiniz.</p><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></aside>
-</div>
-<section class="panel search-panel" aria-labelledby="video-heading">
-<div class="panel-title"><h2 id="video-heading">Maskeli video + nesne takibi</h2><span class="badge subtle">C++ · Video çıktısı</span></div>
+<p class="hint">Solda orijinal kayıt, sağda modelin ürettiği sonuç. Video değiştirince varsa önceki analiziniz açılır.</p></section>
+<section class="panel output-panel" aria-labelledby="video-heading">
+<div class="panel-title"><h2 id="video-heading">02 / Maskeler & takip</h2><span class="badge subtle">YOLOv8-seg · CPU</span></div>
 <p class="hint">Video boyunca renkli maskeler ve takip numaraları çizilir. İş bitince aşağıdaki oynatıcıdan izleyin veya MP4 indirin. Arama için indeksleme gerekmez.</p>
 <form id="video-form" class="index-controls"><div><label for="video-limit">İşlenecek kare · 0 = tüm video</label><input id="video-limit" type="number" min="0" max="1000" step="1" value="0" required></div><button id="video-button" type="submit" disabled>Videoyu analiz et</button><button id="video-cancel" type="button" class="secondary" hidden>Analizi iptal et</button></form>
 <p id="video-source" class="hint">Video seçin.</p><p class="hint">CPU işlemi zaman alabilir; diğer işler aynı sırada bekler. Sınır: 1.000 kare, çift boyutlu en fazla 1920×1080, 1–60 FPS. Çıktı sessizdir. Takip numaraları bu videoya aittir; örtüşmelerde değişebilir.</p>
@@ -37,8 +32,15 @@
 <video id="video-result" controls muted playsinline preload="metadata" aria-label="Maskeli ve takip numaralı analiz videosu" hidden></video>
 <div class="demo-actions"><a id="video-download" download hidden>MP4 indir</a><a id="video-report" download hidden>Takip raporunu indir (CSV)</a></div>
 </section>
+</div>
+<section id="own-video" class="panel search-panel"><div class="panel-title"><h2>Bir sonraki videonuz hazır mı?</h2><span class="badge subtle">Dosyanız bilgisayarınızda kalır</span></div><p>Proje klasöründeki <strong>VIDEO-EKLE.cmd</strong> dosyasına çift tıklayın ve bir video seçin. İlk 15 saniye demo için hazırlanır; panel seçtiğiniz video ile açılır. Ardından <strong>Videoyu analiz et</strong> düğmesine basın.</p><p class="hint">Orijinal dosyanız değişmez. Demo kopyası sessiz, 10 FPS ve en fazla 960×540 olur. Uzun videoların başka bölümleri için scripts/import_video.ps1 ile başlangıç ve süre seçebilirsiniz. Tarayıcıya sürükle-bırak yüklemesi yoktur.</p></section>
+<details class="advanced"><summary>Analiz geçmişi ve diğer araçlar <span>Tek kare · OCR · Sahne açıklaması · Metinle arama</span></summary>
+<p id="detector-backend" class="hint" role="status">Nesne tespiti motoru kontrol ediliyor…</p>
+<section id="redis-image-panel" class="panel search-panel" aria-label="Redis görüntü analizi" data-optional="true" hidden></section>
+<section class="panel search-panel"><div class="panel-title"><h2>İş geçmişi</h2><span class="badge subtle">YEREL</span></div><div id="jobs" aria-live="polite"><p class="empty">Henüz iş yok.</p></div></section>
 <section class="panel search-panel" aria-labelledby="segmentation-heading">
 <div class="panel-title"><h2 id="segmentation-heading">Piksel maskesi analizi</h2><span id="segmentation-state" class="badge subtle">Hazırlanıyor…</span></div>
+<div class="demo-actions"><button id="quick-analyze" type="button" disabled>İlk kareyi analiz et</button></div>
 <form id="segmentation-form" class="index-controls"><div><label for="segmentation-frame">Kare numarası · ilk kare = 0</label><input id="segmentation-frame" type="number" min="0" max="10000" step="1" value="0" required></div><button id="segmentation-button" type="submit" disabled>Seçili kareyi analiz et</button></form>
 <p id="segmentation-source" class="hint">Video seçin.</p><p class="hint">Bağımsız tek-kare analizi; takip kimliği veya canlı RTSP değildir. Aşağıdaki görüntü, modelin analiz ettiği karenin üzerine çizilir; oynatıcının o anki zamanı kullanılmaz.</p>
 <p id="segmentation-status" role="status" aria-live="polite"></p><img id="segmentation-image" alt="Seçilen video karesindeki nesne maskeleri" hidden>
@@ -59,9 +61,12 @@
 <div id="scene-summary" class="scene-summary"></div>
 </section>
 <section class="panel search-panel"><div class="panel-title"><h2>Görüntülerde ara</h2><span class="muted">Metin → video anı</span></div>
+<form id="index-form" class="index-controls"><div><label for="stride">Her kaç karede bir?</label><input id="stride" type="number" min="1" max="10000" value="15" required></div><div><label for="max-frames">Kare sınırı · 0 = tümü</label><input id="max-frames" type="number" min="0" max="1000000" value="150" required></div><button type="submit" id="index-button">Arama için indeksle</button></form>
+<p class="hint">Metinle arama için önce indeksleyin. Maske videosu oluşturmak için bu adım gerekmez. CPU üzerinde diğer analizleri bekletebilir.</p>
 <form id="search-form"><input id="query" aria-label="Arama metni" placeholder="Örn. a person walking on the street" value="a person walking on the street" maxlength="1024" required><select id="search-scope" aria-label="Arama kapsamı"><option value="all">Tüm kayıtlar</option><option value="live">Yalnızca canlı arşiv</option></select><button type="submit">Ara</button></form>
 <p class="hint">Mevcut CLIP modeli için İngilizce sorgular önerilir. Skor, benzerlik ölçüsüdür.</p>
 <div class="panel-title"><p id="result-title" class="muted">Sonuçlar burada görünecek.</p></div><div id="results" class="results"></div>
 </section>
+</details>
 <footer>Yerel C++ servis · YOLO + CLIP · Qdrant <span>Zamanlar klip kare/FPS konumudur; kamera PTS değildir.</span></footer>
 </main></body></html>

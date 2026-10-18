@@ -56,7 +56,7 @@ class Node {
   removeAttribute(name) { if (name === 'src') this._src = ''; }
   set innerHTML(value) { throw new Error('Metadata must be text, never HTML'); }
 }
-function harness({delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[],backend,liveBackend,liveMode='detection',sourceKind='rtsp'} = {}) {
+function harness({pageUrl=base,delayMedia = false, videos = [ordinary], segmentation=false, video=false, ocr=false, ocrUnicode=false, vlm=false, delayMask=false, initialJobs=[],backend,liveBackend,liveMode='detection',sourceKind='rtsp'} = {}) {
   const nodes = new Map(), calls = [], media = deferred();
   const maskReply=deferred(), jobs=[...initialJobs];
   const get = id => {
@@ -91,7 +91,7 @@ function harness({delayMedia = false, videos = [ordinary], segmentation=false, v
   };
   const context = {document:{hidden:false,getElementById:get,createElement:tag => new Node(tag),
     addEventListener(){},querySelectorAll(){return [];}},window:{addEventListener(){}},
-    fetch,console,URL,location:{href:base},performance,AbortController,setTimeout,clearTimeout,setInterval(){}};
+    fetch,console,URL,location:{href:pageUrl},performance,AbortController,setTimeout,clearTimeout,setInterval(){}};
   vm.createContext(context);
   const source = fs.readFileSync(path.join(__dirname,'../web/app.js'),'utf8');
   assert.match(source,/start\(\);\s*$/,'App bootstrap must remain visible to the regression harness');
@@ -289,6 +289,11 @@ async function videoPanel() {
   assert.equal(test.get('video-download').href,`/api/jobs/${job.id}/video.mp4?download=1`);
   assert.equal(test.get('video-button').disabled,false);
   const restored=harness({video:true,initialJobs:[job]});await restored.started;assert.equal(restored.get('video-result').hidden,false);
+  restored.ui.chooseMedia('another.mp4',true);await restored.ui.refresh();
+  assert.equal(restored.get('video-result').hidden,true,'Do not display another source result');
+  restored.ui.chooseMedia(ordinary,true);await restored.ui.refresh();
+  assert.equal(restored.get('video-result').hidden,false,'Switching back restores the selected video result');
+  assert.equal(restored.get('video-download').href,`/api/jobs/${job.id}/video.mp4?download=1`);
   test.ui.chooseMedia(archived,true);assert.equal(test.get('video-result').hidden,true);assert.equal(test.get('video-download').hidden,true);
   assert.equal(test.get('video-button').disabled,true);
   const open=test.get('jobs').children[0].children.find(n=>n.textContent==='Videoyu göster');await open.emit('click');
@@ -304,6 +309,17 @@ async function videoPanel() {
   assert.equal(malicious.get('video-result').hidden,true);assert.equal(malicious.get('video-download').hidden,true);
 }
 (async () => {
+  const videos=[ordinary,'demo-street.mp4'];
+  const studio=harness({videos,video:true,pageUrl:base+'?video='+ordinary});await studio.started;
+  assert.equal(studio.get('media').value,ordinary,'Explicit import link selects catalog entry');
+  videos.push('demo-new.mp4');await studio.get('media-refresh').emit('click');
+  assert.equal(studio.get('media').value,ordinary,'Refresh preserves current source');
+  assert.equal(studio.get('media').options.filter(n=>n.value==='demo-new.mp4').length,1);
+  await studio.get('media-refresh').emit('click');
+  assert.equal(studio.get('media').options.filter(n=>n.value==='demo-new.mp4').length,1,'No duplicates');
+  const invalidLink=harness({videos,pageUrl:base+'?video=../../private.mp4'});await invalidLink.started;
+  assert.equal(invalidLink.get('media').value,'demo-street.mp4','Unknown paths cannot become media');
+  console.log('Studio passed: catalog-only deep links, demo default, library refresh preserves selection and deduplicates.');
   const gpu={engine:'tensorrt',device:'cuda:0',precision:'fp16-mixed'};
   const replay=harness({sourceKind:'file_replay'});await replay.started;
   assert.match(replay.get('live-heading').textContent,/kamera yayını değil/);

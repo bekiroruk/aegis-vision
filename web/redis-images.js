@@ -46,7 +46,7 @@
   async function api(path, body) {
     const r = await fetch(path, {signal: AbortSignal.timeout(10000), ...(body === undefined ? {} :
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});
-    const value = await r.json();
+    const value = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(value.error || `HTTP ${r.status}`); e.status=r.status; throw e; }
     return value;
   }
@@ -114,7 +114,7 @@
         if(saved?.context===context && saved.queue===queueName && idOK(saved.id) && typeof saved.image==='string') active={...saved,state:'queued'};
       } catch {}}
       if(active) {active.state='queued';shown='';}
-    } catch(e) {enabled=false;panel.hidden=false;clearResult();el('connection').textContent=`Redis bağlantısı yok: ${e.message}`;}
+    } catch(e) {enabled=false;panel.hidden=e.status===404 && panel.dataset?.optional==='true';clearResult();el('connection').textContent=`Redis bağlantısı yok: ${e.message}`;}
     finally {pending=false;sync();}
     await poll();
   }

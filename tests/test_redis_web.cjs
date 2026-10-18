@@ -6,7 +6,7 @@ const flush=async()=>{for(let i=0;i<5;i++) await new Promise(r=>setImmediate(r))
 function harness(handler,stored=null) {
   const nodes=new Map(),store=new Map(stored?[['aegis-redis-image-v1',JSON.stringify(stored)]]:[]),calls=[],timers=[];
   class Element {
-    constructor(tag='div') {this.tag=tag;this.children=[];this.events={};this.hidden=false;this.disabled=false;this.textContent='';this._value='';}
+    constructor(tag='div') {this.tag=tag;this.children=[];this.events={};this.dataset={optional:'true'};this.hidden=false;this.disabled=false;this.textContent='';this._value='';}
     set innerHTML(html) {for(const m of html.matchAll(/<(\w+)[^>]*\bid="([^"]+)"([^>]*)>/g)) {const e=new Element(m[1]);e.hidden=/\bhidden\b/.test(m[3]);e.disabled=/\bdisabled\b/.test(m[3]);nodes.set(m[2],e);}}
     get value() {return this._value || (this.tag==='select'?this.children[0]?.value || '':'');}
     set value(v) {this._value=v;}
@@ -21,12 +21,16 @@ function harness(handler,stored=null) {
     crypto:{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'},AbortSignal,
     setInterval:fn=>timers.push(fn),
     fetch:async(path,options)=>{const body=options.body?JSON.parse(options.body):undefined;calls.push({path,body});
-      const r=await handler(path,body);return {ok:(r.status||200)<400,status:r.status||200,json:async()=>r.value};}};
+      const r=await handler(path,body);return {ok:(r.status||200)<400,status:r.status||200,json:async()=>{if(r.empty) throw new SyntaxError('Empty response');return r.value;}};}};
   vm.runInNewContext(code,context);
   return {nodes,store,calls,timers,el:id=>nodes.get('ri-'+id),click:async(id,type='click')=>{nodes.get('ri-'+id).events[type]({preventDefault(){}});await flush();}};
 }
 const status={enabled:true,queue:'images',context:'ctx',images:['bus.jpg'],worker_status:'unknown'};
 (async()=>{
+  const absent=harness(async()=>({status:404,empty:true}));await flush();
+  assert.equal(absent.nodes.get('redis-image-panel').hidden,true,'Older service without optional endpoint hides panel');
+  const failed=harness(async()=>({status:503,empty:true}));await flush();
+  assert.equal(failed.nodes.get('redis-image-panel').hidden,false,'Real connection failure stays visible');
   let h=harness(async()=>({value:{enabled:false}}));await flush();assert.equal(h.el('submit').disabled,true);
   let job=null,failSubmit=true;
   h=harness(async(path,body)=>{

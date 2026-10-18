@@ -1,6 +1,8 @@
 # AegisVision yol haritası
 
-Güncelleme: 2026-10-15. Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
+Güncelleme: 2026-10-18. Güncel teslim sınırı [Video Studio](video-studio.md) portföy demosudur;
+aşağıdaki araştırma/üretim hedefleri demo tesliminin ön koşulu değildir.
+Aktif uygulama C++20'dir; Python yalnızca model eğitimi/veri hazırlama,
 bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut özelliklerle hedefleri ayırır.
 
 ## Tamamlanan temel
@@ -19,7 +21,9 @@ bağımsız referans kontrolü ve eski prototip içindir. Aşağıdakiler mevcut
 - COCO validation kırpmaları için toplu indeksleme ve Recall@K/Hit@K değerlendirme komutları.
 - Klasörden tam görsel ve örneklenmiş video karelerinden YOLO/CLIP nesne indeksleme;
   tekrar çalıştırmada sabit ID, dosya/kare/zaman/kutu metadata'sı.
-- Redis/Qdrant Compose tanımları; **Redis istemcisi ve GPU deployment hazır değil**.
+- Redis/Qdrant Compose, [C++ Redis worker](redis-queue.md) ve
+  [yerel Linux GPU konteyner işlevsel kabulü](gpu-container.md) mevcut.
+  Bunlar dağıtık üretim kapasitesi veya tüm modeller için GPU kalite onayı değildir.
 - Yerel C++ HTTP servisi, sınırlı asenkron iş kuyruğu, ilerleme/iptal ve tarayıcıda
   gerçek videoda metin arama, kutulu önizleme ve zamanına atlama; [servis kılavuzu](service.md).
 - SQLite ile kalıcı iş geçmişi/kuyruk, ani kapanma sonrası sınırlı yeniden deneme,

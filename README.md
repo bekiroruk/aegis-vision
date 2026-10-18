@@ -1,5 +1,20 @@
 # AegisVision
 
+## Video Studio — çalışan demo
+
+Hazır Windows kurulumunda **`DEMOYU-AC.cmd` dosyasına çift tıklayın**.
+Panelde video seçin → **Videoyu analiz et** → maskeli/takipli sonucu izleyin ve MP4 indirin.
+Önceki sonuçlar otomatik açılır; yeniden analiz etmeniz gerekmez. Kamera gerekmez.
+
+**Kendi videonuz:** `VIDEO-EKLE.cmd` → dosya seç → panelde analiz et.
+Orijinal korunur; ilk 15 saniye 10 FPS, en fazla 960×540 sessiz demo kopyası olarak hazırlanır.
+Bu başlatıcılar mevcut model/derleme/FFmpeg kurulumunu kullanır; yeni bilgisayarda
+önce [kurulum kılavuzu](docs/demo.md) gerekir.
+
+[Örnek sonuçlar, sunum akışı ve farklı video kullanımı](docs/video-studio.md).
+Bu teslimin sınırı **yerel video portföy demosudur**. Kamera, yeni Re-ID araştırmaları,
+Jetson/Triton ve üretim sertifikasyonu demoyu bitirmek için beklenen adımlar değildir.
+
 AegisVision, gerçek zamanlı video analizi ve multimodal nesne araması için geliştirilen
 modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking, Re-ID,
 OCR/VLM, geometrik eşleştirme ve GPU inference bileşenlerini aynı üretim odaklı pipeline
@@ -11,7 +26,7 @@ içinde birleştirmektir.
 
 ## Mevcut özellikler
 
-[Güncel teslim durumu ve kalan 8 iş grubu](docs/delivery-status.md).
+[Güncel teslim durumu ve ayrı tutulan ileri çalışmalar](docs/delivery-status.md).
 
 İlandaki maddelerle mevcut kanıtları ve eksikleri karşılaştır:
 [iş ilanı teslim kontrolü](docs/job-requirements.md).
