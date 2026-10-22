@@ -7,7 +7,7 @@ Fiziksel kamera gerekmez. Analiz C++ / OpenCV DNN üzerinde CPU ile çalışır.
 ## Aç ve göster
 
 1. Proje klasöründeki `DEMOYU-AC.cmd` dosyasına çift tıkla.
-2. Açılan panelde `demo-TUD-Stadtmitte...` veya `demo-KITTI-17...` videosunu seç.
+2. Açılan panelde yaya caddesi, araç kamerası veya güvenlik kamerası örneğini seç.
 3. Mevcut başarılı sonuç sağda otomatik açılır. Yoksa **Videoyu analiz et** düğmesine bas.
 4. Kaynak ve sonuç ayrı oynatıcılardır. Sunumda senkron karşılaştırma için aşağıdaki
    dışa aktarma aracının tek parça karşılaştırma videosunu kullan.
@@ -41,9 +41,10 @@ Elle eklenen dosyaları **Listeyi yenile** düğmesiyle listeye alabilirsin.
 |---|---|---|---|
 | MOT15 / TUD-Stadtmitte | Sokakta yürüyen insanlar | 7,2 sn, 72 kare, 720×540 | 447 kare-içi maske, 26 takip ID'si |
 | MOT15 / KITTI-17 | Hareketli araç kamerası | 12 sn, 120 kare, 960×288 | 832 kare-içi maske, 36 takip ID'si |
+| MOT15 / PETS09-S2L1 | Sabit güvenlik kamerası | 12 sn, 120 kare, 720×540 | 1.090 kare-içi maske, 20 takip ID'si |
 
-İş kimlikleri: `1791700823339-16` ve `1791700823339-15`.
-İkisi de bu teslimde yeni çıkarımla tamamlandı; eski sonucun yeniden adlandırılması
+İş kimlikleri: `1791700823339-16`, `1791700823339-15` ve `1791700823339-17`.
+Üçü de bu teslimde yeni çıkarımla tamamlandı; eski sonucun yeniden adlandırılması
 veya yapay görüntü animasyonu değildir. Sayılar doğruluk puanı değildir.
 Takip ID'leri benzersiz kişi/araç sayısı değildir; örtüşme ve hareketle değişebilir.
 
@@ -82,5 +83,5 @@ segmentation", "üretime hazır tüm ilan maddeleri" deme. Fiziksel kamera, çok
 kalitesi ve ileri deployment araştırmaları bu demo tesliminden ayrı tutulmuştur.
 
 Kod/test kontrolleri: `node tests/test_web_state.cjs`, `node tests/test_redis_web.cjs`.
-İçe aktarma iki gerçek videoda; dışa aktarma kare sayısı/boyut/codec ve tarayıcı sonucu
+İçe aktarma üç gerçek videoda; dışa aktarma kare sayısı/boyut/codec ve tarayıcı sonucu
 ile kontrol edilir. Sıfır bilgisayarda otomatik kurulum değildir; [kurulum](demo.md).

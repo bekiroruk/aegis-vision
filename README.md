@@ -1,23 +1,51 @@
 # AegisVision
 
-## Video Studio — çalışan demo
+**C++ video intelligence platform:** instance segmentation, video-local tracking,
+multimodal search, OCR/VLM analysis and GPU inference behind one persistent job API.
 
-Hazır Windows kurulumunda **`DEMOYU-AC.cmd` dosyasına çift tıklayın**.
-Panelde video seçin → **Videoyu analiz et** → maskeli/takipli sonucu izleyin ve MP4 indirin.
-Önceki sonuçlar otomatik açılır; yeniden analiz etmeniz gerekmez. Kamera gerekmez.
+[![CI](https://github.com/bekiroruk/aegis-vision/actions/workflows/ci.yml/badge.svg)](https://github.com/bekiroruk/aegis-vision/actions/workflows/ci.yml)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-69e0c0)
+![OpenCV](https://img.shields.io/badge/OpenCV-DNN-5c8dbc)
+![TensorRT](https://img.shields.io/badge/TensorRT-FP16-76b900)
 
-**Kendi videonuz:** `VIDEO-EKLE.cmd` → dosya seç → panelde analiz et.
-Orijinal korunur; ilk 15 saniye 10 FPS, en fazla 960×540 sessiz demo kopyası olarak hazırlanır.
-Bu başlatıcılar mevcut model/derleme/FFmpeg kurulumunu kullanır; yeni bilgisayarda
-önce [kurulum kılavuzu](docs/demo.md) gerekir.
+![AegisVision gerçek kaynak ve segmentation sonucu](docs/assets/showcase.jpg)
 
-[Örnek sonuçlar, sunum akışı ve farklı video kullanımı](docs/video-studio.md).
-Yerel teslimde `SUNUMU-AC.cmd`, servis gerektirmeyen altı slaytlık sunumu ve iki
-karşılaştırma videosunu açar. [Anlatım ve paket kullanımı](docs/sunum/KULLANIM.md).
-PowerPoint, slayt görselleri ve videolar `outputs/sunum-paketi-20261019/` altında
-yereldedir; Git klonu bu üretilmiş dosyaları içermez.
-Bu teslimin sınırı **yerel video portföy demosudur**. Kamera, yeni Re-ID araştırmaları,
-Jetson/Triton ve üretim sertifikasyonu demoyu bitirmek için beklenen adımlar değildir.
+<p align="center"><b>Kaynak video</b> ile <b>YOLOv8-seg + takip</b> sonucu aynı karede. Gerçek C++ inference çıktısı.</p>
+
+![AegisVision mimarisi](docs/assets/architecture.svg)
+
+## 30 saniyede çalıştır
+
+Hazır Windows kurulumunda `DEMOYU-AC.cmd` dosyasına çift tıklayın. Panelden üç
+hazır sahneden birini seçin veya `VIDEO-EKLE.cmd` ile kendi videonuzu hazırlayın.
+**Videoyu analiz et** düğmesi maskeli/takipli MP4 ve kare bazlı CSV üretir.
+
+```powershell
+.\scripts\demo.ps1 -OpenBrowser
+```
+
+| Gerçek örnek | Süre / kare | Üretilen sonuç |
+|---|---:|---:|
+| Yaya caddesi | 7,2 sn / 72 | 447 maske · 26 video-içi takip ID'si |
+| Hareketli araç kamerası | 12 sn / 120 | 832 maske · 36 video-içi takip ID'si |
+| Güvenlik kamerası | 12 sn / 120 | 1.090 maske · 20 video-içi takip ID'si |
+
+Sayılar doğruluk puanı veya benzersiz kişi sayısı değildir. Örnekler aynı pipeline'ın
+farklı kamera koşullarındaki gerçek çıktılarıdır. [Video Studio kılavuzu](docs/video-studio.md) ·
+[kurulum](docs/demo.md) · [API](docs/api.md) · [ilan kapsamı](docs/job-requirements.md)
+
+## Neler var?
+
+- Gerçek YOLOv8 detection ve instance segmentation, IoU tabanlı video takibi
+- CLIP ViT görsel/metin embedding'leri ve Qdrant benzerlik araması
+- Çok dilli OCR ve yerel SmolVLM sahne açıklaması
+- Kalıcı SQLite işleri, iptal/ilerleme, Redis C++ worker ve RTSP arşivi
+- TensorRT FP16 detection ve izole Linux GPU konteyner kabulü
+- OpenCV feature matching, RANSAC homografi ve deneysel multi-camera Re-ID
+
+Yerel sunum teslimi `outputs/AegisVision-showcase-20261023.mp4` altında 26 saniyelik
+tek parça karşılaştırma videosu ve `outputs/AegisVision-vitrin-20261023.zip` altında
+taşınabilir çevrimdışı paketi içerir. Üretilmiş video/model dosyaları Git'e eklenmez.
 
 AegisVision, gerçek zamanlı video analizi ve multimodal nesne araması için geliştirilen
 modüler bir **C++20 computer vision platformudur**. Hedefi; detection, tracking, Re-ID,
@@ -89,7 +117,8 @@ hız kazancı kanıtlanmadı. [INT8 kalibrasyonu da çalıştırıldı](docs/ten
 varsayılanı korunur. Gerçek GPU dosya indeksleme/arama ve fixture kaynaklı
 canlı worker doğrulandı. Publisher gerektirmeyen `-ReplayFile` video demosu da
 gerçek GPU'da panel, eşzamanlı indeksleme/arama ve stop ile doğrulandı;
-kamera yayını değildir. Gerçek RTSP + GPU birleşik testi ve GPU Docker hâlâ eksik.
+kamera yayını değildir. Gerçek RTSP + GPU birleşik testi, fiziksel kamera olmadığı için
+bu bilgisayarda uçtan uca doğrulanmamıştır; CPU video demosu ve GPU konteyner paketi hazırdır.
 [Linux GPU servis paketi](docs/gpu-container.md) eklendi: ayrı Dockerfile/Compose,
 model/mount ön kontrolü ve FP16 sağlık kontrolü. İmaj derlemesi ve gerçek GPU
 konteyner çalışması henüz doğrulanmadı; mevcut Windows demosu değişmedi.

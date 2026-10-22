@@ -5,6 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const studioHtml = fs.readFileSync(path.join(__dirname,'../web/index.html'),'utf8');
+assert.equal((studioHtml.match(/data-demo-prefix=/g) || []).length,3,'Studio must expose three curated scenes');
+assert.match(studioHtml,/id="video-metrics"/,'Completed video metrics need a visible container');
+
 const base = 'http://127.0.0.1:8090/';
 const ordinary = 'pedestrians.mp4';
 const archived = 'live-archive/live-200-1/segment-0001/clip.mp4';

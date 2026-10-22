@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="title desc">
+<title id="title">AegisVision video analysis pipeline</title><desc id="desc">Video flows through C++ job orchestration, YOLO segmentation and tracking, then produces video, CSV and multimodal search results.</desc>
+<rect width="1280" height="300" rx="24" fill="#0c121b"/><g font-family="Arial,Segoe UI,sans-serif">
+<text x="64" y="55" fill="#69e0c0" font-size="18" font-weight="700" letter-spacing="2">AEGISVISION PIPELINE</text>
+<g transform="translate(64 92)"><rect width="220" height="126" rx="16" fill="#142432" stroke="#355065"/><text x="24" y="42" fill="#69e0c0" font-size="15">INPUT</text><text x="24" y="77" fill="#e9f0f8" font-size="25" font-weight="700">Video</text><text x="24" y="103" fill="#9eafc5" font-size="14">file · RTSP · archive</text></g>
+<path d="M300 155h54" stroke="#69e0c0" stroke-width="3"/><path d="m346 146 14 9-14 9" fill="#69e0c0"/>
+<g transform="translate(376 92)"><rect width="220" height="126" rx="16" fill="#142432" stroke="#355065"/><text x="24" y="42" fill="#69e0c0" font-size="15">ORCHESTRATION</text><text x="24" y="77" fill="#e9f0f8" font-size="25" font-weight="700">C++ jobs</text><text x="24" y="103" fill="#9eafc5" font-size="14">persistent · cancellable</text></g>
+<path d="M612 155h54" stroke="#69e0c0" stroke-width="3"/><path d="m658 146 14 9-14 9" fill="#69e0c0"/>
+<g transform="translate(688 92)"><rect width="220" height="126" rx="16" fill="#142432" stroke="#355065"/><text x="24" y="42" fill="#69e0c0" font-size="15">INFERENCE</text><text x="24" y="77" fill="#e9f0f8" font-size="25" font-weight="700">YOLO + track</text><text x="24" y="103" fill="#9eafc5" font-size="14">masks · boxes · IDs</text></g>
+<path d="M924 155h54" stroke="#69e0c0" stroke-width="3"/><path d="m970 146 14 9-14 9" fill="#69e0c0"/>
+<g transform="translate(1000 92)"><rect width="216" height="126" rx="16" fill="#17322f" stroke="#69e0c0"/><text x="24" y="42" fill="#69e0c0" font-size="15">OUTPUT</text><text x="24" y="77" fill="#e9f0f8" font-size="25" font-weight="700">MP4 + CSV</text><text x="24" y="103" fill="#9eafc5" font-size="14">preview · CLIP search</text></g>
+<text x="64" y="266" fill="#71869b" font-size="14">C++20 · OpenCV · ONNX Runtime · TensorRT · CLIP · Qdrant · Redis · SQLite</text></g></svg>

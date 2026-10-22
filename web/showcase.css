@@ -13,5 +13,13 @@ main{max-width:1600px;padding-top:36px}.intro{max-width:900px;margin-bottom:28px
 .advanced>summary span{display:block;color:var(--muted);font-size:12px;font-weight:400;margin-top:5px}
 #own-video{background:linear-gradient(100deg,#172d32,#141e2b)}#own-video p{font-size:14px;max-width:1000px}
 #own-video .hint{font-size:12px}#media-refresh{font-size:12px;padding:7px 12px}.demo-actions a{font-size:13px}
+.demo-library{margin:0 0 28px;padding:26px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.demo-library h2{font-size:24px}.demo-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.demo-card{position:relative;min-height:140px;padding:22px;text-align:left;color:var(--ink);background:linear-gradient(135deg,#142432,#101923);border:1px solid #2c4052;border-radius:14px;white-space:normal;overflow:hidden}
+.demo-card:hover{border-color:var(--accent);transform:translateY(-2px)}.demo-card:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.demo-card strong,.demo-card small,.demo-card em{display:block}.demo-card strong{font-size:20px;margin:13px 0 3px}.demo-card small{color:var(--muted);font-weight:400}.demo-card em{position:absolute;right:18px;top:18px;color:var(--accent);font-size:12px;font-style:normal}
+.demo-number{font:700 12px system-ui;color:var(--accent);letter-spacing:1px}.result-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.result-metrics span{padding:10px 12px;background:#0d181f;border:1px solid #29443f;border-radius:8px}.result-metrics small,.result-metrics strong{display:block}.result-metrics small{font-size:9px;letter-spacing:1px;color:var(--muted)}.result-metrics strong{font-size:17px;color:var(--accent);margin-top:2px}
 @media(max-width:1000px){.workspace{grid-template-columns:1fr}.intro h1{letter-spacing:-1px}}
-@media(max-width:540px){.workflow{gap:12px}.workflow span{font-size:11px}.output-panel .index-controls{grid-template-columns:1fr}.output-panel .index-controls button{grid-column:auto}.panel-title{flex-wrap:wrap}}
+@media(max-width:760px){.demo-cards{grid-template-columns:1fr}.demo-card{min-height:110px}}
+@media(max-width:540px){.workflow{gap:12px}.workflow span{font-size:11px}.output-panel .index-controls{grid-template-columns:1fr}.output-panel .index-controls button{grid-column:auto}.panel-title{flex-wrap:wrap}.result-metrics{grid-template-columns:1fr 1fr}}

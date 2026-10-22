@@ -24,7 +24,7 @@ function clearVideo() {
   $('video-result').removeAttribute('src');$('video-result').removeAttribute('poster');$('video-result').load();
   $('video-download').hidden=true;$('video-download').removeAttribute('href');
   $('video-report').hidden=true;$('video-report').removeAttribute('href');
-  $('video-status').textContent='';$('video-progress').hidden=true;syncVideo();
+  $('video-status').textContent='';$('video-progress').hidden=true;$('video-metrics').hidden=true;$('video-metrics').replaceChildren();syncVideo();
 }
 function showVideo(job) {
   if(!videoJob || job.id!==videoJob) return;
@@ -46,6 +46,9 @@ function showVideo(job) {
   $('video-result').src=base+'/video.mp4';$('video-result').poster=base+'/preview.jpg';$('video-result').hidden=false;
   $('video-download').href=base+'/video.mp4?download=1';$('video-download').hidden=false;
   $('video-report').href=base+'/tracks.csv';$('video-report').hidden=false;
+  const metrics=[['KARE',r.frames],['SÜRE',`${Number(r.duration_seconds).toFixed(1)} sn`],['MASKE',Number(r.instances||0)],['TAKİP ID',r.track_ids]];
+  $('video-metrics').replaceChildren(...metrics.map(([label,value])=>{const box=element('span');box.append(element('small',label),element('strong',String(value)));return box;}));
+  $('video-metrics').hidden=false;
   $('video-status').textContent=`Tamamlandı · ${r.frames} kare · ${Number(r.duration_seconds).toFixed(1)} saniye · ${r.width}×${r.height} · ${r.track_ids} takip kimliği (benzersiz kişi sayısı değil)${r.stop_reason==='requested_frame_limit' ? ' · Seçtiğiniz kare sınırına kadar' : ''}`;
 }
 const jobName = job => ({segment_video:'Maskeli video + takip',index_video:'Video indeksleme',index_live_archive:'Canlı arşiv indeksleme',segment_frame:'Piksel maskesi analizi',ocr_frame:'Yazı okuma',scene_frame:'Sahne açıklaması',search:'Metin araması'}[job.request.type] || 'Analiz');
@@ -549,6 +552,11 @@ async function start() {
     setInterval(() => { if (liveObjectUrl && performance.now() >= liveExpiresAt) hideLive('Güncel analiz karesi bekleniyor…'); },250);
     const data = await api('/api/media');
     data.videos.forEach(video => addMedia(video.path));
+    document.querySelectorAll('[data-demo-prefix]').forEach(button=> {
+      const match=data.videos.find(video=>video.path.startsWith(button.dataset.demoPrefix));
+      button.disabled=!match;
+      button.addEventListener('click',async()=>{if(!match)return;chooseMedia(match.path,true);await refresh();$('video-heading').scrollIntoView({behavior:'smooth',block:'start'});});
+    });
     mediaReady = true;
     if (!mediaChoiceMade) {
       const requested = new URL(location.href).searchParams.get('video');

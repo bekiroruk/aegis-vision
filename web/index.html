@@ -7,6 +7,11 @@
 <header><div class="brand"><span class="mark">A</span><div>AegisVision<small>VIDEO ANALİZİ & ARAMA</small></div></div><span id="health" class="badge">Bağlanıyor…</span></header>
 <main>
 <section class="intro"><p class="eyebrow">AEGISVISION / VIDEO STUDIO</p><h1>Görüntüyü analize dönüştür.</h1><p>Kendi videonuzda nesne maskeleri ve takip numaraları. Kaynak ile sonucu karşılaştırın, işlenmiş videoyu sunumunuzda kullanın.</p><div class="workflow"><span><b>01</b> Video seç</span><span><b>02</b> Analiz et</span><span><b>03</b> İzle & indir</span></div><p class="hint">Kamera gerekmez · Yerel C++ analizi · Önceki sonuçlar otomatik açılır</p></section>
+<section class="demo-library" aria-labelledby="demo-library-title"><div><p class="eyebrow">HAZIR ÖRNEKLER</p><h2 id="demo-library-title">Üç sahne, aynı C++ pipeline</h2></div><div class="demo-cards">
+<button type="button" class="demo-card" data-demo-prefix="demo-TUD-Stadtmitte"><span class="demo-number">01</span><strong>Yaya caddesi</strong><small>Yakın plan · yoğun örtüşme</small><em>7,2 sn</em></button>
+<button type="button" class="demo-card" data-demo-prefix="demo-KITTI-17"><span class="demo-number">02</span><strong>Araç kamerası</strong><small>Hareketli kamera · geniş sahne</small><em>12 sn</em></button>
+<button type="button" class="demo-card" data-demo-prefix="demo-PETS09-S2L1"><span class="demo-number">03</span><strong>Güvenlik kamerası</strong><small>Sabit kamera · kalabalık alan</small><em>12 sn</em></button>
+</div></section>
 <div id="notice" role="status" aria-live="polite"></div>
 <p id="queue-status" role="status" aria-live="polite"></p>
 <section id="live-panel" class="panel live-panel" aria-labelledby="live-heading" hidden>
@@ -29,6 +34,7 @@
 <form id="video-form" class="index-controls"><div><label for="video-limit">İşlenecek kare · 0 = tüm video</label><input id="video-limit" type="number" min="0" max="1000" step="1" value="0" required></div><button id="video-button" type="submit" disabled>Videoyu analiz et</button><button id="video-cancel" type="button" class="secondary" hidden>Analizi iptal et</button></form>
 <p id="video-source" class="hint">Video seçin.</p><p class="hint">CPU işlemi zaman alabilir; diğer işler aynı sırada bekler. Sınır: 1.000 kare, çift boyutlu en fazla 1920×1080, 1–60 FPS. Çıktı sessizdir. Takip numaraları bu videoya aittir; örtüşmelerde değişebilir.</p>
 <p id="video-status" role="status" aria-live="polite"></p><progress id="video-progress" aria-label="Video analizi ilerlemesi" hidden></progress>
+<div id="video-metrics" class="result-metrics" hidden></div>
 <video id="video-result" controls muted playsinline preload="metadata" aria-label="Maskeli ve takip numaralı analiz videosu" hidden></video>
 <div class="demo-actions"><a id="video-download" download hidden>MP4 indir</a><a id="video-report" download hidden>Takip raporunu indir (CSV)</a></div>
 </section>
